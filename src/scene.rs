@@ -418,7 +418,7 @@ impl Stage {
             hwnd,
             gfx,
             active: false,
-            id: 0,
+            id: usize::MAX,
             start: Instant::now(),
             w: MAX_W,
             left: 0.0,
@@ -702,8 +702,13 @@ impl App {
             self.set_timer(T_SCENE, 60_000);
             return;
         }
+        // random scene, never the same one twice in a row, and only ones that fit
+        let room = self.stage_area().map(|(_, w)| w).unwrap_or(0.0);
         let id = match self.stage.as_mut() {
-            Some(s) => (s.rnd() % SCENES as u32) as usize,
+            Some(s) => {
+                let ok: Vec<usize> = (0..SCENES).filter(|&i| i != s.id && (i != 6 || room >= PRESS_W)).collect();
+                ok[s.rnd() as usize % ok.len()]
+            }
             None => return,
         };
         self.play_scene(id);

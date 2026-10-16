@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+- Scenes: pick a random one each time, never the same twice in a row, and only ones that fit the free space on the bar.
+
 ## 0.3.0
 
 - New buddy: a photo bobblehead (Ravi Kishan) that bobs and tilts along the bar and speaks its own lines.
