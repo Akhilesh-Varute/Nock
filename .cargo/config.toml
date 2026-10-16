@@ -1,0 +1,4 @@
+# Link the C runtime statically so nock.exe is one self-contained file with
+# no Visual C++ redistributable needed on the target PC.
+[target.'cfg(windows)']
+rustflags = ["-C", "target-feature=+crt-static"]

@@ -1,0 +1,59 @@
+[package]
+name = "nock"
+version = "0.1.0"
+edition = "2021"
+description = "A tiny native Windows dynamic island and macOS-style menu bar, written in Rust"
+
+[features]
+default = ["media"]
+# Now-playing via the Windows media session API (SMTC). Needs the WinRT bindings.
+media = [
+  "windows/Media_Control",
+  "windows/Storage_Streams",
+  "windows/Foundation",
+  "windows/Foundation_Collections",
+  "windows/Devices_Radios","windows/Devices_Bluetooth","windows/Devices_Enumeration",
+]
+
+[dependencies]
+windows-numerics = "0.3"
+windows = { version = "0.62.2", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Direct2D",
+  "Win32_Graphics_Direct2D_Common",
+  "Win32_Graphics_DirectWrite",
+  "Win32_Graphics_Dxgi_Common",
+  "Win32_Graphics_Gdi",
+  "Win32_Graphics_Imaging",
+  "Win32_Media_Audio",
+  "Win32_Media_Audio_Endpoints",
+  "Win32_Storage_FileSystem",
+  "Win32_Security",
+  "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_Variant",
+  "Win32_System_DataExchange",
+  "Win32_System_Diagnostics_Debug",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Memory",
+  "Win32_System_Ole",
+  "Win32_System_Registry",
+  "Win32_System_Shutdown",
+  "Win32_System_SystemInformation",
+  "Win32_System_Threading",
+  "Win32_System_Power",
+  "Win32_Devices_Bluetooth",
+  "Win32_System_IO",
+  "Win32_UI_Accessibility",
+  "Win32_UI_HiDpi",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
