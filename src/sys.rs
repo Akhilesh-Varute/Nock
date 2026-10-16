@@ -401,6 +401,8 @@ pub struct WifiNet {
     pub signal: u32,
     pub secure: bool,
     pub saved: bool,
+    /// Authentication as reported by Windows, e.g. "WPA2-Personal".
+    pub auth: String,
 }
 
 #[derive(Clone, Default)]
@@ -409,12 +411,15 @@ pub struct WifiState {
     pub nets: Vec<WifiNet>,
     /// Network we are currently trying to join.
     pub busy: Option<String>,
+    /// Outcome of the last connect attempt (text, success); taken by the UI.
+    pub last: Option<(String, bool)>,
 }
 
 pub static WIFI: std::sync::Mutex<WifiState> = std::sync::Mutex::new(WifiState {
     connected: None,
     nets: Vec::new(),
     busy: None,
+    last: None,
 });
 
 /// Run `netsh` with a raw argument string (so quotes around names survive).
@@ -485,7 +490,9 @@ fn wifi_scan_blocking() -> (Option<String>, Vec<WifiNet>) {
             });
         } else if let Some(n) = cur.as_mut() {
             if l.starts_with("Authentication") {
-                n.secure = !value_after_colon(l).unwrap_or("").eq_ignore_ascii_case("Open");
+                let a = value_after_colon(l).unwrap_or("");
+                n.auth = a.to_string();
+                n.secure = !a.eq_ignore_ascii_case("Open");
             } else if l.starts_with("Signal") {
                 let pct = value_after_colon(l)
                     .unwrap_or("")
@@ -530,27 +537,149 @@ pub fn wifi_scan_async(hwnd: isize) {
     });
 }
 
+/// SSID we are fully connected to (None while associating or disconnected).
+fn wifi_connected_ssid() -> Option<String> {
+    let out = netsh("wlan show interfaces");
+    let mut ssid = None;
+    let mut up = false;
+    for line in out.lines() {
+        let l = line.trim();
+        if l.starts_with("SSID") && !l.starts_with("BSSID") && ssid.is_none() {
+            ssid = value_after_colon(l).filter(|v| !v.is_empty()).map(|v| v.to_string());
+        } else if l.starts_with("State") {
+            up = value_after_colon(l)
+                .map(|v| v.eq_ignore_ascii_case("connected"))
+                .unwrap_or(false);
+        }
+    }
+    if up {
+        ssid
+    } else {
+        None
+    }
+}
+
+/// Wait up to ~10 s for the connection to come up; returns true if it did.
+fn wifi_wait_connected(ssid: &str) -> bool {
+    for _ in 0..10 {
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+        if wifi_connected_ssid().as_deref() == Some(ssid) {
+            return true;
+        }
+    }
+    false
+}
+
+fn wifi_finish(hwnd: isize, text: String, ok: bool) {
+    let (connected, nets) = wifi_scan_blocking();
+    let mut w = WIFI.lock().unwrap();
+    w.connected = connected;
+    w.nets = nets;
+    w.busy = None;
+    w.last = Some((text, ok));
+    drop(w);
+    wifi_post(hwnd);
+}
+
+/// Only the connected-network name (cheap; used for the hover tooltip).
+pub fn wifi_status_async(hwnd: isize) {
+    std::thread::spawn(move || {
+        let c = wifi_connected_ssid();
+        WIFI.lock().unwrap().connected = c;
+        wifi_post(hwnd);
+    });
+}
+
 /// Join a saved network. `None` disconnects.
 pub fn wifi_connect_async(hwnd: isize, ssid: Option<String>) {
     WIFI.lock().unwrap().busy = ssid.clone();
     wifi_post(hwnd);
+    std::thread::spawn(move || match ssid {
+        Some(s) => {
+            netsh(&format!("wlan connect name=\"{s}\" ssid=\"{s}\""));
+            let ok = wifi_wait_connected(&s);
+            let text = if ok {
+                format!("Connected to {s}")
+            } else {
+                format!("Couldn't connect to {s}")
+            };
+            wifi_finish(hwnd, text, ok);
+        }
+        None => {
+            netsh("wlan disconnect");
+            std::thread::sleep(std::time::Duration::from_millis(1200));
+            wifi_finish(hwnd, "Disconnected".into(), true);
+        }
+    });
+}
+
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+/// Is this a network type we can join with just a password?
+pub fn wifi_auth_supported(auth: &str) -> bool {
+    let a = auth.to_ascii_lowercase();
+    a == "open" || a == "wpa2-personal" || a == "wpa3-personal" || a == "wpa-personal"
+}
+
+fn wifi_profile_xml(ssid: &str, auth: &str, key: Option<&str>) -> String {
+    let a = auth.to_ascii_lowercase();
+    let (authn, enc) = match (key.is_some(), a.as_str()) {
+        (false, _) => ("open", "none"),
+        (true, "wpa3-personal") => ("WPA3SAE", "AES"),
+        (true, "wpa-personal") => ("WPAPSK", "TKIP"),
+        _ => ("WPA2PSK", "AES"),
+    };
+    let ssid = xml_escape(ssid);
+    let shared = match key {
+        Some(k) => format!(
+            "<sharedKey><keyType>passPhrase</keyType><protected>false</protected><keyMaterial>{}</keyMaterial></sharedKey>",
+            xml_escape(k)
+        ),
+        None => String::new(),
+    };
+    format!(
+        "<?xml version=\"1.0\"?><WLANProfile xmlns=\"http://www.microsoft.com/networking/WLAN/profile/v1\">\
+<name>{ssid}</name><SSIDConfig><SSID><name>{ssid}</name></SSID></SSIDConfig>\
+<connectionType>ESS</connectionType><connectionMode>auto</connectionMode>\
+<MSM><security><authEncryption><authentication>{authn}</authentication><encryption>{enc}</encryption><useOneX>false</useOneX></authEncryption>{shared}</security></MSM></WLANProfile>"
+    )
+}
+
+/// Join a network that has no saved profile (open, or with a password the user
+/// just typed). The profile is kept only if the connection works; the temporary
+/// file holding the password is deleted straight away.
+pub fn wifi_join_new_async(hwnd: isize, ssid: String, auth: String, key: Option<String>) {
+    WIFI.lock().unwrap().busy = Some(ssid.clone());
+    wifi_post(hwnd);
     std::thread::spawn(move || {
-        match &ssid {
-            Some(s) => {
-                netsh(&format!("wlan connect name=\"{s}\" ssid=\"{s}\""));
-            }
-            None => {
-                netsh("wlan disconnect");
+        let xml = wifi_profile_xml(&ssid, &auth, key.as_deref());
+        let path = std::env::temp_dir().join(format!("nock-wlan-{}.xml", std::process::id()));
+        let wrote = std::fs::write(&path, xml).is_ok();
+        let mut ok = false;
+        if wrote {
+            netsh(&format!("wlan add profile filename=\"{}\" user=current", path.display()));
+            let _ = std::fs::remove_file(&path);
+            netsh(&format!("wlan connect name=\"{ssid}\" ssid=\"{ssid}\""));
+            ok = wifi_wait_connected(&ssid);
+            if !ok {
+                // do not keep a profile with a wrong password
+                netsh(&format!("wlan delete profile name=\"{ssid}\""));
             }
         }
-        std::thread::sleep(std::time::Duration::from_millis(2500));
-        let (connected, nets) = wifi_scan_blocking();
-        let mut w = WIFI.lock().unwrap();
-        w.connected = connected;
-        w.nets = nets;
-        w.busy = None;
-        drop(w);
-        wifi_post(hwnd);
+        let text = if ok {
+            format!("Connected to {ssid}")
+        } else if key.is_some() {
+            format!("Couldn't join {ssid}. Check the password")
+        } else {
+            format!("Couldn't connect to {ssid}")
+        };
+        wifi_finish(hwnd, text, ok);
     });
 }
 

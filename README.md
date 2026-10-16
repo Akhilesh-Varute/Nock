@@ -6,7 +6,7 @@
 Written in Rust. No webview, no framework, no runtime. One small <code>.exe</code>.</p>
 
 <p align="center">
-<a href="https://github.com/OWNER/nock/actions/workflows/ci.yml"><img src="https://github.com/OWNER/nock/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+<a href="https://github.com/Akhilesh-Varute/Nock/actions/workflows/ci.yml"><img src="https://github.com/Akhilesh-Varute/Nock/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-blue" alt="Windows 10/11">
 <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
 </p>
@@ -38,12 +38,16 @@ Right-click the tray icon → **Start with Windows** to launch it at login.
 
 A thin translucent bar runs along the top of the screen (like the macOS menu bar) and the notch hangs from its middle. Left: the app you are in. Right: Wi-Fi, Bluetooth, volume, battery and the date and time. Clicking an icon opens a small dropdown right under it:
 
-- **Wi-Fi**: on/off switch, nearby networks with signal strength (the connected one marked). Click a saved network to join it, click the connected one to disconnect. A new password-protected network opens Windows' own Wi-Fi settings so you can enter the password.
+- **Wi-Fi**: on/off switch, nearby networks with signal strength (the connected one marked). Click a saved network to join it, click the connected one to disconnect. A new password-protected network asks for its password right in the dropdown (paste works); an open network joins directly. Enterprise networks open Windows' own Wi-Fi settings.
 - **Bluetooth**: on/off switch, paired devices (connected ones marked). Click a device to connect or disconnect it. Pairing new devices is done in Windows' Bluetooth settings (linked).
 - **Sound**: volume slider and mute.
 - **Display**: brightness slider (laptop panels; always shown).
 - **Battery**: percentage, charging state, time left, battery saver, link to battery settings.
 - **Date and time**: month calendar with today highlighted.
+
+**Connecting feedback:** while a Wi-Fi or Bluetooth connection is in progress the bar icon pulses and the row shows a spinner. When it finishes a small note says "Connected to …" or "Couldn't connect …".
+
+**Hover tooltips:** resting the pointer on the Wi-Fi or Bluetooth icon shows what is connected (network name and signal; connected Bluetooth devices) without clicking.
 
 A dropdown closes when the pointer leaves it, when you click into another window, or when you click its icon again. The bar follows the Windows light/dark setting; the notch itself always stays black. It reserves its space like the taskbar does, so maximised windows start below it. Tray → *Top bar* turns it off (the old notch-only behaviour returns); `top_bar` in `config.ini` does the same.
 

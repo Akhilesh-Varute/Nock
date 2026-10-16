@@ -58,7 +58,7 @@ pub struct Bar {
     pub hwnd: HWND,
     gfx: Gfx,
     hits: Vec<(Rect, BarAct)>,
-    hot: Option<BarAct>,
+    pub hot: Option<BarAct>,
     tracking: bool,
     pub app_name: String,
     pub battery: Option<(u8, bool)>,
@@ -200,6 +200,10 @@ impl App {
         let clock24 = self.cfg.clock_24h;
         let accent = self.accent;
         let active = self.pop_kind();
+        // connecting: the icon breathes while a Wi-Fi / Bluetooth attempt is running
+        let wifi_busy = sys::WIFI.lock().map(|w| w.busy.is_some()).unwrap_or(false);
+        let bt_busy = self.bt_busy.is_some();
+        let pulse = 0.62 + 0.38 * (self.link_phase as f32 * 0.42).sin();
         let Some(bar) = self.bar.as_mut() else { return };
         let g = &bar.gfx;
         let f = &g.fonts;
@@ -300,7 +304,14 @@ impl App {
             }
             let r = item(30.0);
             draw_hover(g, th.hover, r, is_hot(act));
-            let col = if state == Some(true) { accent } else { th.t2 };
+            let mut col = if state == Some(true) { accent } else { th.t2 };
+            let busy = match act {
+                BarAct::Wifi => wifi_busy,
+                _ => bt_busy,
+            };
+            if busy {
+                col = Color(accent.0, accent.1, accent.2, pulse);
+            }
             g.icon(glyph, r, &f.icon14, col);
             hits.push((r, act));
         }
@@ -374,7 +385,15 @@ impl App {
         };
         if changed {
             self.render_bar();
+            self.bar_hover_changed(hot);
         }
+    }
+
+    /// Screen x of the centre of a bar item (for placing a dropdown or tooltip).
+    pub fn bar_anchor(&self, act: BarAct) -> Option<i32> {
+        let b = self.bar.as_ref()?;
+        let r = b.hits.iter().find(|(_, a)| *a == act)?.0;
+        Some(self.mon.left + (r.cx() * self.scale).round() as i32)
     }
 
     fn bar_click(&mut self, act: BarAct, anchor: i32) {

@@ -17,6 +17,40 @@ const POP_MAX_H: f32 = 340.0;
 const GAP: f32 = 4.0;
 const WM_MOUSELEAVE: u32 = 0x02A3;
 pub const T_POPLEAVE: usize = 7;
+/// Connecting animation tick (only runs while a Wi-Fi / Bluetooth attempt is in progress).
+pub const T_LINK: usize = 11;
+/// Hover delay before the Wi-Fi / Bluetooth tooltip appears.
+pub const T_TIP: usize = 12;
+/// Clears the "Connected / Couldn't connect" message after a few seconds.
+pub const T_LINKMSG: usize = 13;
+const TIP_W: f32 = 250.0;
+
+const GREEN: Color = Color(0.45, 0.85, 0.5, 1.0);
+const RED: Color = Color(1.0, 0.45, 0.4, 1.0);
+
+/// A Wi-Fi password being typed into the dropdown.
+#[derive(Clone)]
+pub struct PwEntry {
+    pub ssid: String,
+    pub auth: String,
+    pub buf: Vec<u16>,
+    pub show: bool,
+}
+
+/// Eight dots chasing each other, the usual "working" indicator.
+fn spinner(g: &Gfx, cx: f32, cy: f32, phase: u32, c: Color) {
+    for i in 0..8u32 {
+        let a = i as f32 * std::f32::consts::TAU / 8.0;
+        let behind = (phase + 8 - i % 8) % 8;
+        let k = 1.0 - behind as f32 / 8.0;
+        g.fill_circle(
+            cx + 6.5 * a.cos(),
+            cy + 6.5 * a.sin(),
+            1.8,
+            Color(c.0, c.1, c.2, c.3 * (0.2 + 0.8 * k)),
+        );
+    }
+}
 
 #[derive(Clone, Copy)]
 enum PopAct {
@@ -27,12 +61,17 @@ enum PopAct {
     Wifi(usize),
     Bt(usize),
     Link(&'static str),
+    PwShow,
+    PwJoin,
+    PwCancel,
 }
 
 pub struct Pop {
     pub hwnd: HWND,
     gfx: Gfx,
     pub kind: Option<BarAct>,
+    /// Showing the small hover tooltip instead of the full dropdown.
+    pub tip: bool,
     anchor_px: i32,
     hits: Vec<(Rect, PopAct)>,
     hot: Option<usize>,
@@ -53,6 +92,7 @@ impl Pop {
             hwnd,
             gfx,
             kind: None,
+            tip: false,
             anchor_px: 0,
             hits: Vec::new(),
             hot: None,
@@ -95,7 +135,8 @@ impl App {
     /// Open the dropdown for `kind` under `anchor_px` (screen x of the icon's centre);
     /// opening the one that is already open closes it.
     pub fn open_pop(&mut self, kind: BarAct, anchor_px: i32) {
-        if self.pop_kind() == Some(kind) {
+        self.kill_timer(T_TIP);
+        if self.pop_kind() == Some(kind) && !self.pop_is_tip() {
             self.close_pop();
             return;
         }
@@ -114,6 +155,7 @@ impl App {
         let _ = self.radio.tx.send(crate::radio::Req::Refresh);
         let Some(p) = self.pop.as_mut() else { return };
         p.kind = Some(kind);
+        p.tip = false;
         p.anchor_px = anchor_px;
         p.hot = None;
         p.drag = None;
@@ -129,11 +171,15 @@ impl App {
     }
 
     pub fn close_pop(&mut self) {
+        if self.pw.is_some() {
+            self.end_pw(false);
+        }
         let Some(p) = self.pop.as_mut() else { return };
         if p.kind.is_none() {
             return;
         }
         p.kind = None;
+        p.tip = false;
         p.drag = None;
         unsafe {
             if GetCapture() == p.hwnd {
@@ -147,9 +193,212 @@ impl App {
 
     /// Data for the open dropdown changed (Wi-Fi name, device list, radio state).
     pub fn on_pop_data(&mut self) {
+        let res = sys::WIFI.lock().unwrap().last.take();
+        if let Some((t, ok)) = res {
+            self.notify_result(BarAct::Wifi, t, ok);
+        }
+        self.sync_link_timer();
         if self.pop_kind().is_some() {
             self.render_pop();
         }
+    }
+
+    pub fn pop_is_tip(&self) -> bool {
+        self.pop.as_ref().map(|p| p.tip && p.kind.is_some()).unwrap_or(false)
+    }
+
+    // ------------------------------------------- connecting / results / tooltip --
+
+    /// Start or stop the connecting animation to match what is in progress.
+    pub fn sync_link_timer(&mut self) {
+        let busy = self.bt_busy.is_some()
+            || sys::WIFI.lock().map(|w| w.busy.is_some()).unwrap_or(false);
+        if busy {
+            if self.link_phase == 0 {
+                self.link_phase = 1;
+                self.render_bar();
+            }
+            self.set_timer(T_LINK, 100);
+        } else if self.link_phase != 0 {
+            self.kill_timer(T_LINK);
+            self.link_phase = 0;
+            self.render_bar();
+        }
+    }
+
+    pub fn on_link_tick(&mut self) {
+        self.link_phase = self.link_phase.wrapping_add(1).max(1);
+        self.render_bar();
+        if matches!(self.pop_kind(), Some(BarAct::Wifi) | Some(BarAct::Bluetooth)) {
+            self.render_pop();
+        }
+    }
+
+    /// Remember the outcome and show it: inside an open dropdown, otherwise as a
+    /// small tooltip under the icon for a few seconds.
+    pub fn notify_result(&mut self, kind: BarAct, text: String, ok: bool) {
+        self.link_msg = Some((kind, text, ok));
+        self.set_timer(T_LINKMSG, 4000);
+        let full_open = self.pop_kind().is_some() && !self.pop_is_tip();
+        if !full_open {
+            if let Some(a) = self.bar_anchor(kind) {
+                self.show_tip(kind, a);
+            }
+        }
+    }
+
+    pub fn on_linkmsg_timer(&mut self) {
+        self.kill_timer(T_LINKMSG);
+        self.link_msg = None;
+        if self.pop_is_tip() {
+            let hovering = self.bar.as_ref().and_then(|b| b.hot) == self.pop_kind();
+            if hovering {
+                self.render_pop();
+            } else {
+                self.close_pop();
+            }
+        } else if self.pop_kind().is_some() {
+            self.render_pop();
+        }
+    }
+
+    /// A Bluetooth connect/disconnect attempt finished.
+    pub fn on_bt_done(&mut self, ok: bool) {
+        let Some((_, on, name)) = self.bt_busy.take() else { return };
+        let text = match (ok, on) {
+            (true, true) => format!("Connected to {name}"),
+            (true, false) => format!("Disconnected from {name}"),
+            (false, true) => format!("Couldn't connect to {name}"),
+            (false, false) => format!("Couldn't disconnect {name}"),
+        };
+        self.notify_result(BarAct::Bluetooth, text, ok);
+        self.sync_link_timer();
+        self.render_bar();
+        if self.pop_kind().is_some() {
+            self.render_pop();
+        }
+    }
+
+    /// The pointer moved onto / off a bar item.
+    pub fn bar_hover_changed(&mut self, hot: Option<BarAct>) {
+        let full_open = self.pop_kind().is_some() && !self.pop_is_tip();
+        match hot {
+            Some(BarAct::Wifi) | Some(BarAct::Bluetooth) if !full_open => {
+                self.set_timer(T_TIP, 350);
+            }
+            _ => {
+                self.kill_timer(T_TIP);
+                if self.pop_is_tip() {
+                    self.set_timer(T_POPLEAVE, 250);
+                }
+            }
+        }
+    }
+
+    pub fn on_tip_timer(&mut self) {
+        self.kill_timer(T_TIP);
+        if self.pop_kind().is_some() && !self.pop_is_tip() {
+            return;
+        }
+        let hot = self.bar.as_ref().and_then(|b| b.hot);
+        if let Some(k @ (BarAct::Wifi | BarAct::Bluetooth)) = hot {
+            if let Some(a) = self.bar_anchor(k) {
+                self.show_tip(k, a);
+            }
+        }
+    }
+
+    /// Small read-only box under an icon: what is connected right now.
+    fn show_tip(&mut self, kind: BarAct, anchor_px: i32) {
+        match kind {
+            BarAct::Wifi => sys::wifi_status_async(self.hwnd.0 as isize),
+            BarAct::Bluetooth => {
+                let _ = self.radio.tx.send(crate::radio::Req::Devices);
+            }
+            _ => return,
+        }
+        let Some(p) = self.pop.as_mut() else { return };
+        p.kind = Some(kind);
+        p.tip = true;
+        p.anchor_px = anchor_px;
+        p.hot = None;
+        p.drag = None;
+        self.kill_timer(T_POPLEAVE);
+        self.render_pop();
+        unsafe {
+            if let Some(p) = &self.pop {
+                let _ = ShowWindow(p.hwnd, SW_SHOWNOACTIVATE);
+            }
+        }
+        self.raise_windows();
+    }
+
+    // ------------------------------------------------------ Wi-Fi password --
+
+    fn pop_activatable(&self, on: bool) {
+        if let Some(p) = &self.pop {
+            unsafe {
+                let ex = GetWindowLongPtrW(p.hwnd, GWL_EXSTYLE);
+                let flag = WS_EX_NOACTIVATE.0 as isize;
+                let new = if on { ex & !flag } else { ex | flag };
+                SetWindowLongPtrW(p.hwnd, GWL_EXSTYLE, new);
+            }
+        }
+    }
+
+    fn start_pw(&mut self, ssid: String, auth: String) {
+        unsafe {
+            self.pw_prev_fg = GetForegroundWindow();
+        }
+        self.pw = Some(PwEntry {
+            ssid,
+            auth,
+            buf: Vec::new(),
+            show: false,
+        });
+        self.pop_activatable(true);
+        self.kill_timer(T_POPLEAVE);
+        if let Some(p) = &self.pop {
+            unsafe {
+                let _ = SetForegroundWindow(p.hwnd);
+            }
+        }
+        self.render_pop();
+    }
+
+    /// Stop typing a password. `refocus` hands the keyboard back to the previous window.
+    pub fn end_pw(&mut self, refocus: bool) {
+        if self.pw.take().is_none() {
+            return;
+        }
+        self.pop_activatable(false);
+        if refocus && !self.pw_prev_fg.0.is_null() {
+            unsafe {
+                let _ = SetForegroundWindow(self.pw_prev_fg);
+            }
+        }
+        self.pw_prev_fg = HWND::default();
+    }
+
+    fn pw_join(&mut self) {
+        let Some(pw) = self.pw.as_ref() else { return };
+        let key = String::from_utf16_lossy(&pw.buf);
+        let (ssid, auth) = (pw.ssid.clone(), pw.auth.clone());
+        if key.chars().count() < 8 {
+            self.link_msg = Some((
+                BarAct::Wifi,
+                "Password must be at least 8 characters".into(),
+                false,
+            ));
+            self.set_timer(T_LINKMSG, 4000);
+            self.render_pop();
+            return;
+        }
+        self.end_pw(true);
+        sys::wifi_join_new_async(self.hwnd.0 as isize, ssid, auth, Some(key));
+        self.sync_link_timer();
+        self.render_bar();
+        self.render_pop();
     }
 
     pub fn on_pop_leave_timer(&mut self) {
@@ -168,7 +417,8 @@ impl App {
                 && pt.y >= r.top
                 && pt.y < r.bottom
         };
-        if !inside {
+        let hovering_icon = p.tip && self.bar.as_ref().and_then(|b| b.hot) == p.kind;
+        if !inside && !hovering_icon {
             self.close_pop();
         }
     }
@@ -183,6 +433,11 @@ impl App {
             Some(k) => k,
             None => return,
         };
+        let tip_mode = self.pop_is_tip() && matches!(kind, BarAct::Wifi | BarAct::Bluetooth);
+        let phase = self.link_phase;
+        let link_msg = self.link_msg.clone();
+        let bt_busy = self.bt_busy.clone();
+        let pw = self.pw.clone();
         let radios = self.radios;
         let wifi = sys::WIFI.lock().unwrap().clone();
         let devices = self.radio.devices.lock().unwrap().clone();
@@ -195,7 +450,7 @@ impl App {
         let mon = self.mon;
         let Some(p) = self.pop.as_mut() else { return };
         let g = &p.gfx;
-        let w = POP_W;
+        let w = if tip_mode { TIP_W } else { POP_W };
         let surf = if light {
             Color(0.97, 0.97, 0.98, 0.95)
         } else {
@@ -245,6 +500,77 @@ impl App {
         };
 
         match kind {
+            BarAct::Wifi if tip_mode => {
+                ops.push(title("Wi-Fi", y));
+                y += 28.0;
+                let msg = match &link_msg {
+                    Some((BarAct::Wifi, t, ok)) => Some((t.clone(), if *ok { GREEN } else { RED })),
+                    _ => None,
+                };
+                let (txt, col) = if let Some(m) = msg {
+                    m
+                } else if let Some(n) = &wifi.busy {
+                    (format!("Connecting to {}\u{2026}", n), th.t2)
+                } else {
+                    match (radios.wifi, &wifi.connected) {
+                        (None, _) => ("Not available".to_string(), th.t2),
+                        (Some(false), _) => ("Off".to_string(), th.t2),
+                        (Some(true), Some(n)) => (format!("Connected to {}", n), th.t1),
+                        (Some(true), None) => ("Not connected".to_string(), th.t2),
+                    }
+                };
+                ops.push(note(txt, y, col));
+                y += 26.0;
+                if wifi.busy.is_none() {
+                    if let Some(c) = &wifi.connected {
+                        if let Some(n) = wifi.nets.iter().find(|n| &n.ssid == c) {
+                            ops.push(note(format!("Signal {}%", n.signal), y, th.t2));
+                            y += 24.0;
+                        }
+                    }
+                }
+                y += 6.0;
+            }
+            BarAct::Bluetooth if tip_mode => {
+                ops.push(title("Bluetooth", y));
+                y += 28.0;
+                let msg = match &link_msg {
+                    Some((BarAct::Bluetooth, t, ok)) => Some((t.clone(), if *ok { GREEN } else { RED })),
+                    _ => None,
+                };
+                if let Some((t, c)) = msg {
+                    ops.push(note(t, y, c));
+                    y += 26.0;
+                } else if let Some((_, on, name)) = &bt_busy {
+                    let v = if *on { "Connecting to" } else { "Disconnecting" };
+                    ops.push(note(format!("{} {}\u{2026}", v, name), y, th.t2));
+                    y += 26.0;
+                }
+                if radios.bluetooth != Some(true) {
+                    let t = if radios.bluetooth.is_none() { "Not available" } else { "Off" };
+                    ops.push(note(t.into(), y, th.t2));
+                    y += 26.0;
+                } else {
+                    let conn: Vec<String> = devices
+                        .iter()
+                        .filter(|d| d.connected)
+                        .map(|d| d.name.clone())
+                        .collect();
+                    if conn.is_empty() {
+                        ops.push(note("No devices connected".into(), y, th.t2));
+                        y += 26.0;
+                    }
+                    for name in conn {
+                        let yy = y;
+                        ops.push(Box::new(move |g, _h, _| {
+                            g.fill_circle(22.0, yy + 11.0, 3.5, accent);
+                            g.text(&name, Rect::new(34.0, yy, w - 50.0, 22.0), &g.fonts.small, th.t1, Align::Left);
+                        }));
+                        y += 24.0;
+                    }
+                }
+                y += 6.0;
+            }
             BarAct::Wifi => {
                 ops.push(title("Wi-Fi", y));
                 ops.push(switch(radios.wifi == Some(true), 0, y));
@@ -259,33 +585,99 @@ impl App {
                     },
                 };
                 ops.push(note(status, y, th.t2));
-                y += 30.0;
+                y += 26.0;
+                if let Some((BarAct::Wifi, t, ok)) = &link_msg {
+                    ops.push(note(t.clone(), y, if *ok { GREEN } else { RED }));
+                    y += 26.0;
+                }
+                y += 4.0;
                 if radios.wifi == Some(true) {
-                    if wifi.nets.is_empty() {
-                        ops.push(note("Looking for networks\u{2026}".into(), y, th.t2));
-                        y += 28.0;
-                    }
-                    for (i, n) in wifi.nets.iter().enumerate() {
-                        let is_conn = wifi.connected.as_deref() == Some(n.ssid.as_str());
-                        let (name, secure, signal) = (n.ssid.clone(), n.secure, n.signal);
-                        let yy = y;
-                        ops.push(Box::new(move |g, h, hot| {
-                            let r = Rect::new(8.0, yy, w - 16.0, 28.0);
-                            let idx = h.len();
-                            if hot == Some(idx) {
-                                g.fill_rrect(r, 7.0, th.hover);
-                            }
-                            if is_conn {
-                                g.fill_circle(22.0, yy + 14.0, 3.5, accent);
-                            }
-                            g.text(&name, Rect::new(34.0, yy, w - 120.0, 28.0), &g.fonts.small, th.t1, Align::Left);
-                            if secure {
-                                g.icon('\u{E72E}', Rect::new(w - 84.0, yy, 20.0, 28.0), &g.fonts.icon14, th.t2);
-                            }
-                            g.text(&format!("{}%", signal), Rect::new(w - 62.0, yy, 46.0, 28.0), &g.fonts.tiny, th.t2, Align::Right);
-                            h.push((r, PopAct::Wifi(i)));
+                    if let Some(entry) = &pw {
+                        // password form
+                        let ssid = entry.ssid.clone();
+                        ops.push(note(format!("Password for {}", ssid), y, th.t1));
+                        y += 26.0;
+                        let shown: String = if entry.show {
+                            String::from_utf16_lossy(&entry.buf)
+                        } else {
+                            "\u{2022}".repeat(entry.buf.len())
+                        };
+                        let empty = entry.buf.is_empty();
+                        let field = Rect::new(16.0, y, w - 32.0, 32.0);
+                        ops.push(Box::new(move |g, _h, _| {
+                            g.fill_rrect(field, 8.0, th.hover);
+                            g.stroke_rrect(field, 8.0, accent, 1.5);
+                            let (t, c) = if empty {
+                                ("Enter password".to_string(), th.t2)
+                            } else {
+                                (format!("{}|", shown), th.t1)
+                            };
+                            g.text(&t, Rect::new(field.x + 10.0, field.y, field.w - 20.0, field.h), &g.fonts.small, c, Align::Left);
                         }));
-                        y += 28.0;
+                        y += 42.0;
+                        let ready = entry.buf.len() >= 8;
+                        let show_label = if entry.show { "Hide" } else { "Show" };
+                        let by = y;
+                        ops.push(Box::new(move |g, h, hot| {
+                            let sr = Rect::new(12.0, by, 56.0, 28.0);
+                            let i = h.len();
+                            if hot == Some(i) {
+                                g.fill_rrect(sr, 7.0, th.hover);
+                            }
+                            g.text(show_label, sr, &g.fonts.small, th.t2, Align::Center);
+                            h.push((sr, PopAct::PwShow));
+                            let cr = Rect::new(w - 16.0 - 80.0 - 8.0 - 72.0, by, 72.0, 28.0);
+                            let i = h.len();
+                            if hot == Some(i) {
+                                g.fill_rrect(cr, 7.0, th.hover);
+                            }
+                            g.text("Cancel", cr, &g.fonts.small, th.t1, Align::Center);
+                            h.push((cr, PopAct::PwCancel));
+                            let jr = Rect::new(w - 16.0 - 80.0, by, 80.0, 28.0);
+                            let bg = if ready { accent } else { th.hover };
+                            g.fill_rrect(jr, 7.0, bg);
+                            let tc = if ready { Color::white(1.0) } else { th.t2 };
+                            g.text("Join", jr, &g.fonts.small, tc, Align::Center);
+                            h.push((jr, PopAct::PwJoin));
+                        }));
+                        y += 36.0;
+                    } else {
+                        if wifi.nets.is_empty() {
+                            ops.push(note("Looking for networks\u{2026}".into(), y, th.t2));
+                            y += 28.0;
+                        }
+                        let busy_ssid = wifi.busy.clone();
+                        for (i, n) in wifi.nets.iter().enumerate() {
+                            let is_conn = wifi.connected.as_deref() == Some(n.ssid.as_str());
+                            let is_busy = busy_ssid.as_deref() == Some(n.ssid.as_str());
+                            let dim = busy_ssid.is_some() && !is_busy;
+                            let (name, secure, signal) = (n.ssid.clone(), n.secure, n.signal);
+                            let yy = y;
+                            ops.push(Box::new(move |g, h, hot| {
+                                let r = Rect::new(8.0, yy, w - 16.0, 28.0);
+                                let idx = h.len();
+                                if hot == Some(idx) && !dim {
+                                    g.fill_rrect(r, 7.0, th.hover);
+                                }
+                                if is_conn && !is_busy {
+                                    g.fill_circle(22.0, yy + 14.0, 3.5, accent);
+                                }
+                                let nc = if dim { th.t2 } else { th.t1 };
+                                g.text(&name, Rect::new(34.0, yy, w - 120.0, 28.0), &g.fonts.small, nc, Align::Left);
+                                if is_busy {
+                                    spinner(g, w - 30.0, yy + 14.0, phase, accent);
+                                } else {
+                                    if secure {
+                                        g.icon('\u{E72E}', Rect::new(w - 84.0, yy, 20.0, 28.0), &g.fonts.icon14, th.t2);
+                                    }
+                                    g.text(&format!("{}%", signal), Rect::new(w - 62.0, yy, 46.0, 28.0), &g.fonts.tiny, th.t2, Align::Right);
+                                }
+                                if !dim && !is_busy {
+                                    h.push((r, PopAct::Wifi(i)));
+                                }
+                            }));
+                            y += 28.0;
+                        }
                     }
                     y += 2.0;
                 }
@@ -298,34 +690,51 @@ impl App {
                 ops.push(title("Bluetooth", y));
                 ops.push(switch(radios.bluetooth == Some(true), 1, y));
                 y += 36.0;
+                if let Some((BarAct::Bluetooth, t, ok)) = &link_msg {
+                    ops.push(note(t.clone(), y - 4.0, if *ok { GREEN } else { RED }));
+                    y += 22.0;
+                }
                 if radios.bluetooth == Some(true) {
                     if devices.is_empty() {
                         ops.push(note("No paired devices".into(), y, th.t2));
                         y += 28.0;
                     }
+                    let busy_addr = bt_busy.as_ref().map(|b| (b.0, b.1));
                     for (i, d) in devices.iter().enumerate() {
-                        let (name, connected) = (d.name.clone(), d.connected);
+                        let (name, connected, addr) = (d.name.clone(), d.connected, d.address);
+                        let is_busy = busy_addr.map(|b| b.0) == Some(addr);
+                        let connecting = busy_addr.map(|b| b.1).unwrap_or(true);
+                        let dim = busy_addr.is_some() && !is_busy;
                         let yy = y;
                         ops.push(Box::new(move |g, h, hot| {
                             let r = Rect::new(8.0, yy, w - 16.0, 28.0);
                             let idx = h.len();
-                            let hovered = hot == Some(idx);
+                            let hovered = hot == Some(idx) && !dim;
                             if hovered {
                                 g.fill_rrect(r, 7.0, th.hover);
                             }
-                            if connected {
+                            if connected && !is_busy {
                                 g.fill_circle(22.0, yy + 14.0, 3.5, accent);
                             }
-                            g.text(&name, Rect::new(34.0, yy, w - 130.0, 28.0), &g.fonts.small, th.t1, Align::Left);
-                            let label = match (connected, hovered) {
-                                (true, true) => "Disconnect",
-                                (true, false) => "Connected",
-                                (false, true) => "Connect",
-                                (false, false) => "",
-                            };
-                            let c = if connected && !hovered { accent } else { th.t2 };
-                            g.text(label, Rect::new(w - 106.0, yy, 90.0, 28.0), &g.fonts.tiny, c, Align::Right);
-                            h.push((r, PopAct::Bt(i)));
+                            let nc = if dim { th.t2 } else { th.t1 };
+                            g.text(&name, Rect::new(34.0, yy, w - 150.0, 28.0), &g.fonts.small, nc, Align::Left);
+                            if is_busy {
+                                let t = if connecting { "Connecting\u{2026}" } else { "Disconnecting\u{2026}" };
+                                g.text(t, Rect::new(w - 150.0, yy, 100.0, 28.0), &g.fonts.tiny, th.t2, Align::Right);
+                                spinner(g, w - 30.0, yy + 14.0, phase, accent);
+                            } else {
+                                let label = match (connected, hovered) {
+                                    (true, true) => "Disconnect",
+                                    (true, false) => "Connected",
+                                    (false, true) => "Connect",
+                                    (false, false) => "",
+                                };
+                                let c = if connected && !hovered { accent } else { th.t2 };
+                                g.text(label, Rect::new(w - 106.0, yy, 90.0, 28.0), &g.fonts.tiny, c, Align::Right);
+                            }
+                            if !dim && !is_busy {
+                                h.push((r, PopAct::Bt(i)));
+                            }
                         }));
                         y += 28.0;
                     }
@@ -648,32 +1057,52 @@ impl App {
                         let net = sys::WIFI.lock().unwrap().nets.get(i).cloned();
                         let cur = sys::WIFI.lock().unwrap().connected.clone();
                         if let Some(n) = net {
+                            let hw = self.hwnd.0 as isize;
                             if cur.as_deref() == Some(n.ssid.as_str()) {
-                                sys::wifi_connect_async(self.hwnd.0 as isize, None);
+                                sys::wifi_connect_async(hw, None);
                             } else if n.saved {
-                                sys::wifi_connect_async(self.hwnd.0 as isize, Some(n.ssid));
+                                sys::wifi_connect_async(hw, Some(n.ssid));
+                            } else if !n.secure {
+                                sys::wifi_join_new_async(hw, n.ssid, n.auth, None);
+                            } else if sys::wifi_auth_supported(&n.auth) {
+                                self.start_pw(n.ssid, n.auth);
+                                return LRESULT(0);
                             } else {
-                                // needs a password: let Windows ask for it
+                                // enterprise etc.: let Windows handle it
                                 sys::open("ms-settings:network-wifi", "");
                                 self.close_pop();
+                                return LRESULT(0);
                             }
+                            self.sync_link_timer();
+                            self.render_bar();
+                            self.render_pop();
                         }
                     }
                     Some(PopAct::Bt(i)) => {
                         let dev = self.radio.devices.lock().unwrap().get(i).cloned();
                         if let Some(d) = dev {
-                            if d.address != 0 {
+                            if d.address != 0 && self.bt_busy.is_none() {
                                 let _ = self
                                     .radio
                                     .tx
                                     .send(crate::radio::Req::BtConnect(d.address, !d.connected));
-                                // show the expected result right away
-                                if let Some(x) = self.radio.devices.lock().unwrap().get_mut(i) {
-                                    x.connected = !d.connected;
-                                }
+                                self.bt_busy = Some((d.address, !d.connected, d.name.clone()));
+                                self.sync_link_timer();
+                                self.render_bar();
                                 self.render_pop();
                             }
                         }
+                    }
+                    Some(PopAct::PwShow) => {
+                        if let Some(pw) = self.pw.as_mut() {
+                            pw.show = !pw.show;
+                        }
+                        self.render_pop();
+                    }
+                    Some(PopAct::PwJoin) => self.pw_join(),
+                    Some(PopAct::PwCancel) => {
+                        self.end_pw(true);
+                        self.render_pop();
                     }
                     Some(PopAct::Link(url)) => {
                         sys::open(url, "");
@@ -683,7 +1112,55 @@ impl App {
                 }
                 LRESULT(0)
             }
-            WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
+            WM_MOUSEACTIVATE => {
+                let r = if self.pw.is_some() { MA_ACTIVATE } else { MA_NOACTIVATE };
+                LRESULT(r as isize)
+            }
+            WM_CHAR => {
+                if self.pw.is_some() {
+                    let c = wp.0 as u16;
+                    match c {
+                        0x0D => self.pw_join(),
+                        0x1B => {
+                            self.end_pw(true);
+                        }
+                        0x16 => {
+                            // Ctrl+V
+                            if let Some(t) = sys::clipboard_text(hwnd) {
+                                if let Some(pw) = self.pw.as_mut() {
+                                    for u in t.trim().encode_utf16() {
+                                        if u >= 0x20 && pw.buf.len() < 63 {
+                                            pw.buf.push(u);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        0x08 => {
+                            if let Some(pw) = self.pw.as_mut() {
+                                pw.buf.pop();
+                            }
+                        }
+                        c if c >= 0x20 => {
+                            if let Some(pw) = self.pw.as_mut() {
+                                if pw.buf.len() < 63 {
+                                    pw.buf.push(c);
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                    self.render_pop();
+                }
+                LRESULT(0)
+            }
+            WM_KILLFOCUS => {
+                if self.pw.is_some() {
+                    self.end_pw(false);
+                    self.render_pop();
+                }
+                LRESULT(0)
+            }
             _ => unsafe { DefWindowProcW(hwnd, msg, wp, lp) },
         }
     }

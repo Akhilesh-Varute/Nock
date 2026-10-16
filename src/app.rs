@@ -189,6 +189,15 @@ pub struct App {
     pub todos: Vec<Todo>,
     pub entering: Option<Vec<u16>>,
     prev_fg: HWND,
+    /// Bluetooth device being connected/disconnected: (address, connect?, name).
+    pub bt_busy: Option<(u64, bool, String)>,
+    /// Frame counter for the connecting animations.
+    pub link_phase: u32,
+    /// Result of the last Wi-Fi/Bluetooth attempt, shown briefly: (which, text, ok).
+    pub link_msg: Option<(crate::bar::BarAct, String, bool)>,
+    /// Wi-Fi password being typed in the dropdown.
+    pub pw: Option<crate::pop::PwEntry>,
+    pub pw_prev_fg: HWND,
     /// Set when the focus timer finishes: the pill pulses and shows "Time's up".
     alert_until: Option<Instant>,
 }
@@ -251,6 +260,11 @@ impl App {
             todos: store::load_todos(),
             entering: None,
             prev_fg: HWND::default(),
+            bt_busy: None,
+            link_phase: 0,
+            link_msg: None,
+            pw: None,
+            pw_prev_fg: HWND::default(),
             alert_until: None,
         };
         a.update_monitor();
@@ -484,6 +498,9 @@ impl App {
                 self.on_foreground();
             }
             crate::pop::T_POPLEAVE => self.on_pop_leave_timer(),
+            crate::pop::T_LINK => self.on_link_tick(),
+            crate::pop::T_TIP => self.on_tip_timer(),
+            crate::pop::T_LINKMSG => self.on_linkmsg_timer(),
             T_SEC => {
                 if self.timer_running() && self.timer_remaining_ms() <= 0 {
                     self.timer_done();
@@ -1174,7 +1191,8 @@ impl App {
     pub fn on_foreground(&mut self) {
         // Never hide because of our own window (typing a task makes us the
         // foreground window), and never hide while a task is being typed.
-        let ours = unsafe { GetForegroundWindow() } == self.hwnd;
+        let fgw = unsafe { GetForegroundWindow() };
+        let ours = fgw == self.hwnd || self.pop.as_ref().map(|p| p.hwnd) == Some(fgw);
         let kind = if self.tucked || ours || self.entering.is_some() {
             0
         } else {

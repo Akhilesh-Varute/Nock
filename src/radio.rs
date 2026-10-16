@@ -8,6 +8,8 @@ use std::sync::{Arc, Mutex};
 
 /// Posted to the UI window whenever the radio state changed.
 pub const WM_RADIO: u32 = 0x8000 + 4; // WM_APP + 4
+/// Posted when a Bluetooth connect/disconnect attempt finished (wparam = 1 on success).
+pub const WM_BTDONE: u32 = 0x8008;
 
 #[derive(Default, Clone, Copy)]
 pub struct Radios {
@@ -79,8 +81,28 @@ mod imp {
                 Req::Devices => load_devices(&dv),
                 Req::BtConnect(addr, on) => {
                     bt_set(addr, on);
-                    std::thread::sleep(std::time::Duration::from_millis(1800));
-                    load_devices(&dv);
+                    // wait (up to ~6 s) until the device really changed state
+                    let mut ok = false;
+                    for _ in 0..8 {
+                        std::thread::sleep(std::time::Duration::from_millis(750));
+                        load_devices(&dv);
+                        ok = dv
+                            .lock()
+                            .unwrap()
+                            .iter()
+                            .any(|d| d.address == addr && d.connected == on);
+                        if ok {
+                            break;
+                        }
+                    }
+                    unsafe {
+                        let _ = PostMessageW(
+                            Some(HWND(hwnd as *mut _)),
+                            WM_BTDONE,
+                            WPARAM(ok as usize),
+                            LPARAM(0),
+                        );
+                    }
                 }
                 Req::Refresh => {}
             }

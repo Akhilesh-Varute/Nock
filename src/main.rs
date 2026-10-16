@@ -270,6 +270,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
         }
         m if m == media::WM_MEDIA => a.on_media(),
         m if m == radio::WM_RADIO => a.on_radio(),
+        m if m == radio::WM_BTDONE => a.on_bt_done(wp.0 != 0),
         m if m == sys::WM_POP => a.on_pop_data(),
         m if m == sys::WM_EDGE => a.on_edge(),
         m if m == sys::WM_FSCHK => a.on_fullscreen_check(),
