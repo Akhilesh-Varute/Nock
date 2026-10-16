@@ -14,6 +14,7 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 
 use crate::app::*;
 use crate::bar::{theme, BAR_H};
+use crate::cast;
 use crate::gfx::*;
 use crate::sys;
 
@@ -32,9 +33,33 @@ pub enum BuddyKind {
     Bunny,
     Hero,
     Robot,
+    // pixel-art characters that also talk (see cast.rs / pixdata.rs)
+    Ronin,
+    Courier,
+    Necro,
 }
 
 impl BuddyKind {
+    fn pixel_who(self) -> Option<crate::cast::Who> {
+        match self {
+            BuddyKind::Ronin => Some(crate::cast::Who::Ronin),
+            BuddyKind::Courier => Some(crate::cast::Who::Courier),
+            BuddyKind::Necro => Some(crate::cast::Who::Necro),
+            _ => None,
+        }
+    }
+
+    /// In-character remark for the pixel buddies.
+    fn quote(self, r: u32) -> Option<&'static str> {
+        let list: &[&str] = match self {
+            BuddyKind::Ronin => &["Patience.", "The blade is quiet.", "One cut.", "Rain will come.", "Breathe.", "Hm."],
+            BuddyKind::Courier => &["Delivery's late. Again.", "Not my problem.", "Neon never sleeps.", "Fast lane.", "Tip me.", "Zero ping."],
+            BuddyKind::Necro => &["Rise.", "Death is a pause.", "Mind the bones.", "Souls. So many.", "Hush...", "Not dead yet?"],
+            _ => return None,
+        };
+        Some(list[(r as usize) % list.len()])
+    }
+
     /// 1..=5 as stored in config.ini (0 means off).
     pub fn from_id(id: u8) -> Option<BuddyKind> {
         match id {
@@ -43,6 +68,9 @@ impl BuddyKind {
             3 => Some(BuddyKind::Bunny),
             4 => Some(BuddyKind::Hero),
             5 => Some(BuddyKind::Robot),
+            6 => Some(BuddyKind::Ronin),
+            7 => Some(BuddyKind::Courier),
+            8 => Some(BuddyKind::Necro),
             _ => None,
         }
     }
@@ -114,6 +142,12 @@ impl Buddy {
             low_warned: false,
             last_ptr: Instant::now(),
         })
+    }
+
+    /// Back to napping (used when a scene ends).
+    pub fn sleep_now(&mut self) {
+        self.mode = Mode::Sleep;
+        self.bubble = None;
     }
 
     fn rnd(&mut self) -> u32 {
@@ -204,6 +238,9 @@ impl App {
     pub fn set_buddy(&mut self, id: u8) {
         self.cfg.buddy = id;
         crate::store::save_config(&self.cfg);
+        if id == 0 {
+            self.stop_scene();
+        }
         if let Some(b) = self.buddy.as_mut() {
             b.mode = Mode::Sleep;
             b.bubble = None;
@@ -217,6 +254,9 @@ impl App {
     }
 
     fn buddy_start_anim(&mut self) {
+        if self.scene_active() {
+            return;
+        }
         self.kill_timer(T_BWAKE);
         self.set_timer(T_BUDDY, 66);
     }
@@ -232,6 +272,9 @@ impl App {
     /// Wake-up timer: start a short outing (or a dance if music is playing).
     pub fn on_buddy_wake(&mut self) {
         self.kill_timer(T_BWAKE);
+        if self.scene_active() {
+            return;
+        }
         let Some((zl, zr)) = self.buddy_zone() else { return };
         let playing = self.mstate.playing;
         let (_, _, _, _, hh, ..) = sys::local_time();
@@ -260,6 +303,10 @@ impl App {
             b.plan = 1 + (b.rnd() % 2) as u8;
             b.target = zl + (zr - zl) * b.rnd_f();
             b.mode = Mode::Walk;
+            let r = b.rnd();
+            if let Some(q) = b.kind.quote(r) {
+                b.bubble = Some((q.into(), now + ms(3600)));
+            }
         }
         self.buddy_start_anim();
     }
@@ -300,6 +347,12 @@ impl App {
                     if now >= b.until {
                         if b.plan > 0 {
                             b.plan -= 1;
+                            let r = b.rnd();
+                            if r % 3 == 0 {
+                                if let Some(q) = b.kind.quote(r >> 4) {
+                                    b.bubble = Some((q.into(), now + ms(3000)));
+                                }
+                            }
                             b.target = zl + (zr - zl) * b.rnd_f();
                             b.mode = Mode::Walk;
                         } else {
@@ -476,7 +529,22 @@ impl App {
         if g.begin(pw, ph).is_err() {
             return;
         }
-        draw_sprite(g, b.kind, &pose, b.mode, b.tick);
+        if let Some(who) = b.kind.pixel_who() {
+            let act = match b.mode {
+                Mode::Sleep => cast::Act::Crouch,
+                Mode::Idle => cast::Act::Stand,
+                Mode::Walk => cast::Act::Walk,
+                Mode::Dance | Mode::Cheer => cast::Act::Cheer,
+                Mode::Hop => cast::Act::Jump,
+            };
+            let hop = if b.mode == Mode::Hop { ((b.tick as f32) * 0.5).sin().abs() * 5.0 } else { 0.0 };
+            cast::draw_actor(
+                g,
+                &cast::Draw { who, x: SPR_X, y: 28.0 - hop, dir: b.dir, act, p: 0.0, t: b.tick as f32 * 0.066, charge: 0.0 },
+            );
+        } else {
+            draw_sprite(g, b.kind, &pose, b.mode, b.tick);
+        }
         if let Some((text, _)) = &b.bubble {
             let n = text.chars().count() as f32;
             let w = (n * 6.0 + 16.0).clamp(26.0, 128.0);
@@ -591,6 +659,7 @@ fn palette(kind: BuddyKind) -> (Color, Color) {
         BuddyKind::Bunny => (Color(0.97, 0.94, 0.97, 1.0), Color(0.82, 0.76, 0.84, 1.0)),
         BuddyKind::Hero => (Color(0.18, 0.70, 0.76, 1.0), Color(0.1, 0.5, 0.58, 1.0)),
         BuddyKind::Robot => (Color(0.74, 0.8, 0.9, 1.0), Color(0.5, 0.57, 0.7, 1.0)),
+        BuddyKind::Ronin | BuddyKind::Courier | BuddyKind::Necro => (Color(0.5, 0.5, 0.5, 1.0), Color(0.3, 0.3, 0.3, 1.0)),
     }
 }
 
@@ -723,7 +792,7 @@ fn draw_sprite(g: &Gfx, kind: BuddyKind, p: &Pose, mode: Mode, tick: u32) {
             g.line((cx, hy - 7.5), (cx + 1.0, hy - 9.0), 1.1, Color(0.35, 0.7, 0.4, 1.0));
             g.fill_circle(cx + 2.2, hy - 9.3, 1.5, Color(0.45, 0.82, 0.5, 1.0));
         }
-        BuddyKind::Hero => {}
+        BuddyKind::Hero | BuddyKind::Ronin | BuddyKind::Courier | BuddyKind::Necro => {}
     }
 
     // head

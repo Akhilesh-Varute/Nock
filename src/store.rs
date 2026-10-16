@@ -44,6 +44,8 @@ pub struct Config {
     pub top_bar: bool,
     /// Buddy on the top bar: 0 = off, 1 blob, 2 cat, 3 bunny, 4 hero, 5 robot.
     pub buddy: u8,
+    /// Now and then the characters act out a short fight scene on the bar.
+    pub scenes: bool,
 }
 
 const DEFAULT_CONFIG: &str = "\
@@ -53,8 +55,10 @@ eq_animation=1
 clock_24h=0
 reserve_space=0
 top_bar=1
-# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot
+# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer
 buddy=2
+# fight scenes now and then (needs a buddy): 1 = on
+scenes=1
 ";
 
 pub fn load_config() -> Config {
@@ -73,6 +77,7 @@ pub fn load_config() -> Config {
         reserve_space: false,
         top_bar: true,
         buddy: 2,
+        scenes: true,
     };
     for line in text.lines() {
         let line = line.trim();
@@ -87,7 +92,8 @@ pub fn load_config() -> Config {
                 "clock_24h" => cfg.clock_24h = on,
                 "reserve_space" => cfg.reserve_space = on,
                 "top_bar" => cfg.top_bar = on,
-                "buddy" => cfg.buddy = v.trim().parse::<u8>().unwrap_or(2).min(5),
+                "scenes" => cfg.scenes = on,
+                "buddy" => cfg.buddy = v.trim().parse::<u8>().unwrap_or(2).min(8),
                 _ => {}
             }
         }
@@ -98,13 +104,14 @@ pub fn load_config() -> Config {
 pub fn save_config(c: &Config) {
     let b = |v: bool| if v { 1 } else { 0 };
     let text = format!(
-        "# Nock settings (1 = on, 0 = off)\nhover_expand={}\neq_animation={}\nclock_24h={}\nreserve_space={}\ntop_bar={}\n# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot\nbuddy={}\n",
+        "# Nock settings (1 = on, 0 = off)\nhover_expand={}\neq_animation={}\nclock_24h={}\nreserve_space={}\ntop_bar={}\n# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer\nbuddy={}\n# fight scenes now and then (needs a buddy): 1 = on\nscenes={}\n",
         b(c.hover_expand),
         b(c.eq_animation),
         b(c.clock_24h),
         b(c.reserve_space),
         b(c.top_bar),
-        c.buddy
+        c.buddy,
+        b(c.scenes)
     );
     let _ = fs::write(data_dir().join("config.ini"), text);
 }

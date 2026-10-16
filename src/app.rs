@@ -199,6 +199,7 @@ pub struct App {
     pub pw: Option<crate::pop::PwEntry>,
     pub pw_prev_fg: HWND,
     pub buddy: Option<crate::buddy::Buddy>,
+    pub stage: Option<crate::scene::Stage>,
     /// Set when the focus timer finishes: the pill pulses and shows "Time's up".
     alert_until: Option<Instant>,
 }
@@ -267,6 +268,7 @@ impl App {
             pw: None,
             pw_prev_fg: HWND::default(),
             buddy: None,
+            stage: None,
             alert_until: None,
         };
         a.update_monitor();
@@ -503,6 +505,8 @@ impl App {
             crate::pop::T_LINK => self.on_link_tick(),
             crate::buddy::T_BUDDY => self.on_buddy_tick(),
             crate::buddy::T_BWAKE => self.on_buddy_wake(),
+            crate::scene::T_SCENE => self.on_scene_timer(),
+            crate::scene::T_SCENEANIM => self.on_scene_anim(),
             crate::pop::T_TIP => self.on_tip_timer(),
             crate::pop::T_LINKMSG => self.on_linkmsg_timer(),
             T_SEC => {
@@ -1253,6 +1257,7 @@ impl App {
         self.rebuild_bar();
         self.rebuild_pop();
         self.rebuild_buddy();
+        self.rebuild_stage();
         self.update_reserve();
         self.render();
         self.render_bar();

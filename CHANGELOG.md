@@ -2,6 +2,8 @@
 
 ## 0.1.0 (unreleased)
 
+- Pixel-art characters (Ronin, Courier, Necromancer) that talk, as buddies and in three more scenes.
+- Fight scenes: four original characters (Sparkplug, Cinder, Krag, Veil) act out three short scripted scenes on the bar now and then; tray menu to play or disable.
 - Buddy: an animated character on the top bar (kitty, blob, bunny, hero, robot) that strolls, dances to music, follows the pointer and reacts to timers and connections.
 
 - Connecting animation on the Wi-Fi / Bluetooth bar icons, spinner rows and success / failure notes.

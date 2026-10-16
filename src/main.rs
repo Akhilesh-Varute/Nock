@@ -3,6 +3,9 @@
 mod app;
 mod bar;
 mod buddy;
+mod cast;
+mod pixdata;
+mod scene;
 mod gfx;
 mod pop;
 mod media;
@@ -150,8 +153,24 @@ fn main() -> Result<()> {
             Some(hinst),
             None,
         )?;
+        let stage_hwnd = CreateWindowExW(
+            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
+            class,
+            w!("NockStage"),
+            WS_POPUP,
+            0,
+            0,
+            10,
+            10,
+            None,
+            None,
+            Some(hinst),
+            None,
+        )?;
         if let Some(a) = app() {
             a.buddy = buddy::Buddy::new(buddy_hwnd, a.scale);
+            a.stage = scene::Stage::new(stage_hwnd, a.scale);
+            a.plan_scene();
             let mon_w = a.mon.right - a.mon.left;
             a.bar = bar::Bar::new(bar_hwnd, mon_w, a.scale);
             a.pop = pop::Pop::new(pop_hwnd, a.scale);
@@ -243,7 +262,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
     if a.is_pop(hwnd) {
         return a.pop_msg(hwnd, msg, wp, lp);
     }
-    if a.is_buddy(hwnd) {
+    if a.is_buddy(hwnd) || a.is_stage(hwnd) {
         return DefWindowProcW(hwnd, msg, wp, lp);
     }
     match msg {
@@ -376,7 +395,23 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             let _ = AppendMenuW(sub, MF_STRING | mark(3), 23, w!("Bunny"));
             let _ = AppendMenuW(sub, MF_STRING | mark(4), 24, w!("Hero"));
             let _ = AppendMenuW(sub, MF_STRING | mark(5), 25, w!("Robot"));
+            let _ = AppendMenuW(sub, MF_SEPARATOR, 0, PCWSTR::null());
+            let _ = AppendMenuW(sub, MF_STRING | mark(6), 26, w!("Ronin (pixel, talks)"));
+            let _ = AppendMenuW(sub, MF_STRING | mark(7), 27, w!("Courier (pixel, talks)"));
+            let _ = AppendMenuW(sub, MF_STRING | mark(8), 28, w!("Necromancer (pixel, talks)"));
             let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Buddy"));
+        }
+        if let Ok(sub) = CreatePopupMenu() {
+            let on = if a.cfg.scenes { MF_CHECKED } else { MF_UNCHECKED };
+            let _ = AppendMenuW(sub, MF_STRING | on, 30, w!("Play scenes now and then"));
+            let _ = AppendMenuW(sub, MF_SEPARATOR, 0, PCWSTR::null());
+            let _ = AppendMenuW(sub, MF_STRING, 31, w!("Play: Showdown"));
+            let _ = AppendMenuW(sub, MF_STRING, 32, w!("Play: Heist"));
+            let _ = AppendMenuW(sub, MF_STRING, 33, w!("Play: Team-up"));
+            let _ = AppendMenuW(sub, MF_STRING, 34, w!("Play: Duel at dusk"));
+            let _ = AppendMenuW(sub, MF_STRING, 35, w!("Play: Rise"));
+            let _ = AppendMenuW(sub, MF_STRING, 36, w!("Play: Alley fight"));
+            let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Fight scenes"));
         }
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
         let _ = AppendMenuW(menu, MF_STRING | auto, 1, w!("Start with Windows"));
@@ -412,7 +447,9 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             6 => a.toggle_reserve(),
             7 => a.toggle_top_bar(),
             4 => sys::open(&store::data_dir().to_string_lossy(), ""),
-            20..=25 => a.set_buddy((cmd.0 - 20) as u8),
+            20..=28 => a.set_buddy((cmd.0 - 20) as u8),
+            30 => a.toggle_scenes(),
+            31..=36 => a.play_scene((cmd.0 - 31) as usize),
             9 => {
                 // Clean up, then end the process outright so no helper thread,
                 // hook or COM apartment can keep notch.exe alive.

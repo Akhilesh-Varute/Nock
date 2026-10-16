@@ -51,6 +51,10 @@ A thin translucent bar runs along the top of the screen (like the macOS menu bar
 
 A dropdown closes when the pointer leaves it, when you click into another window, or when you click its icon again. The bar follows the Windows light/dark setting; the notch itself always stays black. It reserves its space like the taskbar does, so maximised windows start below it. Tray → *Top bar* turns it off (the old notch-only behaviour returns); `top_bar` in `config.ini` does the same.
 
+## Windows says "Smart App Control blocked an app"
+
+Nock is not code-signed yet, so Windows 11 machines with **Smart App Control** switched on refuse to run `nock.exe` (the app is safe; Windows only blocks programs from publishers it doesn't know). Machines where it is off, which is most of them, only show the usual SmartScreen note: click **More info → Run anyway**. If Smart App Control is on, you can turn it off in Windows Security → App & browser control → Smart App Control settings, or build and run in a different environment. You can read all of the source here before running anything.
+
 ## Buddy
 
 A tiny original character lives on the top bar, in the free stretch between the notch and the status icons. It naps most of the time and wakes up for short outings, so it costs almost nothing:
@@ -61,6 +65,14 @@ A tiny original character lives on the top bar, in the free stretch between the 
 - **Cheers** when the focus timer ends, and says "Connected!" or "Oops" after a Wi-Fi / Bluetooth attempt, "Low battery" when the battery runs low, and "Bedtime?" late at night.
 
 Pick the character from the tray menu → **Buddy**: Kitty (default), Blob, Bunny, Hero or Robot, or Off. It is also the `buddy` setting in `config.ini` (0 = off, 1 blob, 2 cat, 3 bunny, 4 hero, 5 robot). The characters are drawn from simple shapes in code, so there are no image files. It hides together with the bar in full screen.
+
+### Pixel characters
+
+Three more characters are drawn as detailed pixel art and **talk** in character as they stroll: **Ronin** (a rain-worn samurai: "Patience.", "One cut."), **Courier** (a neon hoverboard runner: "Delivery's late. Again.") and **Necromancer** ("Death is a pause."). Pick them in the tray menu → **Buddy**. They also star in three extra scenes: *Duel at dusk*, *Rise* and *Alley fight*.
+
+### Fight scenes
+
+Every 6 to 14 minutes, when there is room on the bar, the original characters act out a short story and then walk off while your buddy comes back: **Showdown** (Cinder the ember knight vs Krag the obsidian brute), **Heist** (Veil the shadow thief vs Sparkplug the young inventor) and **Team-up** (Sparkplug and Cinder vs Krag). Play one right away from the tray menu → **Fight scenes**, or turn the automatic ones off there (`scenes=0` in `config.ini`). Nothing runs between scenes.
 
 ## Using it
 
