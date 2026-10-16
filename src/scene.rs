@@ -141,7 +141,7 @@ fn script(id: usize) -> Script {
                     (3.0, 0.43, Stand, 1.0), (3.1, 0.43, Cast, 1.0), (3.9, 0.43, Stand, 1.0),
                     (4.3, 0.43, Block, 1.0), (5.0, 0.4, Stand, 1.0), (5.1, 0.4, Cast, 1.0),
                     (5.9, 0.4, Stand, 1.0), (6.4, 0.4, Cheer, 1.0), (8.0, 0.4, Walk, -1.0),
-                    (9.0, 0.05, Stand, -1.0),
+                    (9.0, -0.1, Stand, -1.0),
                 ]),
             ],
             evs: vec![
@@ -753,5 +753,51 @@ impl App {
         } else {
             self.kill_timer(T_SCENE);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scripts_are_well_formed() {
+        for id in 0..6 {
+            let sc = script(id);
+            assert!(!sc.tracks.is_empty());
+            for tk in &sc.tracks {
+                assert!(tk.keys.len() >= 2, "scene {id}: track too short");
+                assert!(tk.keys.windows(2).all(|w| w[0].t <= w[1].t), "scene {id}: keys out of order");
+                assert!(tk.keys.last().unwrap().t <= sc.len + 0.01, "scene {id}: key after end");
+            }
+            for e in &sc.evs {
+                assert!(e.a < sc.tracks.len() && e.b < sc.tracks.len(), "scene {id}: bad actor index");
+                assert!(e.t + e.dur <= sc.len + 0.5, "scene {id}: effect after end");
+            }
+            for s in &sc.says {
+                assert!(s.who < sc.tracks.len(), "scene {id}: bad speaker");
+                assert!(s.text.chars().count() <= 24, "scene {id}: line too long for bubble");
+            }
+        }
+    }
+
+    #[test]
+    fn actors_leave_the_stage_at_the_end() {
+        for id in 0..6 {
+            let sc = script(id);
+            for tk in &sc.tracks {
+                let last = tk.keys.last().unwrap();
+                assert!(last.x < 0.0 || last.x > 1.0, "scene {id}: an actor is left standing on stage");
+            }
+        }
+    }
+
+    #[test]
+    fn sample_interpolates_and_hides_outside() {
+        let tk = tr(Who::Cinder, &[(1.0, 0.0, Walk, 1.0), (2.0, 1.0, Stand, 1.0)]);
+        assert!(sample(&tk, 0.5).is_none());
+        let (x, ..) = sample(&tk, 1.5).unwrap();
+        assert!((x - 0.5).abs() < 0.01);
+        assert!(sample(&tk, 2.5).is_none());
     }
 }

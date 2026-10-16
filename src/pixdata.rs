@@ -1368,3 +1368,27 @@ pub fn pal(who: u8, ch: char) -> Option<Color> {
         _ => pal_necro(ch),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_layer_is_the_right_size_and_uses_known_colours() {
+        let sets: [(&[Layer], u8); 6] = [
+            (&RONIN_LEGS, 0), (&RONIN_ARMS, 0), (&COURIER_LEGS, 1),
+            (&COURIER_ARMS, 1), (&NECRO_LEGS, 2), (&NECRO_ARMS, 2),
+        ];
+        for (layers, who) in sets {
+            for l in layers {
+                assert_eq!(l.len(), H);
+                for row in l.iter() {
+                    assert_eq!(row.len(), W);
+                    for ch in row.chars().filter(|c| *c != '.') {
+                        assert!(pal(who, ch).is_some(), "unknown colour {ch}");
+                    }
+                }
+            }
+        }
+    }
+}

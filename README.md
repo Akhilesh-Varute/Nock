@@ -11,7 +11,7 @@ Written in Rust. No webview, no framework, no runtime. One small <code>.exe</cod
 <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
 </p>
 
-> **Status: early.** It type-checks and builds in CI, but has had little real-world testing. Expect rough edges and please [open an issue](../../issues).
+> **Status: early.** It builds in CI and works on the author's machine, but has had limited testing elsewhere. Expect rough edges and please [open an issue](../../issues).
 
 ## Features
 
@@ -128,7 +128,7 @@ Everything is in `%APPDATA%\Nock\` (tray → *Open settings folder*):
 
 ## Contributing
 
-Issues and pull requests are welcome, see [CONTRIBUTING.md](CONTRIBUTING.md). Version history is in [CHANGELOG.md](CHANGELOG.md).
+Issues and pull requests are welcome, see [CONTRIBUTING.md](CONTRIBUTING.md). Looking for something to work on? See [GOOD_FIRST_ISSUES.md](GOOD_FIRST_ISSUES.md). Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
