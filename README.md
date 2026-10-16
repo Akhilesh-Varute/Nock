@@ -68,11 +68,11 @@ Pick the character from the tray menu → **Buddy**: Kitty (default), Blob, Bunn
 
 ### Pixel characters
 
-Three more characters are drawn as detailed pixel art and **talk** in character as they stroll: **Ronin** (a rain-worn samurai: "Patience.", "One cut."), **Courier** (a neon hoverboard runner: "Delivery's late. Again.") and **Necromancer** ("Death is a pause."). Pick them in the tray menu → **Buddy**. They also star in three extra scenes: *Duel at dusk*, *Rise* and *Alley fight*.
+Three more characters are drawn as detailed pixel art and **talk** in character as they stroll: **Ronin** (a rain-worn samurai: "Patience.", "One cut."), **Courier** (a neon hoverboard runner: "Delivery's late. Again.") and **Necromancer** ("Death is a pause."). Pick them in the tray menu → **Buddy** (`buddy=6`, `7` or `8` in `config.ini`). They also star in three of the scenes below.
 
 ### Fight scenes
 
-Every 6 to 14 minutes, when there is room on the bar, the original characters act out a short story and then walk off while your buddy comes back: **Showdown** (Cinder the ember knight vs Krag the obsidian brute), **Heist** (Veil the shadow thief vs Sparkplug the young inventor) and **Team-up** (Sparkplug and Cinder vs Krag). Play one right away from the tray menu → **Fight scenes**, or turn the automatic ones off there (`scenes=0` in `config.ini`). Nothing runs between scenes.
+Every 6 to 14 minutes, when there is room on the bar, the characters act out a short scripted story and then walk off while your buddy comes back. Six scenes: **Showdown** (Cinder the ember knight vs Krag the obsidian brute), **Heist** (Veil the shadow thief vs Sparkplug the young inventor), **Team-up** (Sparkplug and Cinder vs Krag), **Duel at dusk** (Ronin vs Courier), **Rise** (Necromancer vs Ronin) and **Alley fight** (Ronin and Courier vs Necromancer). Play one right away from the tray menu → **Fight scenes**, or turn the automatic ones off there (`scenes=0` in `config.ini`). Nothing runs between scenes.
 
 ## Using it
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.2.0
 
 - Pixel-art characters (Ronin, Courier, Necromancer) that talk, as buddies and in three more scenes.
 - Fight scenes: four original characters (Sparkplug, Cinder, Krag, Veil) act out three short scripted scenes on the bar now and then; tray menu to play or disable.
