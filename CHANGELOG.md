@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0
+
+- New buddy: a photo bobblehead (Ravi Kishan) that bobs and tilts along the bar and speaks its own lines.
+- New scene: Press conference. Reporters with mics and a camera crowd round the bobblehead while it answers.
+- Fight scenes: stay clear of the notch pill at its widest, start right after the app name on the left, and pick whichever side has more room.
+
 ## 0.2.1
 
 - Fight scenes: use the stretch left of the notch when the right side is too narrow; say so when there is no room.

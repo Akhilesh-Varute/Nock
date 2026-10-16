@@ -17,11 +17,14 @@ use crate::bar::{theme, BAR_H};
 use crate::cast;
 use crate::gfx::*;
 use crate::sys;
+use windows::Win32::Graphics::Direct2D::ID2D1Bitmap;
+
+pub const FACE_PNG: &[u8] = include_bytes!("../assets/face.png");
 
 /// Window width (logical px). The character stands at `SPR_X`; speech bubbles
 /// grow to its left.
-const BW: f32 = 190.0;
-const SPR_X: f32 = 152.0;
+const BW: f32 = 380.0;
+const SPR_X: f32 = 342.0;
 
 pub const T_BUDDY: usize = 14;
 pub const T_BWAKE: usize = 15;
@@ -37,6 +40,8 @@ pub enum BuddyKind {
     Ronin,
     Courier,
     Necro,
+    // photo bobblehead (see assets/face.png)
+    Face,
 }
 
 impl BuddyKind {
@@ -55,6 +60,7 @@ impl BuddyKind {
             BuddyKind::Ronin => &["Patience.", "The blade is quiet.", "One cut.", "Rain will come.", "Breathe.", "Hm."],
             BuddyKind::Courier => &["Delivery's late. Again.", "Not my problem.", "Neon never sleeps.", "Fast lane.", "Tip me.", "Zero ping."],
             BuddyKind::Necro => &["Rise.", "Death is a pause.", "Mind the bones.", "Souls. So many.", "Hush...", "Not dead yet?"],
+            BuddyKind::Face => &["Zindagi jhand ba, phir bhi ghamand ba!", "Money follows, my brotha!", "Jaldi the late", "Home from work", "Pehchaan! Daam toh daud kar aayega, my brother!"],
             _ => return None,
         };
         Some(list[(r as usize) % list.len()])
@@ -71,6 +77,7 @@ impl BuddyKind {
             6 => Some(BuddyKind::Ronin),
             7 => Some(BuddyKind::Courier),
             8 => Some(BuddyKind::Necro),
+            9 => Some(BuddyKind::Face),
             _ => None,
         }
     }
@@ -110,6 +117,8 @@ pub struct Buddy {
     rng: u32,
     low_warned: bool,
     last_ptr: Instant,
+    /// the photo head for BuddyKind::Face, decoded on first use
+    face: Option<ID2D1Bitmap>,
 }
 
 impl Buddy {
@@ -141,6 +150,7 @@ impl Buddy {
             rng: seed | 1,
             low_warned: false,
             last_ptr: Instant::now(),
+            face: None,
         })
     }
 
@@ -529,11 +539,16 @@ impl App {
             ((cursor.y as f32 - cy_px) / (70.0 * scale)).clamp(-1.0, 1.0),
         );
         let pose = pose_for(b.mode, b.tick, b.dir, look);
+        if b.kind == BuddyKind::Face && b.face.is_none() {
+            b.face = b.gfx.decode_image(FACE_PNG).ok().map(|f| f.0);
+        }
         let g = &b.gfx;
         if g.begin(pw, ph).is_err() {
             return;
         }
-        if let Some(who) = b.kind.pixel_who() {
+        if let (BuddyKind::Face, Some(face)) = (b.kind, &b.face) {
+            draw_face(g, face, b.mode, b.tick);
+        } else if let Some(who) = b.kind.pixel_who() {
             let act = match b.mode {
                 Mode::Sleep => cast::Act::Crouch,
                 Mode::Idle => cast::Act::Stand,
@@ -551,7 +566,7 @@ impl App {
         }
         if let Some((text, _)) = &b.bubble {
             let n = text.chars().count() as f32;
-            let w = (n * 6.0 + 16.0).clamp(26.0, 128.0);
+            let w = (n * 6.0 + 16.0).clamp(26.0, 320.0);
             let r = Rect::new(SPR_X - 16.0 - w, 5.0, w, 18.0);
             let bg = if light {
                 Color(1.0, 1.0, 1.0, 0.97)
@@ -573,6 +588,26 @@ impl App {
 }
 
 // ------------------------------------------------------------------ drawing --
+
+/// The photo bobblehead: just the head, tilting and bobbing instead of a body.
+fn draw_face(g: &Gfx, face: &ID2D1Bitmap, mode: Mode, tick: u32) {
+    let t = tick as f32 * 0.066;
+    let (bob, tilt) = match mode {
+        Mode::Sleep => (2.0, 0.0),
+        Mode::Idle => ((t * 3.0).sin() * 0.8, (t * 2.0).sin() * 2.0),
+        Mode::Walk => ((t * 14.0).sin().abs() * -2.5, (t * 7.0).sin() * 5.0),
+        Mode::Dance | Mode::Cheer => ((t * 12.0).sin().abs() * -4.0, (t * 9.0).sin() * 9.0),
+        Mode::Hop => (-((tick as f32 * 0.5).sin().abs() * 5.0), 0.0),
+    };
+    draw_face_at(g, face, SPR_X, 28.0, bob, tilt);
+}
+
+/// The head standing on `ground` at `x`, lifted by `-bob` and rotated `tilt` degrees.
+pub fn draw_face_at(g: &Gfx, face: &ID2D1Bitmap, x: f32, ground: f32, bob: f32, tilt: f32) {
+    let (h, w) = (26.0, 26.0 * 112.0 / 140.0);
+    g.fill_rrect(Rect::new(x - 7.0, ground, 14.0, 2.0), 1.0, Color(0.0, 0.0, 0.0, 0.3));
+    g.draw_bitmap_tilted(face, Rect::new(x - w / 2.0, ground - h + bob, w, h), tilt);
+}
 
 #[derive(Clone, Copy, PartialEq)]
 enum Eyes {
@@ -663,7 +698,7 @@ fn palette(kind: BuddyKind) -> (Color, Color) {
         BuddyKind::Bunny => (Color(0.97, 0.94, 0.97, 1.0), Color(0.82, 0.76, 0.84, 1.0)),
         BuddyKind::Hero => (Color(0.18, 0.70, 0.76, 1.0), Color(0.1, 0.5, 0.58, 1.0)),
         BuddyKind::Robot => (Color(0.74, 0.8, 0.9, 1.0), Color(0.5, 0.57, 0.7, 1.0)),
-        BuddyKind::Ronin | BuddyKind::Courier | BuddyKind::Necro => (Color(0.5, 0.5, 0.5, 1.0), Color(0.3, 0.3, 0.3, 1.0)),
+        BuddyKind::Ronin | BuddyKind::Courier | BuddyKind::Necro | BuddyKind::Face => (Color(0.5, 0.5, 0.5, 1.0), Color(0.3, 0.3, 0.3, 1.0)),
     }
 }
 
@@ -796,7 +831,7 @@ fn draw_sprite(g: &Gfx, kind: BuddyKind, p: &Pose, mode: Mode, tick: u32) {
             g.line((cx, hy - 7.5), (cx + 1.0, hy - 9.0), 1.1, Color(0.35, 0.7, 0.4, 1.0));
             g.fill_circle(cx + 2.2, hy - 9.3, 1.5, Color(0.45, 0.82, 0.5, 1.0));
         }
-        BuddyKind::Hero | BuddyKind::Ronin | BuddyKind::Courier | BuddyKind::Necro => {}
+        BuddyKind::Hero | BuddyKind::Ronin | BuddyKind::Courier | BuddyKind::Necro | BuddyKind::Face => {}
     }
 
     // head

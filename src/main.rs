@@ -399,6 +399,7 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             let _ = AppendMenuW(sub, MF_STRING | mark(6), 26, w!("Ronin (pixel, talks)"));
             let _ = AppendMenuW(sub, MF_STRING | mark(7), 27, w!("Courier (pixel, talks)"));
             let _ = AppendMenuW(sub, MF_STRING | mark(8), 28, w!("Necromancer (pixel, talks)"));
+            let _ = AppendMenuW(sub, MF_STRING | mark(9), 29, w!("Ravi Kishan (photo, talks)"));
             let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Buddy"));
         }
         if let Ok(sub) = CreatePopupMenu() {
@@ -411,6 +412,7 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             let _ = AppendMenuW(sub, MF_STRING, 34, w!("Play: Duel at dusk"));
             let _ = AppendMenuW(sub, MF_STRING, 35, w!("Play: Rise"));
             let _ = AppendMenuW(sub, MF_STRING, 36, w!("Play: Alley fight"));
+            let _ = AppendMenuW(sub, MF_STRING, 37, w!("Play: Press conference"));
             let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Fight scenes"));
         }
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
@@ -447,9 +449,9 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             6 => a.toggle_reserve(),
             7 => a.toggle_top_bar(),
             4 => sys::open(&store::data_dir().to_string_lossy(), ""),
-            20..=28 => a.set_buddy((cmd.0 - 20) as u8),
+            20..=29 => a.set_buddy((cmd.0 - 20) as u8),
             30 => a.toggle_scenes(),
-            31..=36 => a.play_scene((cmd.0 - 31) as usize),
+            31..=37 => a.play_scene((cmd.0 - 31) as usize),
             9 => {
                 // Clean up, then end the process outright so no helper thread,
                 // hook or COM apartment can keep notch.exe alive.

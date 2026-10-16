@@ -13,6 +13,7 @@ use crate::app::*;
 use crate::bar::theme;
 use crate::cast::{self, Act, Draw, Who};
 use crate::gfx::*;
+use windows::Win32::Graphics::Direct2D::ID2D1Bitmap;
 
 pub const T_SCENE: usize = 16;
 pub const T_SCENEANIM: usize = 17;
@@ -21,8 +22,12 @@ pub const T_SCENEANIM: usize = 17;
 const SH: f32 = 32.0;
 /// Ground line inside the stage.
 const GROUND: f32 = 28.0;
-const MAX_W: f32 = 380.0;
+const MAX_W: f32 = 460.0;
 const MIN_W: f32 = 160.0;
+/// Number of scripted scenes (0..SCENES).
+const SCENES: usize = 7;
+/// The press conference needs room for its long speech bubbles.
+const PRESS_W: f32 = 420.0;
 
 
 // ------------------------------------------------------------------ scripts --
@@ -274,6 +279,46 @@ fn script(id: usize) -> Script {
             ],
             len: 10.6,
         },
+        // Press conference: reporters (1..=3) and a camera (4) crowd the right end,
+        // the photo head (0) stands just left of them, so its long speech bubble
+        // opens to the left over empty bar and never covers anyone.
+        6 => Script {
+            tracks: vec![
+                tr(Who::Face, &[
+                    (0.0, -0.1, Walk, 1.0), (1.4, 0.70, Stand, 1.0), (2.0, 0.70, Cheer, 1.0),
+                    (5.0, 0.70, Stand, 1.0), (5.2, 0.70, Cheer, 1.0), (7.7, 0.70, Stand, 1.0),
+                    (7.9, 0.70, Cheer, 1.0), (9.9, 0.70, Stand, 1.0), (10.0, 0.70, Cheer, 1.0),
+                    (12.0, 0.70, Stand, 1.0), (12.2, 0.70, Cheer, 1.0), (15.8, 0.70, Stand, 1.0),
+                    (16.4, 0.70, Walk, -1.0), (17.8, -0.1, Stand, -1.0),
+                ]),
+                tr(Who::Press(0), &[
+                    (0.2, 1.1, Run, -1.0), (1.3, 0.826, Stand, -1.0), (16.0, 0.826, Stand, -1.0),
+                    (16.2, 0.826, Walk, 1.0), (17.8, 1.1, Stand, 1.0),
+                ]),
+                tr(Who::Press(1), &[
+                    (0.0, 1.1, Run, -1.0), (1.4, 0.88, Stand, -1.0), (16.0, 0.88, Stand, -1.0),
+                    (16.2, 0.88, Walk, 1.0), (17.8, 1.1, Stand, 1.0),
+                ]),
+                tr(Who::Press(2), &[
+                    (0.4, 1.1, Run, -1.0), (1.6, 0.935, Stand, -1.0), (16.0, 0.935, Stand, -1.0),
+                    (16.2, 0.935, Walk, 1.0), (17.8, 1.1, Stand, 1.0),
+                ]),
+                tr(Who::Press(3), &[
+                    (0.1, 1.1, Run, -1.0), (1.8, 0.98, Stand, -1.0), (16.0, 0.98, Stand, -1.0),
+                    (16.2, 0.98, Walk, 1.0), (17.8, 1.1, Stand, 1.0),
+                ]),
+            ],
+            evs: vec![],
+            says: vec![
+                say(1.3, 0.8, 1, "Sir! Sir!"),
+                say(2.0, 3.0, 0, "Zindagi jhand ba, phir bhi ghamand ba!"),
+                say(5.2, 2.5, 0, "Money follows, my brotha!"),
+                say(7.9, 2.0, 0, "Jaldi the late"),
+                say(10.0, 2.0, 0, "Home from work"),
+                say(12.2, 3.6, 0, "Pehchaan! Daam toh daud kar aayega, my brother!"),
+            ],
+            len: 17.8,
+        },
         // Spark (0) + Cinder (1) vs Krag (2)
         _ => Script {
             tracks: vec![
@@ -353,6 +398,8 @@ pub struct Stage {
     w: f32,
     left: f32,
     rng: u32,
+    /// the photo head for the press-conference scene, decoded on first use
+    face: Option<ID2D1Bitmap>,
 }
 
 impl Stage {
@@ -376,6 +423,7 @@ impl Stage {
             w: MAX_W,
             left: 0.0,
             rng: nanos | 1,
+            face: None,
         })
     }
 
@@ -515,11 +563,53 @@ fn draw_fx(g: &Gfx, e: &Ev, u: f32, draws: &[Option<Draw>], tick: u32) {
     }
 }
 
+/// A reporter holding a mic out toward the speaker (variant 3 is the camera
+/// operator). Rear reporters reach over the front ones, so their arms rise.
+fn draw_reporter(g: &Gfx, d: &Draw, v: u8) {
+    let (x, y, dr) = (d.x, d.y, d.dir);
+    let moving = matches!(d.act, Act::Walk | Act::Run);
+    let sw = if moving { (d.t * 14.0).sin() * 3.0 } else { 0.0 };
+    let cloth = [Color(0.85, 0.25, 0.3, 1.0), Color(0.25, 0.55, 0.85, 1.0), Color(0.95, 0.75, 0.2, 1.0), Color(0.3, 0.3, 0.36, 1.0)][(v % 4) as usize];
+    let skin = [Color(0.95, 0.76, 0.6, 1.0), Color(0.72, 0.5, 0.36, 1.0), Color(0.86, 0.64, 0.48, 1.0), Color(0.62, 0.42, 0.3, 1.0)][((v + 1) % 4) as usize];
+    let dark = Color(0.12, 0.12, 0.16, 1.0);
+    g.fill_rrect(Rect::new(x - 6.0, y - 1.0, 12.0, 2.2), 1.1, Color(0.0, 0.0, 0.0, 0.28));
+    g.line((x - 1.5, y - 8.0), (x - 1.5 + sw, y), 2.2, dark);
+    g.line((x + 1.5, y - 8.0), (x + 1.5 - sw, y), 2.2, dark);
+    g.fill_rrect(Rect::new(x - 3.5, y - 16.0, 7.0, 9.0), 2.0, cloth);
+    g.fill_circle(x + dr * 0.5, y - 19.5, 3.4, skin);
+    g.fill_circle(x - dr * 0.3, y - 21.0, 3.0, dark);
+    if v == 3 {
+        let (cx, cy) = (x + dr * 4.0, y - 17.0);
+        g.fill_rrect(Rect::new(cx - 4.5, cy - 3.0, 9.0, 6.0), 1.0, dark);
+        g.fill_circle(cx + dr * 5.0, cy, 2.2, Color(0.35, 0.4, 0.5, 1.0));
+        if (d.t * 3.0).fract() < 0.12 {
+            g.fill_circle(cx + dr * 6.5, cy, 4.0, Color(1.0, 1.0, 0.9, 0.9));
+        }
+        return;
+    }
+    let reach = if moving { 4.0 } else { 14.0 };
+    let lift = 1.0 + v as f32 * 2.0 + (d.t * 5.0 + v as f32).sin() * 0.8;
+    let hand = (x + dr * reach, y - 14.5 - lift);
+    g.line((x + dr * 1.5, y - 14.0), hand, 2.0, cloth);
+    g.line(hand, (hand.0 + dr * 2.5, hand.1 - 1.0), 1.2, dark);
+    g.fill_circle(hand.0 + dr * 3.4, hand.1 - 1.3, 1.7, dark);
+    g.fill_circle(hand.0 + dr * 3.4, hand.1 - 1.3, 0.7, cloth);
+}
+
+/// Bob and tilt (degrees) of the photo head for an action.
+fn face_motion(act: Act, t: f32) -> (f32, f32) {
+    match act {
+        Act::Walk | Act::Run => ((t * 14.0).sin().abs() * -2.5, (t * 7.0).sin() * 5.0),
+        Act::Cheer => ((t * 12.0).sin().abs() * -3.0, (t * 9.0).sin() * 8.0),
+        _ => ((t * 3.0).sin() * 0.8, (t * 2.0).sin() * 2.0),
+    }
+}
+
 /// Speech bubble beside the speaker (toward the open side of the stage), since
 /// the bar leaves no room above them.
 fn draw_bubble(g: &Gfx, th: &crate::bar::Theme, light: bool, text: &str, sx: f32, sw: f32) {
     let n = text.chars().count() as f32;
-    let w = (n * 5.6 + 14.0).clamp(26.0, 130.0);
+    let w = (n * 5.6 + 14.0).clamp(26.0, 280.0).min(sw - 2.0);
     let right = sx < sw * 0.5;
     let x = if right { sx + 14.0 } else { sx - 14.0 - w };
     let x = x.clamp(1.0, (sw - w - 1.0).max(1.0));
@@ -569,10 +659,13 @@ impl App {
         let b = self.bar.as_ref()?;
         let w = (self.mon.right - self.mon.left) as f32 / self.scale;
         let right_end = b.hits.iter().map(|(r, _)| r.x).fold(w, f32::min) - 10.0;
-        // the notch pill is about 128 px wide when idle and 296 px with music
-        let half = if self.mstate.playing { 160.0 } else { 76.0 };
+        // keep clear of the widest collapsed pill (music + running timer), since
+        // the pill is drawn above the stage and would hide anything under it
+        let half = (COL_MEDIA_W + 58.0) / 2.0 + 14.0;
         let r_zone = (w / 2.0 + half, right_end);
-        let l_zone = (280.0, w / 2.0 - half);
+        // left zone starts right after the app name (about 8 px per character)
+        let name_end = 14.0 + b.app_name.chars().count() as f32 * 8.0 + 16.0;
+        let l_zone = (name_end.max(100.0), w / 2.0 - half);
         let best = if r_zone.1 - r_zone.0 >= l_zone.1 - l_zone.0 { r_zone } else { l_zone };
         let width = (best.1 - best.0).min(MAX_W);
         if width < MIN_W {
@@ -610,7 +703,7 @@ impl App {
             return;
         }
         let id = match self.stage.as_mut() {
-            Some(s) => (s.rnd() % 6) as usize,
+            Some(s) => (s.rnd() % SCENES as u32) as usize,
             None => return,
         };
         self.play_scene(id);
@@ -643,10 +736,16 @@ impl App {
             self.buddy_say("No room on the bar for a scene", 3500);
             return;
         };
+        if id == 6 && w < PRESS_W {
+            self.buddy_say("Not enough room for the press conference", 3500);
+            return;
+        }
+        // the fight scenes were staged for 380 px; only the press conference uses more
+        let (left, w) = if id == 6 || w <= 380.0 { (left, w) } else { (left + w - 380.0, 380.0) };
         let mon = self.mon;
         let scale = self.scale;
         let Some(s) = self.stage.as_mut() else { return };
-        s.id = id.min(5);
+        s.id = id.min(SCENES - 1);
         s.start = Instant::now();
         s.w = w;
         s.left = left;
@@ -710,6 +809,9 @@ impl App {
         let t = s.start.elapsed().as_secs_f32();
         let tick = (t * 30.0) as u32;
         let (pw, ph) = ((s.w * scale).round() as i32, (SH * scale).round() as i32);
+        if s.id == 6 && s.face.is_none() {
+            s.face = s.gfx.decode_image(crate::buddy::FACE_PNG).ok().map(|f| f.0);
+        }
         let g = &s.gfx;
         if g.begin(pw, ph).is_err() {
             return;
@@ -747,8 +849,16 @@ impl App {
             ya.partial_cmp(&yb).unwrap_or(std::cmp::Ordering::Equal)
         });
         for i in order {
-            if let Some(d) = &draws[i] {
-                cast::draw_actor(g, d);
+            let Some(d) = &draws[i] else { continue };
+            match d.who {
+                Who::Face => {
+                    if let Some(f) = &s.face {
+                        let (bob, tilt) = face_motion(d.act, d.t);
+                        crate::buddy::draw_face_at(g, f, d.x, d.y, bob, tilt);
+                    }
+                }
+                Who::Press(v) => draw_reporter(g, d, v),
+                _ => cast::draw_actor(g, d),
             }
         }
         for e in &sc.evs {
@@ -798,7 +908,7 @@ mod tests {
 
     #[test]
     fn scripts_are_well_formed() {
-        for id in 0..6 {
+        for id in 0..SCENES {
             let sc = script(id);
             assert!(!sc.tracks.is_empty());
             for tk in &sc.tracks {
@@ -812,14 +922,14 @@ mod tests {
             }
             for s in &sc.says {
                 assert!(s.who < sc.tracks.len(), "scene {id}: bad speaker");
-                assert!(s.text.chars().count() <= 24, "scene {id}: line too long for bubble");
+                assert!(s.text.chars().count() <= 50, "scene {id}: line too long for bubble");
             }
         }
     }
 
     #[test]
     fn actors_leave_the_stage_at_the_end() {
-        for id in 0..6 {
+        for id in 0..SCENES {
             let sc = script(id);
             for tk in &sc.tracks {
                 let last = tk.keys.last().unwrap();

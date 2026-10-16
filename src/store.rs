@@ -57,7 +57,7 @@ eq_animation=1
 clock_24h=0
 reserve_space=0
 top_bar=1
-# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer
+# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer, 9 = ravi kishan
 buddy=2
 # fight scenes now and then (needs a buddy): 1 = on
 scenes=1
@@ -99,7 +99,7 @@ pub fn load_config() -> Config {
                 "top_bar" => cfg.top_bar = on,
                 "scenes" => cfg.scenes = on,
                 "scene_min" => cfg.scene_min = v.trim().parse::<u8>().unwrap_or(5).clamp(1, 60),
-                "buddy" => cfg.buddy = v.trim().parse::<u8>().unwrap_or(2).min(8),
+                "buddy" => cfg.buddy = v.trim().parse::<u8>().unwrap_or(2).min(9),
                 _ => {}
             }
         }
@@ -117,7 +117,7 @@ pub fn load_config() -> Config {
 pub fn save_config(c: &Config) {
     let b = |v: bool| if v { 1 } else { 0 };
     let text = format!(
-        "# Nock settings (1 = on, 0 = off)\nhover_expand={}\neq_animation={}\nclock_24h={}\nreserve_space={}\ntop_bar={}\n# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer\nbuddy={}\n# fight scenes now and then (needs a buddy): 1 = on\nscenes={}\n# average minutes between scenes (1 to 60)\nscene_min={}\n",
+        "# Nock settings (1 = on, 0 = off)\nhover_expand={}\neq_animation={}\nclock_24h={}\nreserve_space={}\ntop_bar={}\n# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer, 9 = ravi kishan\nbuddy={}\n# fight scenes now and then (needs a buddy): 1 = on\nscenes={}\n# average minutes between scenes (1 to 60)\nscene_min={}\n",
         b(c.hover_expand),
         b(c.eq_animation),
         b(c.clock_24h),

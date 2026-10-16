@@ -24,6 +24,9 @@ pub enum Who {
     Ronin,
     Courier,
     Necro,
+    // press-conference scene (drawn in scene.rs): the photo head and reporters
+    Face,
+    Press(u8),
 }
 
 impl Who {

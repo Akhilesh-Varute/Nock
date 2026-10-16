@@ -343,6 +343,24 @@ impl Gfx {
         }
     }
 
+    /// `draw_bitmap` rotated about the rect's centre (degrees).
+    pub fn draw_bitmap_tilted(&self, bmp: &ID2D1Bitmap, r: Rect, deg: f32) {
+        let (sn, cs) = deg.to_radians().sin_cos();
+        let (cx, cy) = (r.cx(), r.cy());
+        unsafe {
+            self.rt.SetTransform(&Matrix3x2 {
+                M11: cs,
+                M12: sn,
+                M21: -sn,
+                M22: cs,
+                M31: cx - (cx * cs - cy * sn),
+                M32: cy - (cx * sn + cy * cs),
+            });
+        }
+        self.draw_bitmap(bmp, r, 0.0, 1.0);
+        unsafe { self.rt.SetTransform(&Matrix3x2::identity()) };
+    }
+
     // ------------------------------------------------------------ images ----
 
     /// Decode encoded image bytes (jpeg/png/...) into a GPU-less D2D bitmap and
