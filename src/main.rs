@@ -2,6 +2,7 @@
 
 mod app;
 mod bar;
+mod buddy;
 mod gfx;
 mod pop;
 mod media;
@@ -135,7 +136,22 @@ fn main() -> Result<()> {
             Some(hinst),
             None,
         )?;
+        let buddy_hwnd = CreateWindowExW(
+            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
+            class,
+            w!("NockBuddy"),
+            WS_POPUP,
+            0,
+            0,
+            10,
+            10,
+            None,
+            None,
+            Some(hinst),
+            None,
+        )?;
         if let Some(a) = app() {
+            a.buddy = buddy::Buddy::new(buddy_hwnd, a.scale);
             let mon_w = a.mon.right - a.mon.left;
             a.bar = bar::Bar::new(bar_hwnd, mon_w, a.scale);
             a.pop = pop::Pop::new(pop_hwnd, a.scale);
@@ -226,6 +242,9 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
     }
     if a.is_pop(hwnd) {
         return a.pop_msg(hwnd, msg, wp, lp);
+    }
+    if a.is_buddy(hwnd) {
+        return DefWindowProcW(hwnd, msg, wp, lp);
     }
     match msg {
         WM_TIMER => a.on_timer(wp.0),
@@ -348,6 +367,17 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
         let _ = AppendMenuW(menu, MF_STRING | tb, 7, w!("Top bar"));
         let res = if a.cfg.reserve_space { MF_CHECKED } else { MF_UNCHECKED };
         let _ = AppendMenuW(menu, MF_STRING | res, 6, w!("Reserve screen space (when top bar is off)"));
+        if let Ok(sub) = CreatePopupMenu() {
+            let cur = a.cfg.buddy;
+            let mark = |id: u8| if cur == id { MF_CHECKED } else { MF_UNCHECKED };
+            let _ = AppendMenuW(sub, MF_STRING | mark(0), 20, w!("Off"));
+            let _ = AppendMenuW(sub, MF_STRING | mark(1), 21, w!("Blob"));
+            let _ = AppendMenuW(sub, MF_STRING | mark(2), 22, w!("Kitty"));
+            let _ = AppendMenuW(sub, MF_STRING | mark(3), 23, w!("Bunny"));
+            let _ = AppendMenuW(sub, MF_STRING | mark(4), 24, w!("Hero"));
+            let _ = AppendMenuW(sub, MF_STRING | mark(5), 25, w!("Robot"));
+            let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Buddy"));
+        }
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
         let _ = AppendMenuW(menu, MF_STRING | auto, 1, w!("Start with Windows"));
         let _ = AppendMenuW(menu, MF_STRING, 2, w!("Edit pinned apps"));
@@ -382,6 +412,7 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             6 => a.toggle_reserve(),
             7 => a.toggle_top_bar(),
             4 => sys::open(&store::data_dir().to_string_lossy(), ""),
+            20..=25 => a.set_buddy((cmd.0 - 20) as u8),
             9 => {
                 // Clean up, then end the process outright so no helper thread,
                 // hook or COM apartment can keep notch.exe alive.

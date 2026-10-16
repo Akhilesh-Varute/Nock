@@ -51,6 +51,17 @@ A thin translucent bar runs along the top of the screen (like the macOS menu bar
 
 A dropdown closes when the pointer leaves it, when you click into another window, or when you click its icon again. The bar follows the Windows light/dark setting; the notch itself always stays black. It reserves its space like the taskbar does, so maximised windows start below it. Tray → *Top bar* turns it off (the old notch-only behaviour returns); `top_bar` in `config.ini` does the same.
 
+## Buddy
+
+A tiny original character lives on the top bar, in the free stretch between the notch and the status icons. It naps most of the time and wakes up for short outings, so it costs almost nothing:
+
+- **Strolls** along the bar every minute or so, then goes back to sleep.
+- **Dances** when music starts playing.
+- **Follows your pointer** when you move it over that part of the bar, and its eyes follow the cursor. Click it to pet it.
+- **Cheers** when the focus timer ends, and says "Connected!" or "Oops" after a Wi-Fi / Bluetooth attempt, "Low battery" when the battery runs low, and "Bedtime?" late at night.
+
+Pick the character from the tray menu → **Buddy**: Kitty (default), Blob, Bunny, Hero or Robot, or Off. It is also the `buddy` setting in `config.ini` (0 = off, 1 blob, 2 cat, 3 bunny, 4 hero, 5 robot). The characters are drawn from simple shapes in code, so there are no image files. It hides together with the bar in full screen.
+
 ## Using it
 
 | Action | What happens |

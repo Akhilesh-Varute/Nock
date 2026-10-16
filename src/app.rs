@@ -198,6 +198,7 @@ pub struct App {
     /// Wi-Fi password being typed in the dropdown.
     pub pw: Option<crate::pop::PwEntry>,
     pub pw_prev_fg: HWND,
+    pub buddy: Option<crate::buddy::Buddy>,
     /// Set when the focus timer finishes: the pill pulses and shows "Time's up".
     alert_until: Option<Instant>,
 }
@@ -265,6 +266,7 @@ impl App {
             link_msg: None,
             pw: None,
             pw_prev_fg: HWND::default(),
+            buddy: None,
             alert_until: None,
         };
         a.update_monitor();
@@ -499,6 +501,8 @@ impl App {
             }
             crate::pop::T_POPLEAVE => self.on_pop_leave_timer(),
             crate::pop::T_LINK => self.on_link_tick(),
+            crate::buddy::T_BUDDY => self.on_buddy_tick(),
+            crate::buddy::T_BWAKE => self.on_buddy_wake(),
             crate::pop::T_TIP => self.on_tip_timer(),
             crate::pop::T_LINKMSG => self.on_linkmsg_timer(),
             T_SEC => {
@@ -949,6 +953,7 @@ impl App {
         self.timer_start = None;
         self.timer_left_ms = 0;
         alarm_sound();
+        self.buddy_event(crate::buddy::BuddyEv::TimerDone);
         self.page = Page::Tasks; // so a click on the pill lands on the timer
         if !self.expanded {
             // pulse the pill for 30 s (or until it is clicked)
@@ -1063,7 +1068,11 @@ impl App {
             self.art_bytes = st.art.clone();
             self.load_art();
         }
+        let started = st.playing && !self.mstate.playing;
         self.mstate = st;
+        if started {
+            self.buddy_event(crate::buddy::BuddyEv::MusicStarted);
+        }
         self.retarget();
         self.sync_timers();
         if self.anim_ms == 0 {
@@ -1243,6 +1252,7 @@ impl App {
         }
         self.rebuild_bar();
         self.rebuild_pop();
+        self.rebuild_buddy();
         self.update_reserve();
         self.render();
         self.render_bar();

@@ -42,6 +42,8 @@ pub struct Config {
     pub reserve_space: bool,
     /// Full-width status bar along the top; the notch hangs from it.
     pub top_bar: bool,
+    /// Buddy on the top bar: 0 = off, 1 blob, 2 cat, 3 bunny, 4 hero, 5 robot.
+    pub buddy: u8,
 }
 
 const DEFAULT_CONFIG: &str = "\
@@ -51,6 +53,8 @@ eq_animation=1
 clock_24h=0
 reserve_space=0
 top_bar=1
+# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot
+buddy=2
 ";
 
 pub fn load_config() -> Config {
@@ -68,6 +72,7 @@ pub fn load_config() -> Config {
         clock_24h: false,
         reserve_space: false,
         top_bar: true,
+        buddy: 2,
     };
     for line in text.lines() {
         let line = line.trim();
@@ -82,6 +87,7 @@ pub fn load_config() -> Config {
                 "clock_24h" => cfg.clock_24h = on,
                 "reserve_space" => cfg.reserve_space = on,
                 "top_bar" => cfg.top_bar = on,
+                "buddy" => cfg.buddy = v.trim().parse::<u8>().unwrap_or(2).min(5),
                 _ => {}
             }
         }
@@ -92,12 +98,13 @@ pub fn load_config() -> Config {
 pub fn save_config(c: &Config) {
     let b = |v: bool| if v { 1 } else { 0 };
     let text = format!(
-        "# Nock settings (1 = on, 0 = off)\nhover_expand={}\neq_animation={}\nclock_24h={}\nreserve_space={}\ntop_bar={}\n",
+        "# Nock settings (1 = on, 0 = off)\nhover_expand={}\neq_animation={}\nclock_24h={}\nreserve_space={}\ntop_bar={}\n# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot\nbuddy={}\n",
         b(c.hover_expand),
         b(c.eq_animation),
         b(c.clock_24h),
         b(c.reserve_space),
-        b(c.top_bar)
+        b(c.top_bar),
+        c.buddy
     );
     let _ = fs::write(data_dir().join("config.ini"), text);
 }

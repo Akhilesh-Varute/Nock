@@ -57,7 +57,7 @@ pub enum BarAct {
 pub struct Bar {
     pub hwnd: HWND,
     gfx: Gfx,
-    hits: Vec<(Rect, BarAct)>,
+    pub hits: Vec<(Rect, BarAct)>,
     pub hot: Option<BarAct>,
     tracking: bool,
     pub app_name: String,
@@ -120,6 +120,7 @@ impl App {
             self.render_bar();
             self.raise_windows();
         }
+        self.sync_buddy();
     }
 
     /// Keep both windows topmost, the notch above the bar.
@@ -128,6 +129,11 @@ impl App {
             let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE;
             if let Some(b) = &self.bar {
                 let _ = SetWindowPos(b.hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0, flags);
+            }
+            if let Some(bd) = &self.buddy {
+                if bd.shown {
+                    let _ = SetWindowPos(bd.hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0, flags);
+                }
             }
             if let Some(p) = &self.pop {
                 if p.kind.is_some() {
@@ -145,6 +151,9 @@ impl App {
         let batt = sys::battery();
         let light = sys::light_theme();
         let fg = sys::foreground_app_name(&[self.hwnd]);
+        if let Some((pct, charging)) = batt {
+            self.buddy_battery(pct, charging);
+        }
         if let Some(b) = self.bar.as_mut() {
             b.battery = batt;
             b.light = light;
@@ -348,6 +357,7 @@ impl App {
                     }
                 }
                 self.set_bar_hot(hot);
+                self.buddy_pointer(px);
                 LRESULT(0)
             }
             m if m == WM_MOUSELEAVE => {
@@ -360,6 +370,9 @@ impl App {
             WM_LBUTTONUP => {
                 let s = self.scale;
                 let (px, py) = (lo as f32 / s, hi as f32 / s);
+                if self.buddy_click(px, py) {
+                    return LRESULT(0);
+                }
                 let hit = self
                     .bar
                     .as_ref()

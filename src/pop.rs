@@ -238,6 +238,7 @@ impl App {
     /// small tooltip under the icon for a few seconds.
     pub fn notify_result(&mut self, kind: BarAct, text: String, ok: bool) {
         self.link_msg = Some((kind, text, ok));
+        self.buddy_event(crate::buddy::BuddyEv::Result(ok));
         self.set_timer(T_LINKMSG, 4000);
         let full_open = self.pop_kind().is_some() && !self.pop_is_tip();
         if !full_open {

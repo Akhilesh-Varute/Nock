@@ -2,6 +2,8 @@
 
 ## 0.1.0 (unreleased)
 
+- Buddy: an animated character on the top bar (kitty, blob, bunny, hero, robot) that strolls, dances to music, follows the pointer and reacts to timers and connections.
+
 - Connecting animation on the Wi-Fi / Bluetooth bar icons, spinner rows and success / failure notes.
 - Hover tooltips for Wi-Fi and Bluetooth showing what is connected.
 - Join password-protected Wi-Fi networks from the dropdown.

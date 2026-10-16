@@ -94,6 +94,7 @@ pub struct Fonts {
 // ----------------------------------------------------------------------- Gfx
 
 pub struct Gfx {
+    d2d: ID2D1Factory,
     pub wic: IWICImagingFactory,
     rt: ID2D1DCRenderTarget,
     brush: ID2D1SolidColorBrush,
@@ -142,6 +143,7 @@ impl Gfx {
 
             let fonts = make_fonts(&dw)?;
             Ok(Gfx {
+                d2d,
                 wic,
                 rt,
                 brush,
@@ -227,6 +229,43 @@ impl Gfx {
                 radiusY: rad,
             };
             self.rt.DrawRoundedRectangle(&rr, &self.brush, width, None);
+        }
+    }
+
+    /// Filled polygon (ears, capes, tails...).
+    pub fn fill_poly(&self, pts: &[(f32, f32)], c: Color) {
+        if pts.len() < 3 {
+            return;
+        }
+        unsafe {
+            let Ok(geo) = self.d2d.CreatePathGeometry() else { return };
+            let Ok(sink) = geo.Open() else { return };
+            sink.BeginFigure(
+                windows_numerics::Vector2 { X: pts[0].0, Y: pts[0].1 },
+                D2D1_FIGURE_BEGIN_FILLED,
+            );
+            let rest: Vec<windows_numerics::Vector2> = pts[1..]
+                .iter()
+                .map(|p| windows_numerics::Vector2 { X: p.0, Y: p.1 })
+                .collect();
+            sink.AddLines(&rest);
+            sink.EndFigure(D2D1_FIGURE_END_CLOSED);
+            let _ = sink.Close();
+            self.brush.SetColor(&c.d2d());
+            self.rt.FillGeometry(&geo, &self.brush, None);
+        }
+    }
+
+    pub fn line(&self, a: (f32, f32), b: (f32, f32), width: f32, c: Color) {
+        unsafe {
+            self.brush.SetColor(&c.d2d());
+            self.rt.DrawLine(
+                windows_numerics::Vector2 { X: a.0, Y: a.1 },
+                windows_numerics::Vector2 { X: b.0, Y: b.1 },
+                &self.brush,
+                width,
+                None,
+            );
         }
     }
 
