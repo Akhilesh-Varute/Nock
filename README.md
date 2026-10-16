@@ -78,7 +78,7 @@ Three more characters are drawn as detailed pixel art and **talk** in character 
 
 ### Fight scenes
 
-Every 6 to 14 minutes, when there is room on the bar, the characters act out a short scripted story and then walk off while your buddy comes back. Six scenes: **Showdown** (Cinder the ember knight vs Krag the obsidian brute), **Heist** (Veil the shadow thief vs Sparkplug the young inventor), **Team-up** (Sparkplug and Cinder vs Krag), **Duel at dusk** (Ronin vs Courier), **Rise** (Necromancer vs Ronin) and **Alley fight** (Ronin and Courier vs Necromancer). Play one right away from the tray menu → **Fight scenes**, or turn the automatic ones off there (`scenes=0` in `config.ini`). Nothing runs between scenes.
+The first scene plays a minute or two after Nock starts, then one every few minutes (about every 5 by default; set `scene_min=` in `config.ini`), when there is room on the bar, the characters act out a short scripted story and then walk off while your buddy comes back. Six scenes: **Showdown** (Cinder the ember knight vs Krag the obsidian brute), **Heist** (Veil the shadow thief vs Sparkplug the young inventor), **Team-up** (Sparkplug and Cinder vs Krag), **Duel at dusk** (Ronin vs Courier), **Rise** (Necromancer vs Ronin) and **Alley fight** (Ronin and Courier vs Necromancer). Play one right away from the tray menu → **Fight scenes**, or turn the automatic ones off there (`scenes=0` in `config.ini`). Nothing runs between scenes.
 
 ## Using it
 

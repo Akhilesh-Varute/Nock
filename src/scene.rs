@@ -586,8 +586,12 @@ impl App {
     pub fn plan_scene(&mut self) {
         self.kill_timer(T_SCENE);
         if self.cfg.scenes && self.cfg.buddy != 0 && self.stage.is_some() {
+            // first scene soon after start, then about every `scene_min` minutes
+            let avg = self.cfg.scene_min.max(1) as u32 * 60_000;
+            let first = !self.scene_seen;
             let d = match self.stage.as_mut() {
-                Some(s) => 360_000 + s.rnd() % 480_000,
+                Some(s) if first => 60_000 + s.rnd() % 60_000,
+                Some(s) => avg / 2 + s.rnd() % avg,
                 None => return,
             };
             self.set_timer(T_SCENE, d);
@@ -647,6 +651,8 @@ impl App {
         s.w = w;
         s.left = left;
         s.active = true;
+        self.scene_seen = true;
+        let Some(s) = self.stage.as_mut() else { return };
         unsafe {
             let _ = ShowWindow(s.hwnd, SW_SHOWNOACTIVATE);
         }

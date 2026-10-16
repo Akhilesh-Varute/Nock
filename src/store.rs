@@ -46,6 +46,8 @@ pub struct Config {
     pub buddy: u8,
     /// Now and then the characters act out a short fight scene on the bar.
     pub scenes: bool,
+    /// Average minutes between automatic scenes.
+    pub scene_min: u8,
 }
 
 const DEFAULT_CONFIG: &str = "\
@@ -59,6 +61,8 @@ top_bar=1
 buddy=2
 # fight scenes now and then (needs a buddy): 1 = on
 scenes=1
+# average minutes between scenes (1 to 60)
+scene_min=5
 ";
 
 pub fn load_config() -> Config {
@@ -78,6 +82,7 @@ pub fn load_config() -> Config {
         top_bar: true,
         buddy: 2,
         scenes: true,
+        scene_min: 5,
     };
     for line in text.lines() {
         let line = line.trim();
@@ -93,6 +98,7 @@ pub fn load_config() -> Config {
                 "reserve_space" => cfg.reserve_space = on,
                 "top_bar" => cfg.top_bar = on,
                 "scenes" => cfg.scenes = on,
+                "scene_min" => cfg.scene_min = v.trim().parse::<u8>().unwrap_or(5).clamp(1, 60),
                 "buddy" => cfg.buddy = v.trim().parse::<u8>().unwrap_or(2).min(8),
                 _ => {}
             }
@@ -104,14 +110,15 @@ pub fn load_config() -> Config {
 pub fn save_config(c: &Config) {
     let b = |v: bool| if v { 1 } else { 0 };
     let text = format!(
-        "# Nock settings (1 = on, 0 = off)\nhover_expand={}\neq_animation={}\nclock_24h={}\nreserve_space={}\ntop_bar={}\n# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer\nbuddy={}\n# fight scenes now and then (needs a buddy): 1 = on\nscenes={}\n",
+        "# Nock settings (1 = on, 0 = off)\nhover_expand={}\neq_animation={}\nclock_24h={}\nreserve_space={}\ntop_bar={}\n# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer\nbuddy={}\n# fight scenes now and then (needs a buddy): 1 = on\nscenes={}\n# average minutes between scenes (1 to 60)\nscene_min={}\n",
         b(c.hover_expand),
         b(c.eq_animation),
         b(c.clock_24h),
         b(c.reserve_space),
         b(c.top_bar),
         c.buddy,
-        b(c.scenes)
+        b(c.scenes),
+        c.scene_min
     );
     let _ = fs::write(data_dir().join("config.ini"), text);
 }

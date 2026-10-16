@@ -200,6 +200,7 @@ pub struct App {
     pub pw_prev_fg: HWND,
     pub buddy: Option<crate::buddy::Buddy>,
     pub stage: Option<crate::scene::Stage>,
+    pub scene_seen: bool,
     /// Set when the focus timer finishes: the pill pulses and shows "Time's up".
     alert_until: Option<Instant>,
 }
@@ -269,6 +270,7 @@ impl App {
             pw_prev_fg: HWND::default(),
             buddy: None,
             stage: None,
+            scene_seen: false,
             alert_until: None,
         };
         a.update_monitor();
