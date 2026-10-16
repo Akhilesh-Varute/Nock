@@ -22,7 +22,7 @@ const SH: f32 = 32.0;
 /// Ground line inside the stage.
 const GROUND: f32 = 28.0;
 const MAX_W: f32 = 380.0;
-const MIN_W: f32 = 230.0;
+const MIN_W: f32 = 160.0;
 
 
 // ------------------------------------------------------------------ scripts --
@@ -535,6 +535,11 @@ fn draw_bubble(g: &Gfx, th: &crate::bar::Theme, light: bool, text: &str, sx: f32
     g.text(text, r, &g.fonts.tiny, th.t1, Align::Center);
 }
 
+/// Writes a one-line reason to %APPDATA%\\Nock\\scene.log when a scene can't start.
+fn log_scene(msg: &str) {
+    let _ = std::fs::write(crate::store::data_dir().join("scene.log"), format!("{msg}\n"));
+}
+
 // ------------------------------------------------------------------ App side --
 
 impl App {
@@ -558,16 +563,20 @@ impl App {
     }
 
     /// Stage area on the bar: (left, width) in logical px, if there is room.
+    /// Uses the free stretch right of the notch, or the one left of it (right
+    /// of the app name), whichever is wider.
     fn stage_area(&self) -> Option<(f32, f32)> {
         let b = self.bar.as_ref()?;
         let w = (self.mon.right - self.mon.left) as f32 / self.scale;
-        let right = b.hits.iter().map(|(r, _)| r.x).fold(w, f32::min) - 10.0;
-        let left = w / 2.0 + 200.0;
-        let width = (right - left).min(MAX_W);
+        let right_end = b.hits.iter().map(|(r, _)| r.x).fold(w, f32::min) - 10.0;
+        let r_zone = (w / 2.0 + 200.0, right_end);
+        let l_zone = (280.0, w / 2.0 - 200.0);
+        let best = if r_zone.1 - r_zone.0 >= l_zone.1 - l_zone.0 { r_zone } else { l_zone };
+        let width = (best.1 - best.0).min(MAX_W);
         if width < MIN_W {
             None
         } else {
-            Some((right - width, width))
+            Some((best.1 - width, width))
         }
     }
 
@@ -605,10 +614,29 @@ impl App {
     }
 
     pub fn play_scene(&mut self, id: usize) {
-        if self.scene_active() || !self.bar_visible() || self.cfg.buddy == 0 {
+        if self.scene_active() {
             return;
         }
-        let Some((left, w)) = self.stage_area() else { return };
+        if !self.bar_visible() || self.cfg.buddy == 0 {
+            self.buddy_say("Turn on the top bar and a buddy first", 3500);
+            return;
+        }
+        if self.stage.is_none() {
+            log_scene("stage window could not be created");
+            self.buddy_say("Scene stage unavailable (see scene.log)", 3500);
+            return;
+        }
+        let Some((left, w)) = self.stage_area() else {
+            let mw = (self.mon.right - self.mon.left) as f32 / self.scale;
+            let ic = self
+                .bar
+                .as_ref()
+                .map(|b| b.hits.iter().map(|(r, _)| r.x).fold(mw, f32::min))
+                .unwrap_or(-1.0);
+            log_scene(&format!("no room: monitor {mw:.0} logical px wide, first status icon at x={ic:.0}"));
+            self.buddy_say("No room on the bar for a scene", 3500);
+            return;
+        };
         let mon = self.mon;
         let scale = self.scale;
         let Some(s) = self.stage.as_mut() else { return };

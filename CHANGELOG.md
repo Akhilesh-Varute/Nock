@@ -2,6 +2,10 @@
 
 ## 0.2.1
 
+- Fight scenes: use the stretch left of the notch when the right side is too narrow; say so when there is no room.
+
+## 0.2.0
+
 - Pixel-art characters (Ronin, Courier, Necromancer) that talk, as buddies and in three more scenes.
 - Fight scenes: four original characters (Sparkplug, Cinder, Krag, Veil) act out three short scripted scenes on the bar now and then; tray menu to play or disable.
 - Buddy: an animated character on the top bar (kitty, blob, bunny, hero, robot) that strolls, dances to music, follows the pointer and reacts to timers and connections.

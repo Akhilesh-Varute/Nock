@@ -433,6 +433,10 @@ impl App {
         true
     }
 
+    pub fn buddy_say(&mut self, text: &str, dur_ms: u64) {
+        self.buddy_event_bubble(text, dur_ms);
+    }
+
     fn buddy_event_bubble(&mut self, text: &str, dur_ms: u64) {
         let now = Instant::now();
         let Some(b) = self.buddy.as_mut() else { return };

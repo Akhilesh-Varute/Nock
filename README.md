@@ -34,6 +34,12 @@ Written in Rust. No webview, no framework, no runtime. One small <code>.exe</cod
 
 Right-click the tray icon → **Start with Windows** to launch it at login.
 
+## Tip: auto-hide the Windows taskbar
+
+Nock works best with the Windows taskbar set to hide itself. The bar and notch then take over the top of the screen, the taskbar slides up only when you move the pointer to the bottom edge, and the whole screen feels like one clean desktop.
+
+Settings → Personalization → Taskbar → Taskbar behaviors → **Automatically hide the taskbar** (on Windows 10: right-click the taskbar → Taskbar settings → *Automatically hide the taskbar in desktop mode*).
+
 ## Top bar
 
 A thin translucent bar runs along the top of the screen (like the macOS menu bar) and the notch hangs from its middle. Left: the app you are in. Right: Wi-Fi, Bluetooth, volume, battery and the date and time. Clicking an icon opens a small dropdown right under it:
