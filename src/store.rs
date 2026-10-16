@@ -104,6 +104,13 @@ pub fn load_config() -> Config {
             }
         }
     }
+    // A config file from an older version lacks the newer settings: write the
+    // file back with every setting present (keeping the user's values).
+    let keys = ["hover_expand", "eq_animation", "clock_24h", "reserve_space", "top_bar", "buddy", "scenes", "scene_min"];
+    let present = |k: &str| text.lines().any(|l| l.trim().split_once('=').map(|(a, _)| a.trim() == k).unwrap_or(false));
+    if keys.iter().any(|k| !present(k)) {
+        save_config(&cfg);
+    }
     cfg
 }
 
