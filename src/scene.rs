@@ -569,8 +569,10 @@ impl App {
         let b = self.bar.as_ref()?;
         let w = (self.mon.right - self.mon.left) as f32 / self.scale;
         let right_end = b.hits.iter().map(|(r, _)| r.x).fold(w, f32::min) - 10.0;
-        let r_zone = (w / 2.0 + 200.0, right_end);
-        let l_zone = (280.0, w / 2.0 - 200.0);
+        // the notch pill is about 128 px wide when idle and 296 px with music
+        let half = if self.mstate.playing { 160.0 } else { 76.0 };
+        let r_zone = (w / 2.0 + half, right_end);
+        let l_zone = (280.0, w / 2.0 - half);
         let best = if r_zone.1 - r_zone.0 >= l_zone.1 - l_zone.0 { r_zone } else { l_zone };
         let width = (best.1 - best.0).min(MAX_W);
         if width < MIN_W {
