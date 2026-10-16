@@ -58,6 +58,8 @@ pub struct Bar {
     pub hwnd: HWND,
     gfx: Gfx,
     pub hits: Vec<(Rect, BarAct)>,
+    /// left edge of the leftmost right-side item (stats included): buddy and scenes stay left of it
+    pub left_x: f32,
     pub hot: Option<BarAct>,
     tracking: bool,
     pub app_name: String,
@@ -72,6 +74,7 @@ impl Bar {
             hwnd,
             gfx,
             hits: Vec::new(),
+            left_x: f32::MAX,
             hot: None,
             tracking: false,
             app_name: String::new(),
@@ -212,6 +215,7 @@ impl App {
         let (wifi, bt) = (self.radios.wifi, self.radios.bluetooth);
         let (vol, muted, has_vol) = (self.volume, self.muted, self.has_volume);
         let clock24 = self.cfg.clock_24h;
+        let stats = self.stats;
         let accent = self.accent;
         let active = self.pop_kind();
         // connecting: the icon breathes while a Wi-Fi / Bluetooth attempt is running
@@ -329,6 +333,13 @@ impl App {
             g.icon(glyph, r, &f.icon14, col);
             hits.push((r, act));
         }
+
+        if let Some((cpu, mem)) = stats {
+            // read-out only: not clickable, so it is not in `hits`
+            let r = item(118.0);
+            g.text(&format!("CPU {cpu}%  RAM {mem}%"), r, &f.small, th.t2, Align::Center);
+        }
+        bar.left_x = x;
 
         let _ = g.end();
         bar.hits = hits;

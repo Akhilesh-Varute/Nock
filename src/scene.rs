@@ -25,7 +25,7 @@ const GROUND: f32 = 28.0;
 const MAX_W: f32 = 460.0;
 const MIN_W: f32 = 160.0;
 /// Number of scripted scenes (0..SCENES).
-const SCENES: usize = 7;
+const SCENES: usize = 12;
 /// The press conference needs room for its long speech bubbles.
 const PRESS_W: f32 = 420.0;
 
@@ -55,6 +55,16 @@ enum Fx {
     Ring,
     Burst(u8),
     Arc(u8),
+    /// coloured spell beam from a's hand to b
+    Spell(u8),
+    /// two spells meeting between a and b
+    Clash(u8, u8),
+    /// glowing shield in front of b (facing a)
+    Shield(u8),
+    /// a broom under actor a
+    Broom,
+    /// a silver stag running from a to b
+    Patronus,
 }
 
 struct Ev {
@@ -319,6 +329,172 @@ fn script(id: usize) -> Script {
             ],
             len: 17.8,
         },
+        // Duel: Harry (0) vs Voldemort (1)
+        7 => Script {
+            tracks: vec![
+                tr(Who::Harry, &[
+                    (0.0, -0.1, Run, 1.0), (1.5, 0.27, Stand, 1.0), (3.2, 0.27, Cast, 1.0),
+                    (4.0, 0.27, Stand, 1.0), (4.4, 0.27, Block, 1.0), (5.4, 0.27, Stand, 1.0),
+                    (5.5, 0.27, Cast, 1.0), (6.3, 0.27, Stand, 1.0), (7.0, 0.27, Cheer, 1.0),
+                    (8.4, 0.27, Walk, -1.0), (9.8, -0.1, Stand, -1.0),
+                ]),
+                tr(Who::Voldemort, &[
+                    (0.0, 1.1, Walk, -1.0), (1.6, 0.76, Stand, -1.0), (3.2, 0.76, Cast, -1.0),
+                    (4.0, 0.76, Stand, -1.0), (4.2, 0.76, Cast, -1.0), (4.9, 0.76, Stand, -1.0),
+                    (5.9, 0.76, Hurt, -1.0), (6.5, 0.76, Kneel, -1.0), (7.6, 0.76, Stand, -1.0),
+                    (7.8, 0.76, Walk, 1.0), (9.2, 1.1, Stand, 1.0),
+                ]),
+            ],
+            evs: vec![
+                ev(3.35, 0.8, Fx::Clash(4, 3), 0, 1),
+                ev(4.35, 0.4, Fx::Spell(3), 1, 0),
+                ev(4.3, 1.0, Fx::Shield(1), 1, 0),
+                ev(4.7, 0.45, Fx::Burst(1), 1, 0),
+                ev(5.6, 0.4, Fx::Spell(4), 0, 1),
+                ev(5.95, 0.45, Fx::Burst(0), 0, 1),
+            ],
+            says: vec![
+                say(1.7, 1.3, 1, "Harry Potter..."),
+                say(3.0, 1.0, 0, "Expelliarmus!"),
+                say(4.1, 1.0, 1, "Avada Kedavra!"),
+                say(6.6, 1.2, 1, "Impossible..."),
+                say(7.0, 1.5, 0, "Not today, Tom."),
+            ],
+            len: 9.8,
+        },
+        // Owl post: Harry (0) gets a letter from Hedwig (2), Hermione (1) looks on
+        8 => Script {
+            tracks: vec![
+                tr(Who::Harry, &[
+                    (0.0, -0.1, Run, 1.0), (1.3, 0.30, Stand, 1.0), (3.7, 0.30, Cheer, 1.0),
+                    (6.4, 0.30, Stand, 1.0), (8.4, 0.30, Walk, -1.0), (9.6, -0.1, Stand, -1.0),
+                ]),
+                tr(Who::Hermione, &[
+                    (0.0, 1.1, Walk, -1.0), (1.5, 0.78, Stand, -1.0), (8.4, 0.78, Walk, 1.0),
+                    (9.6, 1.1, Stand, 1.0),
+                ]),
+                tr(Who::Owl, &[
+                    (0.5, -0.1, Run, 1.0), (2.6, 0.30, Stand, 1.0), (3.0, 0.30, Throw, 1.0),
+                    (3.6, 0.30, Stand, 1.0), (4.6, 0.30, Run, -1.0), (5.8, -0.1, Stand, -1.0),
+                ]),
+            ],
+            evs: vec![],
+            says: vec![
+                say(1.6, 1.4, 1, "Look, an owl!"),
+                say(3.8, 1.6, 0, "A letter for me?!"),
+                say(5.4, 1.8, 1, "It's from Hogwarts!"),
+                say(7.0, 1.2, 0, "I'm a wizard!"),
+            ],
+            len: 9.6,
+        },
+        // The trio (0..=2) and Dumbledore (3) vs Voldemort (4)
+        9 => Script {
+            tracks: vec![
+                tr(Who::Harry, &[
+                    (0.0, -0.1, Run, 1.0), (1.4, 0.32, Stand, 1.0), (3.0, 0.32, Block, 1.0),
+                    (3.9, 0.32, Stand, 1.0), (5.3, 0.32, Cast, 1.0), (6.0, 0.32, Stand, 1.0),
+                    (7.4, 0.32, Cheer, 1.0), (9.0, 0.32, Walk, -1.0), (10.4, -0.1, Stand, -1.0),
+                ]),
+                tr(Who::Hermione, &[
+                    (0.2, -0.1, Run, 1.0), (1.5, 0.22, Stand, 1.0), (4.0, 0.22, Cast, 1.0),
+                    (4.7, 0.22, Stand, 1.0), (7.4, 0.22, Cheer, 1.0), (9.0, 0.22, Walk, -1.0),
+                    (10.4, -0.1, Stand, -1.0),
+                ]),
+                tr(Who::Ron, &[
+                    (0.4, -0.1, Run, 1.0), (1.6, 0.12, Stand, 1.0), (4.6, 0.12, Cast, 1.0),
+                    (5.3, 0.12, Stand, 1.0), (7.4, 0.12, Cheer, 1.0), (9.0, 0.12, Walk, -1.0),
+                    (10.4, -0.1, Stand, -1.0),
+                ]),
+                tr(Who::Dumbledore, &[
+                    (4.5, -0.1, Run, 1.0), (5.8, 0.52, Stand, 1.0), (6.2, 0.52, Cast, 1.0),
+                    (6.9, 0.52, Stand, 1.0), (9.0, 0.52, Walk, -1.0), (10.4, -0.1, Stand, -1.0),
+                ]),
+                tr(Who::Voldemort, &[
+                    (0.0, 1.1, Walk, -1.0), (1.5, 0.80, Stand, -1.0), (2.8, 0.80, Cast, -1.0),
+                    (3.5, 0.80, Stand, -1.0), (4.4, 0.80, Hurt, -1.0), (4.9, 0.80, Stand, -1.0),
+                    (5.0, 0.80, Hurt, -1.0), (5.6, 0.80, Stand, -1.0), (5.8, 0.80, Hurt, -1.0),
+                    (6.4, 0.80, Kneel, -1.0), (7.5, 0.80, Walk, 1.0), (8.9, 1.1, Stand, 1.0),
+                ]),
+            ],
+            evs: vec![
+                ev(2.95, 0.4, Fx::Spell(3), 4, 0),
+                ev(2.9, 1.0, Fx::Shield(1), 4, 0),
+                ev(3.3, 0.45, Fx::Burst(1), 4, 0),
+                ev(4.05, 0.4, Fx::Spell(1), 1, 4),
+                ev(4.4, 0.45, Fx::Burst(1), 1, 4),
+                ev(4.65, 0.4, Fx::Spell(0), 2, 4),
+                ev(5.0, 0.45, Fx::Burst(0), 2, 4),
+                ev(5.35, 0.4, Fx::Spell(4), 0, 4),
+                ev(5.7, 0.5, Fx::Burst(0), 0, 4),
+                ev(6.25, 0.4, Fx::Spell(5), 3, 4),
+                ev(6.55, 0.5, Fx::Burst(0), 3, 4),
+            ],
+            says: vec![
+                say(1.7, 1.2, 4, "Bow to me!"),
+                say(2.9, 0.9, 0, "Together!"),
+                say(4.1, 0.9, 1, "Stupefy!"),
+                say(5.4, 0.9, 2, "Take that!"),
+                say(7.3, 1.5, 3, "Run along, Tom."),
+            ],
+            len: 10.4,
+        },
+        // Quidditch: Harry (0) chases the Snitch (1) while Ron (2) and Hermione (3) cheer
+        10 => Script {
+            tracks: vec![
+                tr(Who::Harry, &[
+                    (0.0, -0.1, Jump, 1.0), (1.4, 0.45, Jump, 1.0), (2.4, 0.40, Jump, 1.0),
+                    (3.6, 0.60, Jump, 1.0), (4.6, 0.55, Jump, 1.0), (4.9, 0.60, Jump, 1.0),
+                    (5.4, 0.60, Cheer, 1.0), (7.5, 0.60, Cheer, 1.0), (7.6, 0.60, Walk, -1.0),
+                    (9.0, -0.1, Stand, -1.0),
+                ]),
+                tr(Who::Snitch, &[
+                    (0.0, 0.40, Run, 1.0), (1.4, 0.80, Run, 1.0), (2.4, 0.55, Run, -1.0),
+                    (3.6, 0.85, Run, 1.0), (4.6, 0.62, Run, -1.0), (4.9, 0.62, Stand, 1.0),
+                    (5.0, 1.1, Run, 1.0),
+                ]),
+                tr(Who::Ron, &[
+                    (0.3, -0.1, Run, 1.0), (1.2, 0.10, Stand, 1.0), (2.0, 0.10, Cheer, 1.0),
+                    (7.5, 0.10, Cheer, 1.0), (7.6, 0.10, Walk, -1.0), (9.0, -0.1, Stand, -1.0),
+                ]),
+                tr(Who::Hermione, &[
+                    (0.5, -0.1, Run, 1.0), (1.4, 0.20, Stand, 1.0), (2.0, 0.20, Cheer, 1.0),
+                    (7.5, 0.20, Cheer, 1.0), (7.6, 0.20, Walk, -1.0), (9.0, -0.1, Stand, -1.0),
+                ]),
+            ],
+            evs: vec![
+                ev(0.0, 5.4, Fx::Broom, 0, 0),
+            ],
+            says: vec![
+                say(2.2, 1.4, 2, "Go Harry!"),
+                say(5.5, 1.6, 3, "He caught it!"),
+            ],
+            len: 9.0,
+        },
+        // Dementor (1) drains Harry (0), who answers with a Patronus
+        11 => Script {
+            tracks: vec![
+                tr(Who::Harry, &[
+                    (0.0, -0.1, Run, 1.0), (1.3, 0.28, Stand, 1.0), (2.6, 0.28, Hurt, 1.0),
+                    (3.6, 0.28, Kneel, 1.0), (5.0, 0.28, Stand, 1.0), (5.2, 0.28, Cast, 1.0),
+                    (6.0, 0.28, Stand, 1.0), (7.0, 0.28, Cheer, 1.0), (8.4, 0.28, Walk, -1.0),
+                    (9.8, -0.1, Stand, -1.0),
+                ]),
+                tr(Who::Dementor, &[
+                    (0.0, 1.1, Walk, -1.0), (1.8, 0.76, Stand, -1.0), (5.9, 0.76, Hurt, -1.0),
+                    (6.5, 0.78, Stand, -1.0), (6.6, 0.78, Walk, 1.0), (8.0, 1.1, Stand, 1.0),
+                ]),
+            ],
+            evs: vec![
+                ev(5.3, 0.9, Fx::Patronus, 0, 1),
+                ev(6.05, 0.5, Fx::Burst(1), 0, 1),
+            ],
+            says: vec![
+                say(2.7, 1.4, 0, "So cold..."),
+                say(5.0, 1.8, 0, "Expecto Patronum!"),
+                say(7.0, 1.4, 0, "Phew!"),
+            ],
+            len: 9.8,
+        },
         // Spark (0) + Cinder (1) vs Krag (2)
         _ => Script {
             tracks: vec![
@@ -448,6 +624,8 @@ fn fx_color(kind: u8) -> Color {
         0 => Color(1.0, 0.65, 0.2, 1.0),
         1 => Color(0.7, 0.95, 1.0, 1.0),
         3 => Color(0.4, 1.0, 0.55, 1.0),
+        4 => Color(1.0, 0.25, 0.2, 1.0),
+        5 => Color(1.0, 0.85, 0.3, 1.0),
         _ => Color(1.0, 0.4, 0.9, 1.0),
     }
 }
@@ -514,6 +692,46 @@ fn draw_fx(g: &Gfx, e: &Ev, u: f32, draws: &[Option<Draw>], tick: u32) {
                     g.line((p.0 - d * 4.0, p.1), (p.0 + d * 4.0, p.1), 1.6, Color(0.92, 0.97, 1.0, 1.0));
                 }
             }
+        }
+        Fx::Spell(k) => {
+            let col = fx_color(k);
+            beam(g, hand, chest_b, col, tick);
+            g.fill_circle(hand.0, hand.1, 3.0 * fade.max(0.4), Color(col.0, col.1, col.2, 0.5));
+        }
+        Fx::Clash(ka, kb) => {
+            let (hb, _, _) = cast::anchors(&db);
+            let mid = lerp2(hand, hb, 0.5);
+            beam(g, hand, mid, fx_color(ka), tick);
+            beam(g, hb, mid, fx_color(kb), tick);
+            let r = 4.0 + (tick as f32 * 0.9).sin().abs() * 3.0;
+            g.fill_circle(mid.0, mid.1, r + 2.0, Color(1.0, 0.95, 0.7, 0.35 * fade.max(0.3)));
+            g.fill_circle(mid.0, mid.1, r * 0.6, Color(1.0, 1.0, 1.0, 0.95));
+        }
+        Fx::Shield(k) => {
+            let col = fx_color(k);
+            let toward = (da.x - db.x).signum();
+            let c0 = (db.x + toward * 9.0, db.y - 14.0);
+            let pulse = 0.75 + 0.25 * (tick as f32 * 0.8).sin();
+            g.fill_circle(c0.0, c0.1, 9.0, Color(col.0, col.1, col.2, 0.18 * fade.max(0.2) * pulse));
+            ring(g, c0, 9.0, 1.6, Color(col.0, col.1, col.2, 0.9 * fade.max(0.2)));
+        }
+        Fx::Broom => {
+            let t0 = da.dir;
+            let (x, y) = (da.x, da.y);
+            g.line((x - t0 * 11.0, y - 3.0), (x + t0 * 7.0, y - 5.5), 1.6, Color(0.5, 0.33, 0.18, 1.0));
+            for k in 0..4 {
+                let o = k as f32 - 1.5;
+                g.line((x - t0 * 11.0, y - 3.0), (x - t0 * 16.0, y - 3.0 + o * 1.3), 0.9, Color(0.78, 0.6, 0.25, 1.0));
+            }
+        }
+        Fx::Patronus => {
+            let p = lerp2(hand, chest_b, u);
+            let hop = -((u * std::f32::consts::PI * 3.0).sin().abs()) * 4.0;
+            for k in 1..6 {
+                let q = lerp2(hand, chest_b, (u - k as f32 * 0.05).max(0.0));
+                g.fill_circle(q.0, q.1 + hop * 0.5, 3.4 - k as f32 * 0.5, Color(0.8, 0.95, 1.0, 0.4 / k as f32));
+            }
+            draw_stag(g, (p.0, p.1 + hop), (chest_b.0 - hand.0).signum(), tick);
         }
         Fx::Ring => {
             let rx = 6.0 + u * 90.0;
@@ -605,6 +823,106 @@ fn face_motion(act: Act, t: f32) -> (f32, f32) {
     }
 }
 
+/// Hedwig: a snowy owl flapping at roof height; while `Throw` it drops a letter.
+fn draw_owl(g: &Gfx, d: &Draw) {
+    let dr = d.dir;
+    let (x, y) = (d.x, d.y - 15.0 + (d.t * 9.0).sin() * 1.5);
+    let brown = Color(0.93, 0.93, 0.97, 1.0);
+    let flap = (d.t * 18.0).sin();
+    g.line((x - dr * 1.0, y - 1.0), (x - dr * 5.0, y - 5.0 * flap - 2.0), 2.4, Color(0.76, 0.76, 0.84, 1.0));
+    g.line((x - dr * 3.0, y + 2.0), (x - dr * 7.0, y + 3.5), 1.6, brown);
+    g.fill_circle(x, y, 4.0, brown);
+    g.fill_circle(x + dr * 0.6, y + 1.0, 2.5, Color(1.0, 1.0, 1.0, 1.0));
+    g.fill_circle(x + dr * 3.2, y - 2.5, 2.8, brown);
+    g.fill_circle(x + dr * 4.0, y - 3.0, 1.0, Color(1.0, 1.0, 0.9, 1.0));
+    g.fill_circle(x + dr * 4.2, y - 3.0, 0.5, Color(0.1, 0.1, 0.1, 1.0));
+    g.fill_poly(
+        &[(x + dr * 5.6, y - 2.6), (x + dr * 7.2, y - 1.8), (x + dr * 5.6, y - 1.2)],
+        Color(0.95, 0.65, 0.2, 1.0),
+    );
+    if d.act == Act::Throw {
+        let ly = y + 3.0 + d.p * (GROUND - y - 7.0);
+        g.fill_rrect(Rect::new(x + dr * 4.0 - 3.0, ly, 6.0, 4.0), 0.6, Color(1.0, 1.0, 0.95, 1.0));
+        g.fill_circle(x + dr * 4.0, ly + 2.0, 0.8, Color(0.8, 0.15, 0.15, 1.0));
+    }
+}
+
+/// A bobbing ring around `c`.
+fn ring(g: &Gfx, c: (f32, f32), r: f32, w: f32, col: Color) {
+    let pts: Vec<(f32, f32)> = (0..=16)
+        .map(|i| {
+            let a = i as f32 / 16.0 * std::f32::consts::TAU;
+            (c.0 + a.cos() * r, c.1 + a.sin() * r)
+        })
+        .collect();
+    polyline(g, &pts, w, col);
+}
+
+/// A bolt of coloured light from `a` to `b` with a bright core.
+fn beam(g: &Gfx, a: (f32, f32), b: (f32, f32), col: Color, tick: u32) {
+    let mut pts = vec![a];
+    for i in 1..6 {
+        let p = lerp2(a, b, i as f32 / 6.0);
+        pts.push((p.0, p.1 + (((tick * 5 + i as u32 * 11) % 7) as f32 - 3.0) * 0.5));
+    }
+    pts.push(b);
+    polyline(g, &pts, 4.2, Color(col.0, col.1, col.2, 0.35));
+    polyline(g, &pts, 1.5, Color(1.0, 1.0, 1.0, 0.95));
+}
+
+/// A silver stag, the Patronus: a small glowing silhouette running along.
+fn draw_stag(g: &Gfx, p: (f32, f32), dr: f32, tick: u32) {
+    let silver = Color(0.88, 0.96, 1.0, 1.0);
+    let glow = Color(0.6, 0.85, 1.0, 0.35);
+    g.fill_circle(p.0, p.1, 9.0, glow);
+    g.fill_rrect(Rect::new(p.0 - 5.0, p.1 - 2.5, 10.0, 5.0), 2.0, silver);
+    let sw = (tick as f32 * 1.1).sin() * 2.5;
+    g.line((p.0 - 3.5, p.1 + 1.5), (p.0 - 3.5 + sw, p.1 + 6.0), 1.1, silver);
+    g.line((p.0 + 3.5, p.1 + 1.5), (p.0 + 3.5 - sw, p.1 + 6.0), 1.1, silver);
+    g.line((p.0 + dr * 4.0, p.1 - 1.5), (p.0 + dr * 6.5, p.1 - 5.0), 1.6, silver);
+    g.fill_circle(p.0 + dr * 7.0, p.1 - 5.5, 1.7, silver);
+    g.line((p.0 + dr * 6.5, p.1 - 6.5), (p.0 + dr * 5.0, p.1 - 10.0), 0.8, silver);
+    g.line((p.0 + dr * 7.5, p.1 - 6.5), (p.0 + dr * 9.5, p.1 - 10.0), 0.8, silver);
+    g.line((p.0 + dr * 6.0, p.1 - 8.0), (p.0 + dr * 7.5, p.1 - 11.0), 0.8, silver);
+}
+
+/// The Golden Snitch: a gold ball with flapping silver wings.
+fn draw_snitch(g: &Gfx, d: &Draw) {
+    let (x, y) = (d.x, d.y - 15.0 + (d.t * 14.0).sin() * 3.0);
+    let flap = (d.t * 40.0).sin() * 3.0;
+    g.line((x, y), (x - 5.0, y - 2.0 - flap), 1.2, Color(0.9, 0.93, 1.0, 1.0));
+    g.line((x, y), (x + 5.0, y - 2.0 - flap), 1.2, Color(0.9, 0.93, 1.0, 1.0));
+    g.fill_circle(x, y, 3.2, Color(1.0, 0.85, 0.3, 0.35));
+    g.fill_circle(x, y, 1.8, Color(1.0, 0.82, 0.2, 1.0));
+}
+
+/// A Dementor: a tattered black cloak gliding above the ground, hood with a dark void.
+fn draw_dementor(g: &Gfx, d: &Draw) {
+    let dr = d.dir;
+    let (x, y) = (d.x, d.y - 4.0 + (d.t * 3.0).sin() * 1.5);
+    let cloak = Color(0.06, 0.06, 0.09, 1.0);
+    let w = |k: f32| (d.t * 6.0 + k).sin() * 1.5;
+    g.fill_poly(
+        &[
+            (x - 5.5, y - 26.0),
+            (x + 5.5, y - 26.0),
+            (x + 8.0 + w(0.0), y - 6.0),
+            (x + 4.0 + w(1.0), y - 2.0),
+            (x + 1.0, y - 6.0 + w(2.0)),
+            (x - 3.0 + w(3.0), y - 1.0),
+            (x - 8.0 + w(4.0), y - 7.0),
+        ],
+        cloak,
+    );
+    g.fill_circle(x + dr * 0.5, y - 27.0, 5.0, cloak);
+    g.fill_circle(x + dr * 2.2, y - 26.5, 2.7, Color(0.0, 0.0, 0.0, 1.0));
+    g.line((x + dr * 3.0, y - 20.0), (x + dr * 10.0, y - 17.0 + w(5.0)), 1.2, Color(0.72, 0.72, 0.68, 1.0));
+    g.fill_circle(x + dr * 10.5, y - 17.0 + w(5.0), 1.1, Color(0.72, 0.72, 0.68, 1.0));
+    if d.act == Act::Hurt {
+        g.fill_circle(x, y - 15.0, 14.0, Color(0.75, 0.9, 1.0, 0.25));
+    }
+}
+
 /// Speech bubble beside the speaker (toward the open side of the stage), since
 /// the bar leaves no room above them.
 fn draw_bubble(g: &Gfx, th: &crate::bar::Theme, light: bool, text: &str, sx: f32, sw: f32) {
@@ -658,7 +976,7 @@ impl App {
     fn stage_area(&self) -> Option<(f32, f32)> {
         let b = self.bar.as_ref()?;
         let w = (self.mon.right - self.mon.left) as f32 / self.scale;
-        let right_end = b.hits.iter().map(|(r, _)| r.x).fold(w, f32::min) - 10.0;
+        let right_end = b.left_x.min(w) - 10.0;
         // keep clear of the widest collapsed pill (music + running timer), since
         // the pill is drawn above the stage and would hide anything under it
         let half = (COL_MEDIA_W + 58.0) / 2.0 + 14.0;
@@ -673,6 +991,11 @@ impl App {
         } else {
             Some((best.1 - width, width))
         }
+    }
+
+    /// True if the bar has a free stretch wide enough for a scene.
+    pub fn stage_has_room(&self) -> bool {
+        self.stage_area().is_some()
     }
 
     /// Arm the next automatic scene (rarely: every 6 to 14 minutes).
@@ -863,6 +1186,9 @@ impl App {
                     }
                 }
                 Who::Press(v) => draw_reporter(g, d, v),
+                Who::Owl => draw_owl(g, d),
+                Who::Snitch => draw_snitch(g, d),
+                Who::Dementor => draw_dementor(g, d),
                 _ => cast::draw_actor(g, d),
             }
         }

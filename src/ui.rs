@@ -375,77 +375,8 @@ fn page_controls(a: &App, ca: f32, hits: &mut Vec<Hit>) {
     let g = &a.gfx;
     let f = &g.fonts;
 
-    // volume
-    let mute = Rect::new(28.0, 24.0, 36.0, 36.0);
-    hits.push(Hit {
-        r: mute,
-        act: Act::VolMute,
-    });
-    if hot(a, Act::VolMute) {
-        g.fill_rrect(mute, 18.0, Color::white(0.10 * ca));
-    }
-    let vg = if a.muted || a.volume <= 0.001 {
-        '\u{E74F}'
-    } else {
-        '\u{E767}'
-    };
-    g.icon(vg, mute, &f.icon18, T1.fade(ca));
-    let vol = Rect::new(80.0, 33.0, 400.0, 18.0);
-    let vfrac = if a.muted { 0.0 } else { a.volume };
-    slider(
-        a,
-        vol,
-        vfrac,
-        Act::VolSlider,
-        Color::white(0.95),
-        ca,
-        hits,
-        a.has_volume,
-    );
-    g.text(
-        &if a.has_volume {
-            format!("{}%", (a.volume * 100.0).round() as i32)
-        } else {
-            "\u{2014}".to_string()
-        },
-        Rect::new(496.0, 24.0, 76.0, 36.0),
-        &f.body,
-        T2.fade(ca),
-        Align::Right,
-    );
-
-    // brightness
-    let bi = Rect::new(28.0, 74.0, 36.0, 36.0);
-    g.icon('\u{E706}', bi, &f.icon18, T1.fade(ca));
-    let bri = Rect::new(80.0, 83.0, 400.0, 18.0);
-    let (bfrac, bok) = match a.brightness {
-        Some(b) => (b as f32 / 100.0, true),
-        None => (0.0, false),
-    };
-    slider(
-        a,
-        bri,
-        bfrac,
-        Act::BriSlider,
-        Color::white(0.95),
-        ca,
-        hits,
-        bok,
-    );
-    let btxt = match a.brightness {
-        Some(b) => format!("{}%", b),
-        None => "n/a".to_string(),
-    };
-    g.text(
-        &btxt,
-        Rect::new(496.0, 74.0, 76.0, 36.0),
-        &f.body,
-        T2.fade(ca),
-        Align::Right,
-    );
-
     // quick buttons
-    // (Wi-Fi and Bluetooth live in the top bar now.)
+    // (volume, brightness, Wi-Fi and Bluetooth live in the top bar now.)
     let items = [
         ('\u{E722}', "Screenshot"),
         ('\u{E72E}', "Lock"),
@@ -454,7 +385,7 @@ fn page_controls(a: &App, ca: f32, hits: &mut Vec<Hit>) {
     let gap = 10.0;
     let bw = (EXP_W - 56.0 - 2.0 * gap) / 3.0;
     for (i, (glyph, label)) in items.iter().enumerate() {
-        let r = Rect::new(28.0 + i as f32 * (bw + gap), 128.0, bw, 64.0);
+        let r = Rect::new(28.0 + i as f32 * (bw + gap), 64.0, bw, 96.0);
         let act = Act::Quick(i as u8 + 2);
         hits.push(Hit { r, act });
         let on = false;
@@ -466,13 +397,13 @@ fn page_controls(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         g.fill_rrect(r, 16.0, bg.fade(ca));
         g.icon(
             *glyph,
-            Rect::new(r.x, r.y + 8.0, r.w, 28.0),
+            Rect::new(r.x, r.y + 16.0, r.w, 32.0),
             &f.icon22,
             (if on { a.accent } else { T1 }).fade(ca),
         );
         g.text(
             label,
-            Rect::new(r.x, r.y + 38.0, r.w, 20.0),
+            Rect::new(r.x, r.y + 56.0, r.w, 24.0),
             &f.small,
             T2.fade(ca),
             Align::Center,
@@ -651,13 +582,26 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
     );
     let left = a.timer_remaining_ms();
     let done = !a.timer_running() && left == 0;
+    let face = match (&a.entering, a.entry_timer) {
+        (Some(buf), true) => format!("{}\u{2502} min", String::from_utf16_lossy(buf)),
+        _ => fmt_time(left as f64 / 1000.0),
+    };
     g.text(
-        &fmt_time(left as f64 / 1000.0),
+        &face,
         Rect::new(28.0, 34.0, 175.0, 52.0),
         &f.big,
-        (if done { a.accent } else { T1 }).fade(ca),
+        (if done && !a.entry_timer { a.accent } else { T1 }).fade(ca),
         Align::Left,
     );
+    if a.entry_timer {
+        g.text(
+            "Enter to start \u{00B7} Esc to cancel",
+            Rect::new(28.0, 76.0, 190.0, 16.0),
+            &f.tiny,
+            T3.fade(ca),
+            Align::Left,
+        );
+    }
     if done {
         g.text(
             "Time's up",
@@ -668,7 +612,7 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         );
     }
     for (i, mins) in [5u32, 15, 25, 50].iter().enumerate() {
-        let r = Rect::new(28.0 + i as f32 * 44.0, 94.0, 38.0, 26.0);
+        let r = Rect::new(28.0 + i as f32 * 38.0, 94.0, 34.0, 26.0);
         let act = Act::TimerPreset(*mins);
         hits.push(Hit { r, act });
         let sel = a.timer_total_s == mins * 60;
@@ -688,6 +632,11 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
             Align::Center,
         );
     }
+    // custom length: type minutes
+    let cr = Rect::new(28.0 + 4.0 * 38.0, 94.0, 34.0, 26.0);
+    hits.push(Hit { r: cr, act: Act::TimerCustom });
+    g.fill_rrect(cr, 13.0, (if hot(a, Act::TimerCustom) || a.entry_timer { HOVER } else { SURF }).fade(ca));
+    g.icon('\u{E70F}', cr, &f.icon14, T2.fade(ca));
     let sb = Rect::new(28.0, 130.0, 108.0, 36.0);
     hits.push(Hit {
         r: sb,
@@ -762,7 +711,7 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         );
     }
     let y = 38.0 + a.todos.len() as f32 * 28.0;
-    if let Some(buf) = &a.entering {
+    if let (Some(buf), false) = (&a.entering, a.entry_timer) {
         let r = Rect::new(tx, y, tw, 26.0);
         g.fill_rrect(r, 9.0, Color::white(0.14 * ca));
         let mut s = String::from_utf16_lossy(buf);

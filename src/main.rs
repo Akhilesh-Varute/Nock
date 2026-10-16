@@ -171,6 +171,7 @@ fn main() -> Result<()> {
             a.buddy = buddy::Buddy::new(buddy_hwnd, a.scale);
             a.stage = scene::Stage::new(stage_hwnd, a.scale);
             a.plan_scene();
+            a.sync_stats();
             let mon_w = a.mon.right - a.mon.left;
             a.bar = bar::Bar::new(bar_hwnd, mon_w, a.scale);
             a.pop = pop::Pop::new(pop_hwnd, a.scale);
@@ -384,6 +385,8 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
         );
         let tb = if a.cfg.top_bar { MF_CHECKED } else { MF_UNCHECKED };
         let _ = AppendMenuW(menu, MF_STRING | tb, 7, w!("Top bar"));
+        let st = if a.cfg.stats { MF_CHECKED } else { MF_UNCHECKED };
+        let _ = AppendMenuW(menu, MF_STRING | st, 10, w!("CPU and memory on the bar"));
         let res = if a.cfg.reserve_space { MF_CHECKED } else { MF_UNCHECKED };
         let _ = AppendMenuW(menu, MF_STRING | res, 6, w!("Reserve screen space (when top bar is off)"));
         if let Ok(sub) = CreatePopupMenu() {
@@ -413,7 +416,12 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             let _ = AppendMenuW(sub, MF_STRING, 35, w!("Play: Rise"));
             let _ = AppendMenuW(sub, MF_STRING, 36, w!("Play: Alley fight"));
             let _ = AppendMenuW(sub, MF_STRING, 37, w!("Play: Press conference"));
-            let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Fight scenes"));
+            let _ = AppendMenuW(sub, MF_STRING, 38, w!("Play: Harry vs Voldemort"));
+            let _ = AppendMenuW(sub, MF_STRING, 39, w!("Play: Owl post"));
+            let _ = AppendMenuW(sub, MF_STRING, 40, w!("Play: Harry and friends vs Voldemort"));
+            let _ = AppendMenuW(sub, MF_STRING, 41, w!("Play: Quidditch"));
+            let _ = AppendMenuW(sub, MF_STRING, 42, w!("Play: Dementor"));
+            let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Scenes"));
         }
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
         let _ = AppendMenuW(menu, MF_STRING | auto, 1, w!("Start with Windows"));
@@ -448,10 +456,11 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             5 => a.toggle_tucked(),
             6 => a.toggle_reserve(),
             7 => a.toggle_top_bar(),
+            10 => a.toggle_stats(),
             4 => sys::open(&store::data_dir().to_string_lossy(), ""),
             20..=29 => a.set_buddy((cmd.0 - 20) as u8),
             30 => a.toggle_scenes(),
-            31..=37 => a.play_scene((cmd.0 - 31) as usize),
+            31..=42 => a.play_scene((cmd.0 - 31) as usize),
             9 => {
                 // Clean up, then end the process outright so no helper thread,
                 // hook or COM apartment can keep notch.exe alive.

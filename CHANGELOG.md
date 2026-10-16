@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- New scenes: Harry Potter fan art (Harry vs Voldemort, Owl post, Harry and friends vs Voldemort, Quidditch, Dementor); the tray submenu is now just "Scenes".
+- Timer: type any length in minutes with the new pencil chip; when it ends, the Quidditch scene plays if there is room.
+- Top bar: optional CPU and memory read-out (tray menu, or `stats=1` in `config.ini`).
+- Notch: removed the volume and brightness sliders from the Controls page (they live in the top bar).
+
 ## 0.3.1
 
 - Scenes: pick a random one each time, never the same twice in a row, and only ones that fit the free space on the bar.

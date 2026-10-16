@@ -48,6 +48,8 @@ pub struct Config {
     pub scenes: bool,
     /// Average minutes between automatic scenes.
     pub scene_min: u8,
+    /// CPU and memory read-out on the top bar.
+    pub stats: bool,
 }
 
 const DEFAULT_CONFIG: &str = "\
@@ -63,6 +65,8 @@ buddy=2
 scenes=1
 # average minutes between scenes (1 to 60)
 scene_min=5
+# CPU and memory read-out on the top bar: 1 = on
+stats=0
 ";
 
 pub fn load_config() -> Config {
@@ -83,6 +87,7 @@ pub fn load_config() -> Config {
         buddy: 2,
         scenes: true,
         scene_min: 5,
+        stats: false,
     };
     for line in text.lines() {
         let line = line.trim();
@@ -98,6 +103,7 @@ pub fn load_config() -> Config {
                 "reserve_space" => cfg.reserve_space = on,
                 "top_bar" => cfg.top_bar = on,
                 "scenes" => cfg.scenes = on,
+                "stats" => cfg.stats = on,
                 "scene_min" => cfg.scene_min = v.trim().parse::<u8>().unwrap_or(5).clamp(1, 60),
                 "buddy" => cfg.buddy = v.trim().parse::<u8>().unwrap_or(2).min(9),
                 _ => {}
@@ -106,7 +112,7 @@ pub fn load_config() -> Config {
     }
     // A config file from an older version lacks the newer settings: write the
     // file back with every setting present (keeping the user's values).
-    let keys = ["hover_expand", "eq_animation", "clock_24h", "reserve_space", "top_bar", "buddy", "scenes", "scene_min"];
+    let keys = ["hover_expand", "eq_animation", "clock_24h", "reserve_space", "top_bar", "buddy", "scenes", "scene_min", "stats"];
     let present = |k: &str| text.lines().any(|l| l.trim().split_once('=').map(|(a, _)| a.trim() == k).unwrap_or(false));
     if keys.iter().any(|k| !present(k)) {
         save_config(&cfg);
@@ -117,7 +123,7 @@ pub fn load_config() -> Config {
 pub fn save_config(c: &Config) {
     let b = |v: bool| if v { 1 } else { 0 };
     let text = format!(
-        "# Nock settings (1 = on, 0 = off)\nhover_expand={}\neq_animation={}\nclock_24h={}\nreserve_space={}\ntop_bar={}\n# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer, 9 = ravi kishan\nbuddy={}\n# fight scenes now and then (needs a buddy): 1 = on\nscenes={}\n# average minutes between scenes (1 to 60)\nscene_min={}\n",
+        "# Nock settings (1 = on, 0 = off)\nhover_expand={}\neq_animation={}\nclock_24h={}\nreserve_space={}\ntop_bar={}\n# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer, 9 = ravi kishan\nbuddy={}\n# fight scenes now and then (needs a buddy): 1 = on\nscenes={}\n# average minutes between scenes (1 to 60)\nscene_min={}\n# CPU and memory read-out on the top bar: 1 = on\nstats={}\n",
         b(c.hover_expand),
         b(c.eq_animation),
         b(c.clock_24h),
@@ -125,7 +131,8 @@ pub fn save_config(c: &Config) {
         b(c.top_bar),
         c.buddy,
         b(c.scenes),
-        c.scene_min
+        c.scene_min,
+        b(c.stats)
     );
     let _ = fs::write(data_dir().join("config.ini"), text);
 }

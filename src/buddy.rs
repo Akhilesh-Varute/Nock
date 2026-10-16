@@ -200,7 +200,7 @@ impl App {
     fn buddy_zone(&self) -> Option<(f32, f32)> {
         let b = self.bar.as_ref()?;
         let w = (self.mon.right - self.mon.left) as f32 / self.scale;
-        let right = b.hits.iter().map(|(r, _)| r.x).fold(w, f32::min) - 24.0;
+        let right = b.left_x.min(w) - 24.0;
         let left = w / 2.0 + 214.0;
         if right - left < 70.0 {
             None

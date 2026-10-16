@@ -24,9 +24,18 @@ pub enum Who {
     Ronin,
     Courier,
     Necro,
+    // wizard-school cast (fan art, drawn by wizard())
+    Harry,
+    Hermione,
+    Ron,
+    Dumbledore,
+    Voldemort,
     // press-conference scene (drawn in scene.rs): the photo head and reporters
     Face,
     Press(u8),
+    Owl,
+    Snitch,
+    Dementor,
 }
 
 impl Who {
@@ -360,6 +369,11 @@ fn spec(who: Who) -> Spec {
         Who::Cinder => Spec { h: 34.0, hr: 6.0, t: 0.30, hw: 3.4, sw: 4.6, th: 3.8, ath: 3.5 },
         Who::Krag => Spec { h: 40.0, hr: 5.8, t: 0.31, hw: 4.4, sw: 6.8, th: 5.0, ath: 5.0 },
         Who::Veil => Spec { h: 33.0, hr: 5.3, t: 0.31, hw: 2.2, sw: 3.0, th: 2.7, ath: 2.4 },
+        Who::Harry => Spec { h: 30.0, hr: 5.4, t: 0.30, hw: 2.8, sw: 3.4, th: 2.8, ath: 2.6 },
+        Who::Hermione => Spec { h: 30.0, hr: 5.2, t: 0.30, hw: 2.7, sw: 3.3, th: 2.7, ath: 2.5 },
+        Who::Ron => Spec { h: 33.0, hr: 5.4, t: 0.30, hw: 3.0, sw: 3.7, th: 2.9, ath: 2.7 },
+        Who::Dumbledore => Spec { h: 36.0, hr: 5.6, t: 0.31, hw: 3.4, sw: 4.0, th: 3.1, ath: 2.9 },
+        Who::Voldemort => Spec { h: 36.0, hr: 5.3, t: 0.31, hw: 2.6, sw: 3.4, th: 2.5, ath: 2.3 },
         _ => Spec { h: 30.0, hr: 5.0, t: 0.3, hw: 3.0, sw: 4.0, th: 3.0, ath: 3.0 },
     }
 }
@@ -464,6 +478,35 @@ fn body(cx: &Ctx, d: &Draw, sk: &Sk, sp: &Spec, j: &J) {
         Who::Cinder => cinder(cx, d, sk, sp, j),
         Who::Krag => krag(cx, d, sk, sp, j),
         Who::Veil => veil(cx, d, sk, sp, j),
+        Who::Harry => wizard(cx, d, sk, sp, j, &Wiz {
+            robe: c(0.09, 0.09, 0.12), dark: c(0.05, 0.05, 0.07), skin: c(0.98, 0.82, 0.68), hat: None,
+            trim: c(0.75, 0.12, 0.15), beard: None, glow: c(1.0, 0.35, 0.3), wand: c(0.45, 0.30, 0.18), staff: false,
+            hair: Some(c(0.07, 0.06, 0.07)), hair_style: 1, glasses: 1, scar: true,
+            scarf: Some((c(0.75, 0.10, 0.12), c(0.95, 0.78, 0.25))), snake: false,
+        }),
+        Who::Hermione => wizard(cx, d, sk, sp, j, &Wiz {
+            robe: c(0.09, 0.09, 0.12), dark: c(0.05, 0.05, 0.07), skin: c(0.96, 0.78, 0.64), hat: None,
+            trim: c(0.75, 0.12, 0.15), beard: None, glow: c(0.6, 0.9, 1.0), wand: c(0.50, 0.33, 0.20), staff: false,
+            hair: Some(c(0.45, 0.28, 0.15)), hair_style: 2, glasses: 0, scar: false,
+            scarf: Some((c(0.75, 0.10, 0.12), c(0.95, 0.78, 0.25))), snake: false,
+        }),
+        Who::Ron => wizard(cx, d, sk, sp, j, &Wiz {
+            robe: c(0.09, 0.09, 0.12), dark: c(0.05, 0.05, 0.07), skin: c(1.0, 0.86, 0.74), hat: None,
+            trim: c(0.75, 0.12, 0.15), beard: None, glow: c(1.0, 0.65, 0.2), wand: c(0.55, 0.40, 0.25), staff: false,
+            hair: Some(c(0.85, 0.35, 0.12)), hair_style: 0, glasses: 0, scar: false,
+            scarf: Some((c(0.75, 0.10, 0.12), c(0.95, 0.78, 0.25))), snake: false,
+        }),
+        Who::Dumbledore => wizard(cx, d, sk, sp, j, &Wiz {
+            robe: c(0.40, 0.20, 0.55), dark: c(0.28, 0.12, 0.40), skin: c(0.97, 0.82, 0.70), hat: Some(c(0.34, 0.16, 0.48)),
+            trim: c(0.95, 0.78, 0.25), beard: Some(c(0.96, 0.96, 0.98)), glow: c(1.0, 0.88, 0.4), wand: c(0.9, 0.85, 0.7), staff: false,
+            hair: Some(c(0.96, 0.96, 0.98)), hair_style: 3, glasses: 2, scar: false,
+            scarf: None, snake: false,
+        }),
+        Who::Voldemort => wizard(cx, d, sk, sp, j, &Wiz {
+            robe: c(0.07, 0.07, 0.09), dark: c(0.03, 0.03, 0.05), skin: c(0.86, 0.90, 0.84), hat: None,
+            trim: c(0.25, 0.30, 0.25), beard: None, glow: c(0.4, 1.0, 0.5), wand: c(0.93, 0.91, 0.86), staff: false,
+            hair: None, hair_style: 0, glasses: 0, scar: false, scarf: None, snake: true,
+        }),
         _ => {}
     }
 }
@@ -781,6 +824,196 @@ fn krag(cx: &Ctx, d: &Draw, sk: &Sk, sp: &Spec, j: &J) {
     cx.circ(j.h_f, 4.3, skd);
     if d.charge > 0.0 {
         cx.circ(j.h_f, 7.0, ca(1.0, 0.3, 0.85, 0.35 * d.charge));
+    }
+}
+
+/// Look of one wizard: they share a body and differ in colours and props.
+struct Wiz {
+    robe: Color,
+    dark: Color,
+    skin: Color,
+    /// pointed hat colour
+    hat: Option<Color>,
+    trim: Color,
+    beard: Option<Color>,
+    glow: Color,
+    wand: Color,
+    /// walking staff with an orb instead of a wand
+    staff: bool,
+    hair: Option<Color>,
+    /// 0 neat, 1 messy and spiky, 2 big and bushy, 3 long
+    hair_style: u8,
+    /// 0 none, 1 round, 2 half-moon
+    glasses: u8,
+    scar: bool,
+    /// house scarf stripes
+    scarf: Option<(Color, Color)>,
+    /// pale, noseless, red-eyed
+    snake: bool,
+}
+
+fn wizard(cx: &Ctx, d: &Draw, sk: &Sk, sp: &Spec, j: &J, w: &Wiz) {
+    let ink = c(0.10, 0.10, 0.14);
+    let boot = c(0.16, 0.11, 0.09);
+    let (hc, hr) = (j.head, j.hr);
+    let gold = c(0.95, 0.78, 0.25);
+    // back arm and leg
+    cx.limb(j.sh, j.e_b, sp.ath, dim(w.robe, 0.7));
+    cx.limb(j.e_b, j.h_b, sp.ath - 0.2, dim(w.robe, 0.7));
+    cx.circ(j.h_b, 1.8, dim(w.skin, 0.8));
+    cx.limb(j.hip, j.k_b, sp.th, dim(w.dark, 0.8));
+    cx.limb(j.k_b, j.f_b, sp.th - 0.1, dim(w.dark, 0.8));
+    cx.circ(j.f_b, 2.4, dim(boot, 0.8));
+    // front leg
+    cx.limb(j.hip, j.k_f, sp.th, w.dark);
+    cx.limb(j.k_f, j.f_f, sp.th - 0.1, w.dark);
+    cx.circ(j.f_f, 2.5, boot);
+    cx.circ((j.f_f.0 + 2.6, j.f_f.1 + 0.5), 1.9, boot);
+    // robe: torso plus a skirt that hides the legs down to near the boots
+    let hem = j.hip.1 * 0.2;
+    cx.poly(&torso_quad(j, sp.hw, sp.sw), w.robe);
+    cx.poly(
+        &[
+            (j.hip.0 - sp.hw - 0.5, j.hip.1 - 1.0),
+            (j.hip.0 + sp.hw + 0.5, j.hip.1 - 1.0),
+            (j.hip.0 + sp.hw + 3.0, hem),
+            (j.hip.0 - sp.hw - 3.0, hem),
+        ],
+        w.robe,
+    );
+    cx.line((j.hip.0 - sp.hw - 3.0, hem), (j.hip.0 + sp.hw + 3.0, hem), 1.0, w.trim);
+    cx.line((j.hip.0 - sp.hw, j.hip.1 - 0.5), (j.hip.0 + sp.hw, j.hip.1 + 0.5), 1.2, w.trim);
+    // hair behind the head
+    if let Some(h) = w.hair {
+        match w.hair_style {
+            2 => cx.circ((hc.0 - hr * 0.55, hc.1 + hr * 0.1), hr * 1.35, h),
+            3 => cx.poly(
+                &[
+                    (hc.0 - hr * 0.9, hc.1),
+                    (hc.0 - hr * 1.1, hc.1 + hr * 2.4),
+                    (hc.0 - hr * 0.1, hc.1 + hr * 1.7),
+                ],
+                h,
+            ),
+            _ => {}
+        }
+    }
+    // head
+    cx.circ(hc, hr, w.skin);
+    if let Some(b) = w.beard {
+        cx.poly(
+            &[
+                (hc.0 - hr * 0.3, hc.1 + hr * 0.3),
+                (hc.0 + hr * 0.9, hc.1 + hr * 0.25),
+                (hc.0 + hr * 0.5, hc.1 + hr * 2.4),
+                (hc.0 - hr * 0.1, hc.1 + hr * 1.8),
+            ],
+            b,
+        );
+    }
+    // hair on top: a cap sweeping down to a fringe
+    if let Some(h) = w.hair {
+        cx.poly(
+            &[
+                (hc.0 - hr * 1.1, hc.1 + hr * 0.2),
+                (hc.0 - hr * 1.0, hc.1 - hr * 0.9),
+                (hc.0 + hr * 0.2, hc.1 - hr * 1.15),
+                (hc.0 + hr * 1.0, hc.1 - hr * 0.6),
+                (hc.0 + hr * 0.55, hc.1 - hr * 0.25),
+                (hc.0 + hr * 0.0, hc.1 - hr * 0.45),
+                (hc.0 - hr * 0.5, hc.1 + hr * 0.1),
+            ],
+            h,
+        );
+        if w.hair_style == 1 {
+            for k in 0..3 {
+                let x0 = hc.0 - hr * 0.7 + k as f32 * hr * 0.65;
+                cx.poly(
+                    &[
+                        (x0 - hr * 0.3, hc.1 - hr * 0.9),
+                        (x0 + hr * 0.3, hc.1 - hr * 0.9),
+                        (x0 + hr * 0.15 - k as f32 * hr * 0.15, hc.1 - hr * 1.6),
+                    ],
+                    h,
+                );
+            }
+        }
+    }
+    // face
+    let (ex, ey) = (hc.0 + hr * 0.42, hc.1 + hr * 0.05);
+    let eye = if w.snake { c(1.0, 0.15, 0.1) } else { ink };
+    if sk.face == Face::Hurt {
+        for gx in [ex, ex - 2.4] {
+            cx.line((gx - 0.9, ey - 0.6), (gx + 0.9, ey + 0.6), 0.8, eye);
+            cx.line((gx - 0.9, ey + 0.6), (gx + 0.9, ey - 0.6), 0.8, eye);
+        }
+    } else if w.glasses == 1 {
+        for gx in [ex, ex - 2.6] {
+            cx.circ((gx, ey), 1.9, ink);
+            cx.circ((gx, ey), 1.35, c(0.85, 0.95, 1.0));
+            cx.circ((gx + 0.25, ey), 0.7, ink);
+        }
+    } else {
+        for gx in [ex, ex - 2.4] {
+            cx.circ((gx, ey), if w.snake { 1.2 } else { 0.95 }, eye);
+            if w.glasses == 2 {
+                cx.line((gx - 1.5, ey + 1.5), (gx + 1.5, ey + 1.5), 0.7, gold);
+            }
+        }
+    }
+    if w.snake {
+        // slits where the nose should be
+        cx.circ((hc.0 + hr * 0.8, hc.1 + hr * 0.45), 0.4, ink);
+        cx.circ((hc.0 + hr * 0.8, hc.1 + hr * 0.7), 0.4, ink);
+        cx.line((ex - 0.8, ey + 3.4), (ex + 1.2, ey + 3.2), 0.6, c(0.45, 0.2, 0.25));
+    } else if matches!(sk.face, Face::Shout | Face::Grin) {
+        cx.circ((ex + 0.2, ey + 2.6), 1.0, ink);
+    }
+    if w.scar {
+        cx.line((ex + 0.1, ey - 3.9), (ex + 0.9, ey - 3.0), 0.6, c(0.85, 0.15, 0.15));
+        cx.line((ex + 0.9, ey - 3.0), (ex + 0.3, ey - 2.6), 0.6, c(0.85, 0.15, 0.15));
+    }
+    if let Some(h) = w.hat {
+        let y = hc.1 - hr * 0.55;
+        cx.poly(
+            &[(hc.0 - hr * 1.1, y), (hc.0 + hr * 1.1, y), (hc.0 - hr * 1.0, hc.1 - hr * 3.1)],
+            h,
+        );
+        cx.line((hc.0 - hr * 1.6, y), (hc.0 + hr * 1.6, y), 1.6, h);
+        cx.line((hc.0 - hr * 1.05, y - 0.6), (hc.0 + hr * 1.05, y - 0.6), 1.0, w.trim);
+    }
+    // house scarf: wrapped round the neck with a tail down the chest
+    if let Some((s1, s2)) = w.scarf {
+        for k in 0..3 {
+            let x = j.sh.0 - 2.4 + k as f32 * 1.7;
+            cx.line((x, j.sh.1 - 1.2), (x + 0.4, j.sh.1 + 1.6), 1.7, if k % 2 == 0 { s1 } else { s2 });
+        }
+        for k in 0..4 {
+            let y = j.sh.1 + 2.6 + k as f32 * 2.0;
+            cx.line((j.sh.0 + 0.2, y), (j.sh.0 + 2.8, y), 1.7, if k % 2 == 0 { s1 } else { s2 });
+        }
+    }
+    // front arm and hand
+    cx.limb(j.sh, j.e_f, sp.ath, w.robe);
+    cx.limb(j.e_f, j.h_f, sp.ath - 0.2, mix(w.robe, w.trim, 0.2));
+    cx.circ(j.h_f, 1.9, w.skin);
+    let hf = j.h_f;
+    let lit = d.charge > 0.0 || d.act == Act::Cast;
+    if w.staff {
+        let top = (hf.0 + 0.8, hf.1 - 11.0);
+        cx.line((hf.0 + 0.8, 0.0), top, 1.4, c(0.45, 0.3, 0.18));
+        cx.circ(top, 2.0, w.glow);
+        if lit {
+            cx.circ(top, 4.2, ca(w.glow.0, w.glow.1, w.glow.2, 0.4));
+        }
+    } else {
+        let a = sk.weap;
+        let tip = (hf.0 + a.sin() * 9.0, hf.1 + a.cos() * 9.0);
+        cx.line(hf, tip, 1.1, w.wand);
+        if lit {
+            cx.circ(tip, 2.0 + 2.5 * d.charge, ca(w.glow.0, w.glow.1, w.glow.2, 0.45));
+            cx.circ(tip, 1.1, c(1.0, 1.0, 1.0));
+        }
     }
 }
 

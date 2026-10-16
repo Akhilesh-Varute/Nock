@@ -1156,3 +1156,27 @@ pub fn file_icon(path: &Path) -> Option<HICON> {
         }
     }
 }
+
+/// Idle and total CPU time (100 ns ticks) since boot, for load between two reads.
+pub fn cpu_times() -> (u64, u64) {
+    use windows::Win32::System::Threading::GetSystemTimes;
+    let (mut idle, mut kernel, mut user) = (FILETIME::default(), FILETIME::default(), FILETIME::default());
+    let q = |f: FILETIME| ((f.dwHighDateTime as u64) << 32) | f.dwLowDateTime as u64;
+    unsafe {
+        if GetSystemTimes(Some(&mut idle), Some(&mut kernel), Some(&mut user)).is_err() {
+            return (0, 0);
+        }
+    }
+    // kernel time already includes idle time
+    (q(idle), q(kernel) + q(user))
+}
+
+/// Percent of physical memory in use.
+pub fn mem_percent() -> u32 {
+    use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+    let mut m = MEMORYSTATUSEX { dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32, ..Default::default() };
+    unsafe {
+        let _ = GlobalMemoryStatusEx(&mut m);
+    }
+    m.dwMemoryLoad
+}

@@ -40,6 +40,7 @@ const T_PASTE: usize = 6;
 const T_EDGE: usize = 8;
 const T_PEEK: usize = 9;
 const T_FSCHK: usize = 10;
+const T_STATS: usize = 18;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Page {
@@ -67,14 +68,13 @@ pub enum Act {
     PlayPause,
     Next,
     Seek,
-    VolMute,
-    VolSlider,
-    BriSlider,
     Quick(u8),
     ClipItem(usize),
     ClipClear,
     Launch(usize),
     TimerPreset(u32),
+    /// type any number of minutes
+    TimerCustom,
     TimerToggle,
     TimerReset,
     TodoToggle(usize),
@@ -91,8 +91,6 @@ pub struct Hit {
 #[derive(Clone, Copy)]
 enum Drag {
     Seek(Rect),
-    Vol(Rect),
-    Bri(Rect),
 }
 
 // ------------------------------------------------------------------ spring
@@ -153,6 +151,9 @@ pub struct App {
     pub hits: Vec<Hit>,
     pub hot: Option<Act>,
     drag: Option<Drag>,
+    /// CPU and memory percent for the top bar (when enabled)
+    pub stats: Option<(u32, u32)>,
+    cpu_prev: (u64, u64),
     pub seek_frac: Option<f32>,
     tracking: bool,
 
@@ -188,6 +189,8 @@ pub struct App {
     timer_start: Option<Instant>,
     pub todos: Vec<Todo>,
     pub entering: Option<Vec<u16>>,
+    /// the text being typed is a timer length in minutes, not a task
+    pub entry_timer: bool,
     prev_fg: HWND,
     /// Bluetooth device being connected/disconnected: (address, connect?, name).
     pub bt_busy: Option<(u64, bool, String)>,
@@ -237,6 +240,8 @@ impl App {
             hits: Vec::new(),
             hot: None,
             drag: None,
+            stats: None,
+            cpu_prev: (0, 0),
             seek_frac: None,
             tracking: false,
             media: media::start(hwnd.0 as isize),
@@ -262,6 +267,7 @@ impl App {
             timer_start: None,
             todos: store::load_todos(),
             entering: None,
+            entry_timer: false,
             prev_fg: HWND::default(),
             bt_busy: None,
             link_phase: 0,
@@ -405,7 +411,7 @@ impl App {
     /// the volume read-out and a running focus timer.
     pub fn sync_timers(&mut self) {
         let need = !self.hidden
-            && ((self.expanded && (self.mstate.playing || self.page == Page::Controls))
+            && ((self.expanded && self.mstate.playing)
                 || self.timer_running());
         if need && !self.sec_on {
             self.set_timer(T_SEC, 1000);
@@ -499,6 +505,7 @@ impl App {
                 }
             }
             T_PEEK => self.on_peek_tick(),
+            T_STATS => self.on_stats_tick(),
             T_FSCHK => {
                 self.kill_timer(T_FSCHK);
                 self.on_foreground();
@@ -514,10 +521,6 @@ impl App {
             T_SEC => {
                 if self.timer_running() && self.timer_remaining_ms() <= 0 {
                     self.timer_done();
-                }
-                if self.expanded && self.page == Page::Controls && self.drag.is_none() {
-                    self.read_volume();
-                    let _ = self.radio.tx.send(Req::Refresh);
                 }
                 if !self.hidden {
                     self.render();
@@ -616,6 +619,39 @@ impl App {
         self.render();
     }
 
+    /// Start or stop the 3 s CPU/RAM sampling to match the setting.
+    pub fn sync_stats(&mut self) {
+        if self.cfg.stats {
+            self.cpu_prev = sys::cpu_times();
+            self.set_timer(T_STATS, 3000);
+        } else {
+            self.kill_timer(T_STATS);
+            self.stats = None;
+        }
+    }
+
+    pub fn toggle_stats(&mut self) {
+        self.cfg.stats = !self.cfg.stats;
+        store::save_config(&self.cfg);
+        self.sync_stats();
+        self.render_bar();
+    }
+
+    fn on_stats_tick(&mut self) {
+        if !self.cfg.stats || !self.bar_visible() {
+            return;
+        }
+        let (idle, total) = sys::cpu_times();
+        let (di, dt) = (idle.wrapping_sub(self.cpu_prev.0), total.wrapping_sub(self.cpu_prev.1));
+        self.cpu_prev = (idle, total);
+        let cpu = if dt == 0 { 0 } else { (100 - (di.min(dt) * 100 / dt)) as u32 };
+        let now = Some((cpu, sys::mem_percent()));
+        if now != self.stats {
+            self.stats = now;
+            self.render_bar();
+        }
+    }
+
     pub fn toggle_reserve(&mut self) {
         self.cfg.reserve_space = !self.cfg.reserve_space;
         store::save_config(&self.cfg);
@@ -648,7 +684,7 @@ impl App {
     fn hit_at(&self, x: f32, y: f32) -> Option<Act> {
         self.hits.iter().rev().find_map(|h| {
             let r = match h.act {
-                Act::Seek | Act::VolSlider | Act::BriSlider => {
+                Act::Seek => {
                     Rect::new(h.r.x - 8.0, h.r.y, h.r.w + 16.0, h.r.h)
                 }
                 _ => h.r,
@@ -746,12 +782,6 @@ impl App {
                     }
                 }
             }
-            Drag::Bri(_) => {
-                if let Some(b) = self.brightness {
-                    sys::brightness_set(b);
-                }
-            }
-            Drag::Vol(_) => {}
         }
         self.render();
     }
@@ -760,20 +790,6 @@ impl App {
         match self.drag {
             Some(Drag::Seek(r)) => {
                 self.seek_frac = Some(((x - r.x) / r.w).clamp(0.0, 1.0));
-            }
-            Some(Drag::Vol(r)) => {
-                let v = ((x - r.x) / r.w).clamp(0.0, 1.0);
-                self.volume = v;
-                if self.muted {
-                    self.muted = false;
-                    sys::set_mute(false);
-                }
-                sys::set_volume(v);
-            }
-            Some(Drag::Bri(r)) => {
-                let v = ((x - r.x) / r.w).clamp(0.0, 1.0);
-                self.brightness = Some((v * 100.0).round() as u32);
-                sys::brightness_set(v_pct(v));
             }
             None => {}
         }
@@ -847,22 +863,6 @@ impl App {
                 if let Some(r) = self.rect_of(Act::Seek) {
                     self.start_drag(Drag::Seek(r), x);
                 }
-            }
-            Act::VolSlider => {
-                if let Some(r) = self.rect_of(Act::VolSlider) {
-                    self.start_drag(Drag::Vol(r), x);
-                }
-            }
-            Act::BriSlider => {
-                if self.brightness.is_some() {
-                    if let Some(r) = self.rect_of(Act::BriSlider) {
-                        self.start_drag(Drag::Bri(r), x);
-                    }
-                }
-            }
-            Act::VolMute => {
-                self.muted = !self.muted;
-                sys::set_mute(self.muted);
             }
             Act::Quick(i) => match i {
                 0 => match self.radios.wifi {
@@ -947,6 +947,10 @@ impl App {
                 }
             }
             Act::TodoAdd => self.start_entry(),
+            Act::TimerCustom => {
+                self.start_entry();
+                self.entry_timer = self.entering.is_some();
+            }
         }
     }
 
@@ -960,6 +964,10 @@ impl App {
         self.timer_left_ms = 0;
         alarm_sound();
         self.buddy_event(crate::buddy::BuddyEv::TimerDone);
+        // celebrate with the Quidditch scene (the Snitch is caught) when there is room
+        if self.cfg.scenes && self.cfg.buddy != 0 && self.stage_has_room() {
+            self.play_scene(10);
+        }
         self.page = Page::Tasks; // so a click on the pill lands on the timer
         if !self.expanded {
             // pulse the pill for 30 s (or until it is clicked)
@@ -986,9 +994,7 @@ impl App {
     }
 
     fn start_entry(&mut self) {
-        if self.todos.len() >= MAX_TODO {
-            return;
-        }
+        self.entry_timer = false;
         unsafe {
             self.prev_fg = GetForegroundWindow();
         }
@@ -1007,7 +1013,16 @@ impl App {
             return;
         };
         self.make_activatable(false);
-        if commit {
+        let timer = std::mem::take(&mut self.entry_timer);
+        if commit && timer {
+            let mins = String::from_utf16_lossy(&buf).parse::<u32>().unwrap_or(0).min(600);
+            if mins > 0 {
+                self.timer_total_s = mins * 60;
+                self.timer_left_ms = mins as i64 * 60_000;
+                self.timer_start = Some(Instant::now());
+                self.after_timer_change();
+            }
+        } else if commit {
             let s = String::from_utf16_lossy(&buf).trim().to_string();
             if !s.is_empty() && self.todos.len() < MAX_TODO {
                 self.todos.push(Todo {
@@ -1042,7 +1057,8 @@ impl App {
                     buf.pop();
                     Do::Redraw
                 }
-                c if c >= 0x20 && buf.len() < 80 => {
+                c if self.entry_timer && !(0x30..=0x39).contains(&c) && c >= 0x20 => Do::Redraw,
+                c if c >= 0x20 && buf.len() < if self.entry_timer { 3 } else { 80 } => {
                     buf.push(c);
                     Do::Redraw
                 }
@@ -1298,10 +1314,6 @@ impl App {
 }
 
 /// Make the album colour usable as an accent on black (never too dark/dull).
-fn v_pct(v: f32) -> u32 {
-    (v * 100.0).round() as u32
-}
-
 fn boost(c: Color) -> Color {
     let m = c.0.max(c.1).max(c.2);
     if m < 0.02 {
