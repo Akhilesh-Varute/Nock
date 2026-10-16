@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- Mini game on the notch: a click-to-flap game with your photo as the bird (new tab).
+- Pill reactions: squish on click, jiggle on hover, a heartbeat when you copy a link, and confetti when the focus timer ends. The pill glows with the music.
+- Top bar: clock styles (digital, analog, binary, hours until Friday), an optional CPU and memory read-out, and a water reminder (tray menu).
+- Notch: custom focus-timer length (type any number of minutes).
+- The photo bobblehead now only appears in the press conference scene.
+
 ## 0.4.0
 
 - New scenes: Harry Potter fan art (Harry vs Voldemort, Owl post, Harry and friends vs Voldemort, Quidditch, Dementor); the tray submenu is now just "Scenes".

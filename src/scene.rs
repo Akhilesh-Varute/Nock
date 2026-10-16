@@ -15,6 +15,16 @@ use crate::cast::{self, Act, Draw, Who};
 use crate::gfx::*;
 use windows::Win32::Graphics::Direct2D::ID2D1Bitmap;
 
+/// The photo head used by the press conference scene.
+const FACE_PNG: &[u8] = include_bytes!("../assets/face.png");
+
+/// The head standing on `ground` at `x`, lifted by `-bob` and rotated `tilt` degrees.
+fn draw_face_at(g: &Gfx, face: &ID2D1Bitmap, x: f32, ground: f32, bob: f32, tilt: f32) {
+    let (h, w) = (26.0, 26.0 * 112.0 / 140.0);
+    g.fill_rrect(Rect::new(x - 7.0, ground, 14.0, 2.0), 1.0, Color(0.0, 0.0, 0.0, 0.3));
+    g.draw_bitmap_tilted(face, Rect::new(x - w / 2.0, ground - h + bob, w, h), tilt);
+}
+
 pub const T_SCENE: usize = 16;
 pub const T_SCENEANIM: usize = 17;
 
@@ -1138,7 +1148,7 @@ impl App {
         let tick = (t * 30.0) as u32;
         let (pw, ph) = ((s.w * scale).round() as i32, (SH * scale).round() as i32);
         if s.id == 6 && s.face.is_none() {
-            s.face = s.gfx.decode_image(crate::buddy::FACE_PNG).ok().map(|f| f.0);
+            s.face = s.gfx.decode_image(FACE_PNG).ok().map(|f| f.0);
         }
         let g = &s.gfx;
         if g.begin(pw, ph).is_err() {
@@ -1182,7 +1192,7 @@ impl App {
                 Who::Face => {
                     if let Some(f) = &s.face {
                         let (bob, tilt) = face_motion(d.act, d.t);
-                        crate::buddy::draw_face_at(g, f, d.x, d.y, bob, tilt);
+                        draw_face_at(g, f, d.x, d.y, bob, tilt);
                     }
                 }
                 Who::Press(v) => draw_reporter(g, d, v),

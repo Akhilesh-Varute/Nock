@@ -50,6 +50,10 @@ pub struct Config {
     pub scene_min: u8,
     /// CPU and memory read-out on the top bar.
     pub stats: bool,
+    /// Top bar clock: 0 digital, 1 analog, 2 binary, 3 countdown to Friday.
+    pub clock_style: u8,
+    /// Minutes between water reminders (0 = off).
+    pub water_min: u16,
 }
 
 const DEFAULT_CONFIG: &str = "\
@@ -59,7 +63,7 @@ eq_animation=1
 clock_24h=0
 reserve_space=0
 top_bar=1
-# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer, 9 = ravi kishan
+# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer
 buddy=2
 # fight scenes now and then (needs a buddy): 1 = on
 scenes=1
@@ -67,6 +71,10 @@ scenes=1
 scene_min=5
 # CPU and memory read-out on the top bar: 1 = on
 stats=0
+# top bar clock: 0 = digital, 1 = analog, 2 = binary, 3 = countdown to Friday
+clock_style=0
+# minutes between water reminders (0 = off)
+water_min=0
 ";
 
 pub fn load_config() -> Config {
@@ -88,6 +96,8 @@ pub fn load_config() -> Config {
         scenes: true,
         scene_min: 5,
         stats: false,
+        clock_style: 0,
+        water_min: 0,
     };
     for line in text.lines() {
         let line = line.trim();
@@ -104,15 +114,17 @@ pub fn load_config() -> Config {
                 "top_bar" => cfg.top_bar = on,
                 "scenes" => cfg.scenes = on,
                 "stats" => cfg.stats = on,
+                "clock_style" => cfg.clock_style = v.trim().parse::<u8>().unwrap_or(0).min(3),
+                "water_min" => cfg.water_min = v.trim().parse::<u16>().unwrap_or(0).min(600),
                 "scene_min" => cfg.scene_min = v.trim().parse::<u8>().unwrap_or(5).clamp(1, 60),
-                "buddy" => cfg.buddy = v.trim().parse::<u8>().unwrap_or(2).min(9),
+                "buddy" => cfg.buddy = v.trim().parse::<u8>().ok().filter(|b| *b <= 8).unwrap_or(2),
                 _ => {}
             }
         }
     }
     // A config file from an older version lacks the newer settings: write the
     // file back with every setting present (keeping the user's values).
-    let keys = ["hover_expand", "eq_animation", "clock_24h", "reserve_space", "top_bar", "buddy", "scenes", "scene_min", "stats"];
+    let keys = ["hover_expand", "eq_animation", "clock_24h", "reserve_space", "top_bar", "buddy", "scenes", "scene_min", "stats", "clock_style", "water_min"];
     let present = |k: &str| text.lines().any(|l| l.trim().split_once('=').map(|(a, _)| a.trim() == k).unwrap_or(false));
     if keys.iter().any(|k| !present(k)) {
         save_config(&cfg);
@@ -123,7 +135,7 @@ pub fn load_config() -> Config {
 pub fn save_config(c: &Config) {
     let b = |v: bool| if v { 1 } else { 0 };
     let text = format!(
-        "# Nock settings (1 = on, 0 = off)\nhover_expand={}\neq_animation={}\nclock_24h={}\nreserve_space={}\ntop_bar={}\n# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer, 9 = ravi kishan\nbuddy={}\n# fight scenes now and then (needs a buddy): 1 = on\nscenes={}\n# average minutes between scenes (1 to 60)\nscene_min={}\n# CPU and memory read-out on the top bar: 1 = on\nstats={}\n",
+        "# Nock settings (1 = on, 0 = off)\nhover_expand={}\neq_animation={}\nclock_24h={}\nreserve_space={}\ntop_bar={}\n# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer\nbuddy={}\n# fight scenes now and then (needs a buddy): 1 = on\nscenes={}\n# average minutes between scenes (1 to 60)\nscene_min={}\n# CPU and memory read-out on the top bar: 1 = on\nstats={}\n# top bar clock: 0 = digital, 1 = analog, 2 = binary, 3 = countdown to Friday\nclock_style={}\n# minutes between water reminders (0 = off)\nwater_min={}\n",
         b(c.hover_expand),
         b(c.eq_animation),
         b(c.clock_24h),
@@ -132,7 +144,9 @@ pub fn save_config(c: &Config) {
         c.buddy,
         b(c.scenes),
         c.scene_min,
-        b(c.stats)
+        b(c.stats),
+        c.clock_style,
+        c.water_min
     );
     let _ = fs::write(data_dir().join("config.ini"), text);
 }
@@ -205,6 +219,18 @@ pub fn load_todos() -> Vec<Todo> {
             })
         })
         .collect()
+}
+
+/// Best score of the notch mini game.
+pub fn load_game_best() -> u32 {
+    fs::read_to_string(data_dir().join("game_best.txt"))
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(0)
+}
+
+pub fn save_game_best(n: u32) {
+    let _ = fs::write(data_dir().join("game_best.txt"), n.to_string());
 }
 
 pub fn save_todos(todos: &[Todo]) {

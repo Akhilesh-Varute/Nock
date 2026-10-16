@@ -4,6 +4,7 @@ mod app;
 mod bar;
 mod buddy;
 mod cast;
+mod game;
 mod pixdata;
 mod scene;
 mod gfx;
@@ -172,6 +173,7 @@ fn main() -> Result<()> {
             a.stage = scene::Stage::new(stage_hwnd, a.scale);
             a.plan_scene();
             a.sync_stats();
+            a.sync_water();
             let mon_w = a.mon.right - a.mon.left;
             a.bar = bar::Bar::new(bar_hwnd, mon_w, a.scale);
             a.pop = pop::Pop::new(pop_hwnd, a.scale);
@@ -402,7 +404,6 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             let _ = AppendMenuW(sub, MF_STRING | mark(6), 26, w!("Ronin (pixel, talks)"));
             let _ = AppendMenuW(sub, MF_STRING | mark(7), 27, w!("Courier (pixel, talks)"));
             let _ = AppendMenuW(sub, MF_STRING | mark(8), 28, w!("Necromancer (pixel, talks)"));
-            let _ = AppendMenuW(sub, MF_STRING | mark(9), 29, w!("Ravi Kishan (photo, talks)"));
             let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Buddy"));
         }
         if let Ok(sub) = CreatePopupMenu() {
@@ -422,6 +423,22 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             let _ = AppendMenuW(sub, MF_STRING, 41, w!("Play: Quidditch"));
             let _ = AppendMenuW(sub, MF_STRING, 42, w!("Play: Dementor"));
             let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Scenes"));
+        }
+        if let Ok(sub) = CreatePopupMenu() {
+            let cur = a.cfg.clock_style;
+            for (i, name) in [w!("Digital"), w!("Analog"), w!("Binary"), w!("Hours until Friday")].into_iter().enumerate() {
+                let m = if cur as usize == i { MF_CHECKED } else { MF_UNCHECKED };
+                let _ = AppendMenuW(sub, MF_STRING | m, 60 + i, name);
+            }
+            let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Clock style"));
+        }
+        if let Ok(sub) = CreatePopupMenu() {
+            let cur = a.cfg.water_min;
+            for (i, (mins, name)) in [(0u16, w!("Off")), (30, w!("Every 30 minutes")), (45, w!("Every 45 minutes")), (60, w!("Every hour")), (90, w!("Every 90 minutes"))].into_iter().enumerate() {
+                let m = if cur == mins { MF_CHECKED } else { MF_UNCHECKED };
+                let _ = AppendMenuW(sub, MF_STRING | m, 70 + i, name);
+            }
+            let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Water reminder"));
         }
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
         let _ = AppendMenuW(menu, MF_STRING | auto, 1, w!("Start with Windows"));
@@ -460,6 +477,8 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             4 => sys::open(&store::data_dir().to_string_lossy(), ""),
             20..=29 => a.set_buddy((cmd.0 - 20) as u8),
             30 => a.toggle_scenes(),
+            60..=63 => a.set_clock_style((cmd.0 - 60) as u8),
+            70..=74 => a.set_water_min([0u16, 30, 45, 60, 90][(cmd.0 - 70) as usize]),
             31..=42 => a.play_scene((cmd.0 - 31) as usize),
             9 => {
                 // Clean up, then end the process outright so no helper thread,

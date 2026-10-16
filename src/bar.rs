@@ -215,6 +215,7 @@ impl App {
         let (wifi, bt) = (self.radios.wifi, self.radios.bluetooth);
         let (vol, muted, has_vol) = (self.volume, self.muted, self.has_volume);
         let clock24 = self.cfg.clock_24h;
+        let clock_style = self.cfg.clock_style;
         let stats = self.stats;
         let accent = self.accent;
         let active = self.pop_kind();
@@ -272,7 +273,45 @@ impl App {
 
         let r = item(if clock24 { 128.0 } else { 148.0 });
         draw_hover(g, th.hover, r, is_hot(BarAct::Clock));
-        g.text(&clock, r, &f.small, th.t1, Align::Center);
+        match clock_style {
+            1 | 2 => {
+                // date on the left, an analog or binary clock on the right
+                let date = format!("{} {} {}", DAYS[(wd % 7) as usize], day, MONTHS[((mo.max(1) - 1) % 12) as usize]);
+                g.text(&date, Rect::new(r.x, r.y, r.w - 34.0, r.h), &f.small, th.t1, Align::Right);
+                let (cx, cy) = (r.x + r.w - 15.0, r.y + r.h / 2.0);
+                if clock_style == 1 {
+                    g.fill_circle(cx, cy, 10.0, th.t1.fade(0.14));
+                    g.fill_circle(cx, cy, 9.0, th.bg);
+                    let a_h = ((hh % 12) as f32 + mm as f32 / 60.0) * std::f32::consts::TAU / 12.0;
+                    let a_m = mm as f32 * std::f32::consts::TAU / 60.0;
+                    g.line((cx, cy), (cx + a_h.sin() * 5.0, cy - a_h.cos() * 5.0), 1.8, th.t1);
+                    g.line((cx, cy), (cx + a_m.sin() * 7.5, cy - a_m.cos() * 7.5), 1.2, accent);
+                    g.fill_circle(cx, cy, 1.2, th.t1);
+                } else {
+                    // binary-coded decimal: columns are tens/ones of hours and minutes
+                    let digits = [hh / 10, hh % 10, mm / 10, mm % 10];
+                    for (c, d) in digits.iter().enumerate() {
+                        for bit in 0..4u32 {
+                            let on = (d >> (3 - bit)) & 1 == 1;
+                            let col = if on { accent } else { th.t1.fade(0.16) };
+                            g.fill_circle(cx - 9.0 + c as f32 * 6.0, cy - 7.5 + bit as f32 * 5.0, 1.9, col);
+                        }
+                    }
+                }
+            }
+            3 => {
+                // hours until Friday 00:00
+                let days = (5 + 7 - wd % 7) % 7;
+                let text = if wd % 7 == 5 {
+                    "It's Friday!".to_string()
+                } else {
+                    let left = days * 1440 - (hh * 60 + mm);
+                    format!("{}d {}h to Friday", left / 1440, (left % 1440) / 60)
+                };
+                g.text(&text, r, &f.small, th.t1, Align::Center);
+            }
+            _ => g.text(&clock, r, &f.small, th.t1, Align::Center),
+        }
         hits.push((r, BarAct::Clock));
 
         if let Some((pct, charging)) = bar.battery {

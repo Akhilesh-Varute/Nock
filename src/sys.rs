@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use windows::core::*;
 use windows::Win32::Foundation::*;
-use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
+use windows::Win32::Media::Audio::Endpoints::{IAudioEndpointVolume, IAudioMeterInformation};
 use windows::Win32::Media::Audio::*;
 use windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES;
 use windows::Win32::System::Com::*;
@@ -1179,4 +1179,32 @@ pub fn mem_percent() -> u32 {
         let _ = GlobalMemoryStatusEx(&mut m);
     }
     m.dwMemoryLoad
+}
+
+thread_local! {
+    static METER: RefCell<Option<(IAudioMeterInformation, std::time::Instant)>> = const { RefCell::new(None) };
+}
+
+/// Current output peak level 0..1 (what the speakers are playing), if available.
+pub fn audio_peak() -> Option<f32> {
+    METER.with(|m| {
+        // re-bind every few seconds so a changed default output device is followed
+        let stale = m.borrow().as_ref().map(|(_, t)| t.elapsed().as_secs() >= 3).unwrap_or(true);
+        if stale {
+            let got = unsafe {
+                let en: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
+                let dev = en.GetDefaultAudioEndpoint(eRender, eMultimedia).ok()?;
+                dev.Activate::<IAudioMeterInformation>(CLSCTX_ALL, None).ok()
+            };
+            *m.borrow_mut() = got.map(|g| (g, std::time::Instant::now()));
+        }
+        let meter = m.borrow().as_ref()?.0.clone();
+        match unsafe { meter.GetPeakValue() } {
+            Ok(v) => Some(v.clamp(0.0, 1.0)),
+            Err(_) => {
+                *m.borrow_mut() = None; // default device probably changed
+                None
+            }
+        }
+    })
 }

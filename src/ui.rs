@@ -20,13 +20,26 @@ pub fn draw(a: &App, w: f32, h: f32, hits: &mut Vec<Hit>) {
 
     // Body. It starts above the window so the top corners are clipped away and
     // the shape hangs flush from the top edge of the screen like a notch.
-    g.fill_rrect(Rect::new(0.0, -rad, w, h + rad), rad, BLACK);
+    // Click squish, heartbeat and hover jiggle nudge it by a pixel or two.
+    let beat = a.beat_factor();
+    let inset = (a.squish * a.squish * 3.0).max(beat * 2.0);
+    let jig = a.jiggle * (a.fx_phase).sin() * 1.5;
+    let body = Rect::new(inset + jig, -rad, w - 2.0 * inset, h + rad - inset);
+    g.fill_rrect(body, rad, BLACK);
     g.stroke_rrect(
-        Rect::new(0.5, -rad, w - 1.0, h + rad - 0.5),
+        Rect::new(body.x + 0.5, -rad, body.w - 1.0, body.h - 0.5),
         rad,
         Color::white(0.10),
         1.0,
     );
+    if beat > 0.01 {
+        g.stroke_rrect(body, rad, Color(1.0, 0.4, 0.5, 0.85 * beat), 2.5);
+    }
+    if a.level > 0.01 && t < 0.05 {
+        // music glow: the pill's rim and fill breathe with the output level
+        g.fill_rrect(body, rad, a.accent.fade(0.03 + 0.15 * a.level));
+        g.stroke_rrect(body, rad, a.accent.fade(0.2 + 0.7 * a.level), 1.0 + 2.2 * a.level);
+    }
 
     if a.alerting() && t < 0.05 {
         let pulse = 0.5 + 0.5 * (a.eq_phase * 0.9).sin();
@@ -44,7 +57,42 @@ pub fn draw(a: &App, w: f32, h: f32, hits: &mut Vec<Hit>) {
     if e_alpha > 0.0 {
         draw_expanded(a, e_alpha, hits);
     }
+    if let Some(ct) = a.confetti_t() {
+        draw_confetti(a, w, h, ct);
+    }
 }
+/// Confetti burst from the pill (or panel) after the focus timer ends: pure
+/// functions of time, so there is no particle state to keep.
+fn draw_confetti(a: &App, w: f32, h: f32, t: f32) {
+    let g = &a.gfx;
+    const COLORS: [Color; 6] = [
+        Color(1.0, 0.45, 0.5, 1.0),
+        Color(1.0, 0.8, 0.3, 1.0),
+        Color(0.5, 0.9, 0.6, 1.0),
+        Color(0.45, 0.75, 1.0, 1.0),
+        Color(0.8, 0.6, 1.0, 1.0),
+        Color(1.0, 1.0, 1.0, 1.0),
+    ];
+    let fade = (1.0 - (t - 2.4).max(0.0) / 0.6).clamp(0.0, 1.0);
+    for i in 0..40u32 {
+        let r = |k: u32| {
+            let mut x = (i + 1).wrapping_mul(2654435761).wrapping_add(k.wrapping_mul(40503));
+            x ^= x >> 15;
+            x = x.wrapping_mul(2246822519);
+            x ^= x >> 13;
+            (x % 1000) as f32 / 1000.0
+        };
+        let x = w * (0.2 + 0.6 * r(1)) + (r(2) - 0.5) * 150.0 * t;
+        let y = h * 0.5 - (30.0 + 80.0 * r(3)) * t + 0.5 * 220.0 * t * t;
+        if y > h + 6.0 || x < -4.0 || x > w + 4.0 {
+            continue;
+        }
+        let spin = (t * (6.0 + 8.0 * r(4)) + r(5) * 6.0).sin().abs();
+        let c = COLORS[(r(6) * 6.0) as usize % 6];
+        g.fill_rrect(Rect::new(x, y, 2.0 + 3.0 * spin, 4.0 - 2.0 * spin), 0.5, c.fade(fade));
+    }
+}
+
 
 // ------------------------------------------------------------- collapsed ----
 
@@ -57,10 +105,17 @@ fn draw_collapsed(a: &App, w: f32, ca: f32) {
 
     if a.alerting() {
         let white = Color(1.0, 1.0, 1.0, ca);
-        g.icon('\u{E916}', Rect::new(w / 2.0 - 58.0, 0.0, 20.0, ch), &f.icon14, white);
+        if a.alert_msg == "Drink water" {
+            // a drawn water drop
+            let (dx, dy) = (w / 2.0 - 52.0, ch / 2.0 + 1.0);
+            g.fill_circle(dx, dy + 2.0, 5.0, Color(0.45, 0.8, 1.0, ca));
+            g.fill_poly(&[(dx - 4.4, dy), (dx + 4.4, dy), (dx, dy - 8.0)], Color(0.45, 0.8, 1.0, ca));
+        } else {
+            g.icon('\u{E916}', Rect::new(w / 2.0 - 58.0, 0.0, 20.0, ch), &f.icon14, white);
+        }
         g.text(
-            "Time's up",
-            Rect::new(w / 2.0 - 34.0, 0.0, 90.0, ch),
+            a.alert_msg,
+            Rect::new(w / 2.0 - 34.0, 0.0, 100.0, ch),
             &f.body,
             white,
             Align::Left,
@@ -203,12 +258,18 @@ fn draw_expanded(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         Page::Clipboard => page_clipboard(a, ca, hits),
         Page::Apps => page_apps(a, ca, hits),
         Page::Tasks => page_tasks(a, ca, hits),
+        Page::Game => {
+            let (ox, oy) = ((EXP_W - crate::game::W) / 2.0, 14.0);
+            hits.push(Hit { r: Rect::new(ox, oy, crate::game::W, crate::game::H), act: Act::GameFlap });
+            a.game.draw(g, ox, oy, a.game_face.as_ref(), ca);
+        }
     }
 
     // tab bar
-    let icons = ['\u{E768}', '\u{E713}', '\u{E77F}', '\u{E71D}', '\u{E73A}'];
+    let icons = ['\u{E768}', '\u{E713}', '\u{E77F}', '\u{E71D}', '\u{E73A}', '\u{E7FC}'];
     let (tw, th, gap) = (52.0, 32.0, 8.0);
-    let x0 = (EXP_W - (5.0 * tw + 4.0 * gap)) / 2.0;
+    let n = PAGES.len() as f32;
+    let x0 = (EXP_W - (n * tw + (n - 1.0) * gap)) / 2.0;
     let y0 = EXP_H - 46.0;
     for (i, p) in PAGES.iter().enumerate() {
         let r = Rect::new(x0 + i as f32 * (tw + gap), y0, tw, th);

@@ -41,6 +41,8 @@ const T_EDGE: usize = 8;
 const T_PEEK: usize = 9;
 const T_FSCHK: usize = 10;
 const T_STATS: usize = 18;
+const T_GAME: usize = 19;
+const T_WATER: usize = 20;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Page {
@@ -49,14 +51,16 @@ pub enum Page {
     Clipboard,
     Apps,
     Tasks,
+    Game,
 }
 
-pub const PAGES: [Page; 5] = [
+pub const PAGES: [Page; 6] = [
     Page::Media,
     Page::Controls,
     Page::Clipboard,
     Page::Apps,
     Page::Tasks,
+    Page::Game,
 ];
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -75,6 +79,8 @@ pub enum Act {
     TimerPreset(u32),
     /// type any number of minutes
     TimerCustom,
+    /// click inside the mini game
+    GameFlap,
     TimerToggle,
     TimerReset,
     TodoToggle(usize),
@@ -191,6 +197,21 @@ pub struct App {
     pub entering: Option<Vec<u16>>,
     /// the text being typed is a timer length in minutes, not a task
     pub entry_timer: bool,
+    /// output level 0..1 driving the music glow, smoothed
+    pub level: f32,
+    /// click squish and hover jiggle, both decaying 1 -> 0
+    pub squish: f32,
+    pub jiggle: f32,
+    pub fx_phase: f32,
+    beat_start: Option<Instant>,
+    confetti_start: Option<Instant>,
+    /// what the pill says while it pulses ("Time's up", "Drink water")
+    pub alert_msg: &'static str,
+    pub game: crate::game::Game,
+    pub game_face: Option<windows::Win32::Graphics::Direct2D::ID2D1Bitmap>,
+    /// interval of the page animation timer (0 = off)
+    page_ms: u32,
+    game_last: Instant,
     prev_fg: HWND,
     /// Bluetooth device being connected/disconnected: (address, connect?, name).
     pub bt_busy: Option<(u64, bool, String)>,
@@ -268,6 +289,17 @@ impl App {
             todos: store::load_todos(),
             entering: None,
             entry_timer: false,
+            level: 0.0,
+            squish: 0.0,
+            jiggle: 0.0,
+            fx_phase: 0.0,
+            beat_start: None,
+            confetti_start: None,
+            alert_msg: "Time's up",
+            game: crate::game::Game::new(store::load_game_best()),
+            game_face: None,
+            page_ms: 0,
+            game_last: Instant::now(),
             prev_fg: HWND::default(),
             bt_busy: None,
             link_phase: 0,
@@ -348,6 +380,26 @@ impl App {
             && self.mstate.has_track()
     }
 
+    /// Heartbeat after copying a link: 0..1, two quick bumps ("lub-dub").
+    pub fn beat_factor(&self) -> f32 {
+        let Some(t0) = self.beat_start else { return 0.0 };
+        let t = t0.elapsed().as_secs_f32();
+        let bump = |c: f32, w: f32| (-((t - c) / w).powi(2)).exp();
+        (bump(0.08, 0.06) + 0.8 * bump(0.36, 0.07)).min(1.0)
+    }
+
+    /// Seconds since the confetti burst, while it is still falling.
+    pub fn confetti_t(&self) -> Option<f32> {
+        self.confetti_start.map(|t| t.elapsed().as_secs_f32()).filter(|t| *t < 3.0)
+    }
+
+    fn fx_active(&self) -> bool {
+        self.squish > 0.0
+            || self.jiggle > 0.0
+            || self.beat_start.is_some_and(|t| t.elapsed().as_secs_f32() < 1.0)
+            || self.confetti_t().is_some()
+    }
+
     pub fn alerting(&self) -> bool {
         self.alert_until.is_some_and(|t| Instant::now() < t)
     }
@@ -420,6 +472,27 @@ impl App {
             self.kill_timer(T_SEC);
             self.sec_on = false;
         }
+        // the mini game ticks at 60 Hz only while its tab is open
+        let want: u32 = if self.expanded && !self.hidden {
+            match self.page {
+                Page::Game => 16,
+                _ => 0,
+            }
+        } else {
+            0
+        };
+        if want != self.page_ms {
+            if want == 0 {
+                self.kill_timer(T_GAME);
+            } else {
+                self.game_last = Instant::now();
+                if self.page == Page::Game && self.game_face.is_none() {
+                    self.game_face = self.gfx.decode_image(crate::game::FACE_PNG).ok().map(|f| f.0);
+                }
+                self.set_timer(T_GAME, want);
+            }
+            self.page_ms = want;
+        }
         // keep the equaliser running (or not)
         if self.eq_active() && self.anim_ms == 0 {
             self.last_tick = Instant::now();
@@ -470,6 +543,16 @@ impl App {
         if self.eq_active() || self.alerting() {
             self.eq_phase += dt * 9.0;
         }
+        self.fx_phase += dt * 45.0;
+        self.squish = (self.squish - dt * 4.5).max(0.0);
+        self.jiggle = (self.jiggle - dt * 2.0).max(0.0);
+        if self.eq_active() {
+            // music glow follows the real output level (with a slow release)
+            let peak = sys::audio_peak().unwrap_or(0.5 + 0.4 * self.eq_phase.sin());
+            self.level = peak.max(self.level - dt * 2.2);
+        } else {
+            self.level = (self.level - dt * 4.0).max(0.0);
+        }
         let (tw, th) = self.target_size();
         while dt > 0.0 {
             let h = dt.min(1.0 / 240.0);
@@ -483,7 +566,7 @@ impl App {
             self.sh = Spring::new(th);
         }
         self.render();
-        let next = if moving {
+        let next = if moving || self.fx_active() {
             16
         } else if self.eq_active() || self.alerting() {
             50
@@ -505,6 +588,8 @@ impl App {
                 }
             }
             T_PEEK => self.on_peek_tick(),
+            T_GAME => self.on_game_tick(),
+            T_WATER => self.water_reminder(),
             T_STATS => self.on_stats_tick(),
             T_FSCHK => {
                 self.kill_timer(T_FSCHK);
@@ -630,6 +715,37 @@ impl App {
         }
     }
 
+    pub fn set_clock_style(&mut self, n: u8) {
+        self.cfg.clock_style = n.min(3);
+        store::save_config(&self.cfg);
+        self.render_bar();
+    }
+
+    /// (Re)arm the repeating water reminder to match the setting.
+    pub fn sync_water(&mut self) {
+        if self.cfg.water_min > 0 {
+            self.set_timer(T_WATER, self.cfg.water_min as u32 * 60_000);
+        } else {
+            self.kill_timer(T_WATER);
+        }
+    }
+
+    pub fn set_water_min(&mut self, mins: u16) {
+        self.cfg.water_min = mins;
+        store::save_config(&self.cfg);
+        self.sync_water();
+    }
+
+    fn water_reminder(&mut self) {
+        self.buddy_say("Time to drink some water!", 6000);
+        if !self.expanded && !self.timer_running() {
+            self.alert_msg = "Drink water";
+            self.alert_until = Some(Instant::now() + std::time::Duration::from_secs(10));
+            self.retarget();
+            self.render();
+        }
+    }
+
     pub fn toggle_stats(&mut self) {
         self.cfg.stats = !self.cfg.stats;
         store::save_config(&self.cfg);
@@ -710,6 +826,10 @@ impl App {
                 };
                 if TrackMouseEvent(&mut t).is_ok() {
                     self.tracking = true;
+                    if !self.expanded {
+                        self.jiggle = 1.0;
+                        self.retarget();
+                    }
                 }
             }
         }
@@ -751,6 +871,8 @@ impl App {
     pub fn on_lbutton_down(&mut self, px: i32, py: i32) {
         let (x, y) = (px as f32 / self.scale, py as f32 / self.scale);
         if !self.expanded {
+            self.squish = 1.0;
+            self.retarget();
             self.set_expanded(true);
             return;
         }
@@ -947,11 +1069,27 @@ impl App {
                 }
             }
             Act::TodoAdd => self.start_entry(),
+            Act::GameFlap => self.game.flap(),
             Act::TimerCustom => {
                 self.start_entry();
                 self.entry_timer = self.entering.is_some();
             }
         }
+    }
+
+    fn on_game_tick(&mut self) {
+        let now = Instant::now();
+        let dt = now.duration_since(self.game_last).as_secs_f32().min(0.05);
+        self.game_last = now;
+        match self.page {
+            Page::Game => {
+                if self.game.step(dt) {
+                    store::save_game_best(self.game.best);
+                }
+            }
+            _ => {}
+        }
+        self.render();
     }
 
     fn after_timer_change(&mut self) {
@@ -963,6 +1101,7 @@ impl App {
         self.timer_start = None;
         self.timer_left_ms = 0;
         alarm_sound();
+        self.confetti_start = Some(Instant::now());
         self.buddy_event(crate::buddy::BuddyEv::TimerDone);
         // celebrate with the Quidditch scene (the Snitch is caught) when there is room
         if self.cfg.scenes && self.cfg.buddy != 0 && self.stage_has_room() {
@@ -970,6 +1109,7 @@ impl App {
         }
         self.page = Page::Tasks; // so a click on the pill lands on the timer
         if !self.expanded {
+            self.alert_msg = "Time's up";
             // pulse the pill for 30 s (or until it is clicked)
             self.alert_until = Some(Instant::now() + std::time::Duration::from_secs(30));
         }
@@ -1148,6 +1288,10 @@ impl App {
         }
         if text.trim().is_empty() {
             return;
+        }
+        if text.starts_with("http://") || text.starts_with("https://") {
+            self.beat_start = Some(Instant::now());
+            self.retarget();
         }
         self.clips.retain(|c| *c != text);
         self.clips.insert(0, text);
