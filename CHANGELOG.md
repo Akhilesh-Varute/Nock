@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1
+
+- Apps tab: the app picker now looks for new and changed apps every time you open it (the old list stays visible while it updates), and has a Refresh button, so you no longer need to restart Nock to see new apps or fixed icons.
+
 ## 0.8.0
 
 - Installer: `NockSetup-<version>.exe` installs Nock just for you (no admin rights), adds it to the Start menu, can start it with Windows, and uninstalls from Windows Settings. The plain `nock.exe` is still published too.

@@ -751,6 +751,14 @@ fn page_app_picker(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         g.text("Search apps", Rect::new(sr.x + 34.0, sr.y, sr.w - 40.0, sr.h), &f.small, T3.fade(ca), Align::Left);
     }
     hits.push(Hit { r: sr, act: Act::AppSearch });
+    let rf = Rect::new(sr.x - 36.0, 4.0, 26.0, 26.0);
+    hits.push(Hit { r: rf, act: Act::AppRefresh });
+    g.fill_rrect(rf, 13.0, Color::white((if hot(a, Act::AppRefresh) { 0.14 } else { 0.07 }) * ca));
+    let deg = if a.app_loading { a.spin_t * 360.0 } else { 0.0 };
+    g.rotated(rf.cx(), rf.cy(), deg, || g.icon('\u{E72C}', rf, &f.icon14, (if a.app_loading { a.accent } else { T2 }).fade(ca)));
+    if a.app_loading && a.app_list.is_some() {
+        g.text("Updating\u{2026}", Rect::new(130.0, 4.0, 100.0, 26.0), &f.tiny, T3.fade(ca), Align::Left);
+    }
 
     let list = Rect::new(24.0, 40.0, EXP_W - 48.0, PICK_ROWS as f32 * 32.0);
     let Some(_) = &a.app_list else {

@@ -113,6 +113,8 @@ pub enum Act {
     AppSearch,
     /// the app list took too long: ask again
     AppRetry,
+    /// look for new / changed apps again (keeps showing the current list meanwhile)
+    AppRefresh,
     /// restart / shut down (asks to click twice)
     PowerRestart,
     PowerShutdown,
@@ -266,7 +268,7 @@ pub struct App {
     /// Apps tab picker: open?, the installed apps (None while loading), search text, scroll
     pub picking: bool,
     pub app_list: Option<Vec<(String, String)>>,
-    app_loading: bool,
+    pub app_loading: bool,
     /// when the current app-list request started (for the "taking too long" retry)
     pub app_load_t0: Option<Instant>,
     pub app_filter: String,
@@ -590,7 +592,7 @@ impl App {
             match self.page {
                 Page::Game if self.hub.is_playing() => 16,
                 Page::Stats => 1000,
-                Page::Apps if self.picking && self.app_list.is_none() => 33,
+                Page::Apps if self.picking && (self.app_list.is_none() || self.app_loading) => 33,
                 _ => 0,
             }
         } else {
@@ -1289,13 +1291,23 @@ impl App {
                 self.picking = true;
                 self.app_filter.clear();
                 self.app_scroll = 0;
-                if self.app_list.is_none() && !self.app_loading {
+                // always look again, so apps installed (or icons fixed) since last time show up;
+                // the old list stays visible until the new one arrives
+                if !self.app_loading {
                     self.app_loading = true;
                     self.app_load_t0 = Some(Instant::now());
                     sys::list_start_apps(self.hwnd.0 as isize);
                 }
                 self.ensure_picker_icons();
                 self.sync_timers();
+            }
+            Act::AppRefresh => {
+                if !self.app_loading {
+                    self.app_loading = true;
+                    self.app_load_t0 = Some(Instant::now());
+                    sys::list_start_apps(self.hwnd.0 as isize);
+                    self.sync_timers();
+                }
             }
             Act::AppRetry => {
                 self.app_list = None;
@@ -1667,6 +1679,8 @@ impl App {
         self.app_load_t0 = None;
         self.app_list = Some(sys::START_APPS.lock().unwrap().clone());
         self.app_scroll = 0;
+        self.picker_icons.clear();
+        self.load_app_icons();
         self.ensure_picker_icons();
         self.sync_timers();
         self.render();
@@ -1995,6 +2009,16 @@ mod preview {
         a.app_scroll = 0;
         a.ensure_picker_icons();
         render(&a, "apps_search");
+        a.app_filter.clear();
+        a.app_loading = true;
+        a.spin_t = 0.7;
+        render(&a, "apps_refreshing");
+        a.app_filter = "brawl".into();
+        a.picker_icons.clear();
+        a.ensure_picker_icons();
+        render(&a, "apps_brawl");
+        a.app_loading = false;
+        a.app_filter = "micro".into();
         a.picking = false;
         a.app_filter.clear();
         render(&a, "apps_grid");
