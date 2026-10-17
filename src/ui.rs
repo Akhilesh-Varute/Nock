@@ -501,9 +501,15 @@ fn page_power(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         let r = Rect::new(24.0 + i as f32 * (w + gap), 28.0, w, 130.0);
         hits.push(Hit { r, act: *act });
         let danger = *k != 0 && armed(*k);
+        // colour says how serious it is: calm blue and violet, amber for restart, red for shut down
+        let tint = [C_CPU, C_UP, C_MEM, Color(1.0, 0.42, 0.45, 1.0)][i];
         let bg = if danger { Color(0.85, 0.25, 0.28, 1.0) } else if hot(a, *act) { HOVER } else { SURF };
         g.fill_rrect(r, 20.0, bg.fade(ca));
-        g.icon(*glyph, Rect::new(r.x, r.y + 22.0, r.w, 40.0), &f.icon22, (if danger { Color::white(1.0) } else { T1 }).fade(ca));
+        if !danger {
+            g.fill_rrect(r, 20.0, tint.fade((if hot(a, *act) { 0.14 } else { 0.07 }) * ca));
+            g.fill_circle(r.cx(), r.y + 42.0, 24.0, tint.fade(0.16 * ca));
+        }
+        g.icon(*glyph, Rect::new(r.x, r.y + 22.0, r.w, 40.0), &f.icon22, (if danger { Color::white(1.0) } else { tint }).fade(ca));
         g.text(label, Rect::new(r.x, r.y + 70.0, r.w, 24.0), &f.body, (if danger { Color::white(1.0) } else { T1 }).fade(ca), Align::Center);
         if *k != 0 {
             g.text(
