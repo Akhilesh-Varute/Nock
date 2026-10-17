@@ -20,7 +20,7 @@ Written in Rust. No webview, no framework, no runtime. One small <code>.exe</cod
 - **Top bar** like the macOS menu bar: active app name, Wi-Fi, Bluetooth, sound, brightness, battery and clock, each with a dropdown (join Wi-Fi networks, connect Bluetooth devices, sliders, calendar). Optional clock styles and a CPU / memory read-out.
 - **A little life**: a buddy character on the bar, scripted scenes, an arcade with four mouse-only games, and small reactions on the pill (squish on click, glow with the music, confetti when the timer ends).
 - **Gentle reminders** (all off by default): drink water, and look away from the screen (20-20-20).
-- **Zero idle cost**: event driven, no polling loop. Hides itself in full-screen video and games, with a top-edge reveal.
+- **Zero idle cost**: event driven, no polling loop; about 0% CPU and about 32 MB of memory while idle (see [Why it is light](#why-it-is-light)). Hides itself in full-screen video and games, with a top-edge reveal.
 - Follows the Windows light/dark theme.
 
 ## Install
@@ -161,6 +161,17 @@ Everything is in `%APPDATA%\Nock\` (tray → *Open settings folder*). Most setti
 - `brightness.log` and `scene.log`: only written if a brightness change or a scene fails to start, with the reason.
 
 ## Why it is light
+
+**What that means in numbers** (measured with Task Manager-style counters on a Windows 11 laptop, notch collapsed, nothing playing, build 0.8.x):
+
+| | Nock |
+|---|---|
+| CPU while idle | **0.0%** (readings between 0.00% and 0.3% over 20 s) |
+| Memory (private) | about **32 MB** (about 60 MB working set, which also counts shared Windows DLLs) |
+| Threads / handles | 21 / about 600 |
+| Download | **about 1 MB** exe |
+
+It is a native Rust program with no web view and no background polling, so it avoids the browser engine (typically a few hundred MB) that Electron-style widgets carry. It is not a benchmark against any specific app, and numbers go up briefly while you use it: the panel redraws as you hover, an animated scene or game uses a little CPU while it plays, and Stats samples once a second while that tab is open. You can check your own numbers in Task Manager → Details → `nock.exe`.
 
 - **Zero work while idle.** The process blocks in `GetMessage()`. There is no polling loop anywhere.
 - Timers exist only while needed: a ~60 fps animation timer only during expand/collapse and the small pill reactions; a 20 fps timer only for the equaliser bars and glow while music plays and the pill is collapsed; a 1 Hz timer only while the Stats tab is open, a focus timer runs, or the panel is open on a playing track; a 60 fps timer only while a game is being played; and a 3 s timer only if you turned on the CPU/RAM read-out. Reminders and the clock use single long timers.

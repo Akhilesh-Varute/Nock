@@ -582,14 +582,14 @@ fn page_clipboard(a: &App, ca: f32, hits: &mut Vec<Hit>) {
     } else {
         format!("Clipboard  \u{00B7}  {}", total)
     };
-    g.text(&head, Rect::new(28.0, 12.0, 200.0, 24.0), &f.small, T3.fade(ca), Align::Left);
+    g.text(&head, Rect::new(28.0, 12.0, 200.0, 24.0), &f.small, C_MEM.fade(ca), Align::Left);
     if !a.clips.is_empty() {
         let r = Rect::new(EXP_W - 112.0, 12.0, 64.0, 24.0);
         hits.push(Hit { r, act: Act::ClipClear });
         if hot(a, Act::ClipClear) {
             g.fill_rrect(r, 12.0, Color::white(0.10 * ca));
         }
-        g.text("Clear", r, &f.small, T2.fade(ca), Align::Center);
+        g.text("Clear", r, &f.small, C_PINK.fade(ca), Align::Center);
     }
     // search chip: click, type to filter, Enter keeps it, Esc clears it
     let sr = Rect::new(EXP_W - 252.0, 12.0, 132.0, 24.0);
@@ -636,20 +636,46 @@ fn page_clipboard(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         let pin = Rect::new(r.x + r.w - 32.0, r.y, 30.0, r.h);
         let pact = Act::ClipPin(idx);
         hits.push(Hit { r: pin, act: pact });
+        let (kind, kc) = clip_kind(text);
         if hot(a, act) || hot(a, pact) {
             g.fill_rrect(r, 10.0, Color::white(0.12 * ca));
-        } else if row % 2 == 0 {
+        } else {
             g.fill_rrect(r, 10.0, Color::white(0.04 * ca));
         }
-        g.text(&preview(text), Rect::new(r.x + 14.0, r.y, r.w - 52.0, r.h), &f.body, T1.fade(ca), Align::Left);
+        g.fill_rrect(r, 10.0, kc.fade(0.06 * ca));
+        // a round chip in the colour of the kind of thing copied
+        let chip = Rect::new(r.x + 6.0, r.y + 3.0, 22.0, 22.0);
+        g.fill_circle(chip.cx(), chip.cy(), 11.0, kc.fade(0.20 * ca));
+        g.icon(kind, chip, &f.icon14, kc.fade(ca));
+        g.text(&preview(text), Rect::new(r.x + 38.0, r.y, r.w - 76.0, r.h), &f.body, T1.fade(ca), Align::Left);
         let (glyph, col) = if *pinned {
-            ('\u{E735}', a.accent)
+            ('\u{E735}', C_GOLD)
         } else if hot(a, pact) {
             ('\u{E734}', T1)
         } else {
             ('\u{E734}', T3)
         };
         g.icon(glyph, pin, &f.icon14, col.fade(ca * if *pinned || hot(a, act) || hot(a, pact) { 1.0 } else { 0.6 }));
+    }
+}
+
+const C_GOLD: Color = Color(1.0, 0.82, 0.28, 1.0);
+const C_PINK: Color = Color(1.0, 0.50, 0.62, 1.0);
+
+/// What kind of thing was copied: an icon and a colour for its row.
+fn clip_kind(s: &str) -> (char, Color) {
+    let t = s.trim();
+    let lower = t.to_ascii_lowercase();
+    if lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("www.") {
+        ('\u{E71B}', C_CPU)
+    } else if t.contains('@') && !t.contains(' ') && t.contains('.') {
+        ('\u{E715}', C_BAT)
+    } else if t.contains(":\\") || t.starts_with("\\\\") || t.starts_with('/') || t.starts_with("~/") {
+        ('\u{E8B7}', C_MEM)
+    } else if t.contains(" --") || t.contains("();") || t.contains("=>") || t.contains('{') || t.contains("::") || t.starts_with("cargo ") || t.starts_with("git ") {
+        ('\u{E943}', C_PINK)
+    } else {
+        ('\u{E8A5}', C_UP)
     }
 }
 
