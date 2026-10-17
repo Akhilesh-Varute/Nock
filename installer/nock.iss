@@ -26,7 +26,6 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
-VersionInfoVersion={#MyAppVersion}
 VersionInfoProductName=Nock
 
 [Languages]
