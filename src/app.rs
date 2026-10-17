@@ -24,7 +24,7 @@ use crate::sys;
 pub const EXP_W: f32 = 600.0;
 pub const EXP_H: f32 = 250.0;
 pub const COL_H: f32 = 34.0;
-pub const COL_IDLE_W: f32 = 128.0;
+pub const COL_IDLE_W: f32 = 176.0;
 pub const COL_MEDIA_W: f32 = 296.0;
 pub const COL_TIMER_W: f32 = 132.0;
 pub const MARGIN: f32 = 24.0; // room for spring overshoot
@@ -2022,5 +2022,24 @@ mod preview {
         a.picking = false;
         a.app_filter.clear();
         render(&a, "apps_grid");
+        // the collapsed pill, idle and with media (cropped to the pill)
+        a.expanded = false;
+        a.mstate.has_session = false;
+        a.sh = Spring::new(a.col_h());
+        a.sw = Spring::new(COL_IDLE_W);
+        a.gfx.begin((EXP_W * scale) as i32, (EXP_H * scale) as i32).unwrap();
+        let mut hits = Vec::new();
+        crate::ui::draw(&a, COL_IDLE_W, a.col_h(), &mut hits);
+        let _ = a.gfx.end();
+        let (bw, _bh, buf) = a.gfx.snapshot();
+        let (pw, ph) = ((COL_IDLE_W * scale) as i32, (a.col_h() * scale) as i32);
+        let mut out = Vec::new();
+        out.extend_from_slice(&(pw as u32).to_le_bytes());
+        out.extend_from_slice(&(ph as u32).to_le_bytes());
+        for y in 0..ph {
+            let row = (y * bw * 4) as usize;
+            out.extend_from_slice(&buf[row..row + (pw * 4) as usize]);
+        }
+        std::fs::write(format!("{dir}/panel_idle.raw"), out).unwrap();
     }
 }

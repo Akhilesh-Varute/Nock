@@ -199,13 +199,14 @@ fn draw_collapsed(a: &App, w: f32, ca: f32) {
             };
             format!("{}:{:02} {}", h12, mm, ampm)
         };
-        g.text(
-            &label,
-            Rect::new(0.0, 0.0, w, ch),
-            &f.small,
-            T2.fade(ca),
-            Align::Center,
-        );
+        const DAYS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        let (_, _, day, wday, ..) = sys::local_time();
+        // date | time, centred as a pair; the time is the bold part
+        let (dw, tw) = (50.0, if a.cfg.clock_24h { 44.0 } else { 70.0 });
+        let x0 = (w - (dw + 15.0 + tw)) / 2.0;
+        g.text(&format!("{} {}", DAYS[(wday as usize).min(6)], day), Rect::new(x0, 0.0, dw, ch), &f.small, T3.fade(ca), Align::Right);
+        g.fill_rrect(Rect::new(x0 + dw + 7.0, ch / 2.0 - 7.0, 1.0, 14.0), 0.5, Color::white(0.18 * ca));
+        g.text(&label, Rect::new(x0 + dw + 15.0, 0.0, tw, ch), &f.menu, T1.fade(ca), Align::Left);
     }
 }
 
@@ -523,6 +524,7 @@ const C_CPU: Color = Color(0.30, 0.78, 0.98, 1.0);
 const C_MEM: Color = Color(0.98, 0.70, 0.20, 1.0);
 const C_BAT: Color = Color(0.40, 0.85, 0.50, 1.0);
 const C_UP: Color = Color(0.72, 0.58, 1.0, 1.0);
+const C_FOC: Color = Color(1.0, 0.58, 0.42, 1.0);
 
 /// One inset tile: coloured icon + dim label, bold value, thin bar underneath.
 #[allow(clippy::too_many_arguments)]
@@ -837,8 +839,9 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
     let f = &g.fonts;
 
     // ---- cards
-    for r in [Rect::new(14.0, 2.0, 208.0, 198.0), Rect::new(230.0, 2.0, 190.0, 198.0), Rect::new(428.0, 2.0, 158.0, 198.0)] {
+    for (r, c) in [(Rect::new(14.0, 2.0, 208.0, 198.0), C_FOC), (Rect::new(230.0, 2.0, 190.0, 198.0), C_BAT), (Rect::new(428.0, 2.0, 158.0, 198.0), C_UP)] {
         g.fill_rrect(r, 20.0, Color::white(0.05 * ca));
+        g.fill_rrect(r, 20.0, c.fade(0.07 * ca));
     }
 
     // ---- focus timer
@@ -854,7 +857,7 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         &title,
         Rect::new(28.0, 12.0, 185.0, 22.0),
         &f.small,
-        (if a.break_mode { a.accent } else { T3 }).fade(ca),
+        (if a.break_mode { a.accent } else { C_FOC }).fade(ca),
         Align::Left,
     );
     g.text(
@@ -874,7 +877,7 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         &face,
         Rect::new(28.0, 34.0, 175.0, 52.0),
         &f.big,
-        (if done && !a.entry_timer { a.accent } else { T1 }).fade(ca),
+        (if done && !a.entry_timer { C_FOC } else { T1 }).fade(ca),
         Align::Left,
     );
     if a.entry_timer {
@@ -891,7 +894,7 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
             "Time's up",
             Rect::new(110.0, 12.0, 90.0, 22.0),
             &f.small,
-            a.accent.fade(ca),
+            C_FOC.fade(ca),
             Align::Right,
         );
     }
@@ -903,7 +906,7 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         let bg = if hot(a, act) {
             HOVER
         } else if sel {
-            Color::white(0.13)
+            C_FOC.fade(0.28)
         } else {
             SURF
         };
@@ -912,7 +915,7 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
             &format!("{}m", mins),
             r,
             &f.small,
-            (if sel { T1 } else { T2 }).fade(ca),
+            (if sel { C_FOC } else { T2 }).fade(ca),
             Align::Center,
         );
     }
@@ -929,7 +932,7 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
     g.fill_rrect(
         sb,
         18.0,
-        Color::white((if hot(a, Act::TimerToggle) { 1.0 } else { 0.92 }) * ca),
+        C_FOC.fade((if hot(a, Act::TimerToggle) { 1.0 } else { 0.9 }) * ca),
     );
     g.text(
         if a.timer_running() { "Pause" } else { "Start" },
@@ -957,7 +960,7 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         "To-do",
         Rect::new(tx, 12.0, 100.0, 22.0),
         &f.small,
-        T3.fade(ca),
+        C_BAT.fade(ca),
         Align::Left,
     );
     for (i, t) in a.todos.iter().enumerate() {
@@ -982,7 +985,7 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
             g.fill_rrect(row, 9.0, Color::white(0.07 * ca));
         }
         let glyph = if t.done { '\u{E73A}' } else { '\u{E739}' };
-        let gc = if t.done { a.accent } else { T2 };
+        let gc = if t.done { C_BAT } else { T2 };
         g.icon(glyph, cb, &f.icon14, gc.fade(ca));
         g.text(
             &t.text,
@@ -1042,7 +1045,7 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
             '\u{E710}',
             Rect::new(tx, y, 26.0, 26.0),
             &f.icon14,
-            T3.fade(ca),
+            C_BAT.fade(ca),
         );
         g.text(
             "Add task",
@@ -1081,7 +1084,7 @@ fn draw_calendar(a: &App, ca: f32) {
         &format!("{} {}", MONTHS[(month as usize - 1).min(11)], year),
         Rect::new(x0 - 4.0, 12.0, cw * 7.0 + 8.0, 22.0),
         &f.small,
-        T2.fade(ca),
+        C_UP.fade(ca),
         Align::Center,
     );
     for (i, d) in ["S", "M", "T", "W", "T", "F", "S"].iter().enumerate() {
@@ -1089,7 +1092,7 @@ fn draw_calendar(a: &App, ca: f32) {
             d,
             Rect::new(x0 + i as f32 * cw, 36.0, cw, 18.0),
             &f.tiny,
-            T3.fade(ca),
+            C_UP.fade(0.55 * ca),
             Align::Center,
         );
     }
@@ -1100,7 +1103,7 @@ fn draw_calendar(a: &App, ca: f32) {
         let (c, r) = (slot % 7, slot / 7);
         let cell = Rect::new(x0 + c as f32 * cw, 56.0 + r as f32 * 20.0, cw, 20.0);
         if d == day {
-            g.fill_circle(cell.cx(), cell.cy(), 9.5, a.accent.fade(ca));
+            g.fill_circle(cell.cx(), cell.cy(), 9.5, C_UP.fade(ca));
             g.text(
                 &d.to_string(),
                 cell,
