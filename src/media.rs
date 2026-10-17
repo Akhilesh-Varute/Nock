@@ -24,6 +24,13 @@ pub struct MediaState {
     pub pos_ticks: i64,
     pub pos_stamp: i64,
     pub dur_ticks: i64,
+    /// timeline origin: some apps do not start at 0, and seeking must add it back
+    pub start_ticks: i64,
+    /// the app lets other programs move its playback position (Apple Music does not)
+    pub can_seek: bool,
+    /// the app currently offers previous / next (greyed out in the panel when not)
+    pub can_prev: bool,
+    pub can_next: bool,
     pub rate: f64,
     pub art: Option<Arc<Vec<u8>>>,
     /// Bumped whenever `art` changes so the UI knows to re-decode.
@@ -147,13 +154,20 @@ mod imp {
                     let _ = s.TrySkipNextAsync().and_then(|o| o.join());
                 }
                 Cmd::Prev => {
-                    let _ = s.TrySkipPreviousAsync().and_then(|o| o.join());
+                    // some apps (Apple Music) ignore the session request: press the media key instead
+                    let ok = s.TrySkipPreviousAsync().and_then(|o| o.join()).unwrap_or(false);
+                    if !ok {
+                        crate::sys::media_key(0xB1); // VK_MEDIA_PREV_TRACK
+                    }
                 }
                 Cmd::SeekSecs(secs) => {
-                    let ticks = (secs * 1e7) as i64;
-                    let _ = s
-                        .TryChangePlaybackPositionAsync(ticks)
-                        .and_then(|o| o.join());
+                    let start = ctx.st.lock().map(|m| m.start_ticks).unwrap_or(0);
+                    let ticks = start + (secs * 1e7) as i64;
+                    let ok = s.TryChangePlaybackPositionAsync(ticks).and_then(|o| o.join()).unwrap_or(false);
+                    if !ok {
+                        crate::sys::log_media("seek was refused by the app");
+                        notify(&ctx); // drop the optimistic position and show the real one
+                    }
                 }
             }
         }
@@ -363,16 +377,23 @@ mod imp {
     fn fill_playback(ctx: &Ctx, s: &Session) {
         let mut playing = false;
         let mut rate = 1.0f64;
+        let (mut can_seek, mut can_prev, mut can_next) = (false, true, true);
         if let Ok(info) = s.GetPlaybackInfo() {
             playing = info
                 .PlaybackStatus()
                 .map(|x| x == Status::Playing)
                 .unwrap_or(false);
             rate = info.PlaybackRate().and_then(|r| r.Value()).unwrap_or(1.0);
+            if let Ok(c) = info.Controls() {
+                can_seek = c.IsPlaybackPositionEnabled().unwrap_or(false);
+                can_prev = c.IsPreviousEnabled().unwrap_or(true);
+                can_next = c.IsNextEnabled().unwrap_or(true);
+            }
         }
-        let (mut pos, mut dur, mut stamp) = (0i64, 0i64, 0i64);
+        let (mut pos, mut dur, mut stamp, mut start_t) = (0i64, 0i64, 0i64, 0i64);
         if let Ok(tl) = s.GetTimelineProperties() {
             let start = tl.StartTime().map(|t| t.Duration).unwrap_or(0);
+            start_t = start;
             let end = tl.EndTime().map(|t| t.Duration).unwrap_or(0);
             pos = tl.Position().map(|t| t.Duration).unwrap_or(0) - start;
             dur = (end - start).max(0);
@@ -389,6 +410,10 @@ mod imp {
         st.pos_ticks = pos;
         st.pos_stamp = stamp;
         st.dur_ticks = dur;
+        st.start_ticks = start_t;
+        st.can_seek = can_seek;
+        st.can_prev = can_prev;
+        st.can_next = can_next;
     }
 
     fn read_thumb(r: &IRandomAccessStreamReference) -> Option<Vec<u8>> {

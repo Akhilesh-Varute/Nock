@@ -187,6 +187,7 @@ It is a native Rust program with no web view and no background polling, so it av
 ## Known limits
 
 - Primary monitor only.
+- Media controls only do what the playing app allows through Windows. Apple Music for Windows, for example, does not let other programs seek, so its progress bar is display-only, and its Previous button is greyed out whenever the app reports it as unavailable.
 - Wi-Fi and Bluetooth buttons in the top bar toggle the radio through the Windows Radios API. If Windows exposes no such radio (or denies access) the button opens the matching Settings page instead.
 - Brightness on laptop panels is set through the display driver directly (instant, follows the slider as you drag). If the driver does not offer that, it falls back to a slower WMI call through PowerShell.
 - The volume slider follows the Windows default output device. Apps routed to a different device under Settings → Sound → Volume mixer aren't affected.

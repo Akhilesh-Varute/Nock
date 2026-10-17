@@ -396,7 +396,7 @@ fn page_media(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         pos
     };
     let bar = Rect::new(tx, 104.0, EXP_W - tx - 28.0, 18.0);
-    slider(a, bar, frac, Act::Seek, a.accent, ca, hits, dur > 0.0);
+    slider(a, bar, frac, Act::Seek, a.accent, ca, hits, dur > 0.0 && m.can_seek);
     g.text(
         &fmt_time(shown),
         Rect::new(tx, 122.0, 70.0, 16.0),
@@ -432,11 +432,11 @@ fn page_media(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         r: next,
         act: Act::Next,
     });
-    for (r, act, glyph) in [(prev, Act::Prev, '\u{E892}'), (next, Act::Next, '\u{E893}')] {
+    for (r, act, glyph, ok) in [(prev, Act::Prev, '\u{E892}', m.can_prev), (next, Act::Next, '\u{E893}', m.can_next)] {
         if hot(a, act) {
             g.fill_rrect(r, 20.0, Color::white(0.10 * ca));
         }
-        g.icon(glyph, r, &f.icon18, T1.fade(ca));
+        g.icon(glyph, r, &f.icon18, (if ok { T1 } else { T3 }).fade(ca));
     }
     let big = if hot(a, Act::PlayPause) { 1.0 } else { 0.92 };
     g.fill_circle(play.cx(), play.cy(), 24.0, Color::white(big * ca));
@@ -1185,10 +1185,11 @@ fn slider(
     let track = Rect::new(r.x, r.cy() - 3.0, r.w, 6.0);
     g.fill_rrect(track, 3.0, Color::white(0.16 * ca));
     let fw = (r.w * frac.clamp(0.0, 1.0)).max(0.0);
+    // progress shows even when the app does not allow seeking; only the knob and clicks need `enabled`
+    if fw > 0.5 {
+        g.fill_rrect(Rect::new(r.x, track.y, fw, 6.0), 3.0, fill.fade(ca));
+    }
     if enabled {
-        if fw > 0.5 {
-            g.fill_rrect(Rect::new(r.x, track.y, fw, 6.0), 3.0, fill.fade(ca));
-        }
         hits.push(Hit { r, act });
         if hot(a, act) || a.seek_frac.is_some() && act == Act::Seek {
             g.fill_circle(r.x + fw, r.cy(), 7.0, Color::white(ca));

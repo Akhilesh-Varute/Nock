@@ -150,6 +150,32 @@ fn powershell(cmd: &str) -> Option<String> {
 }
 
 /// Brightness problems are written to %APPDATA%\Notch\brightness.log.
+/// Press and release a media key (play/pause 0xB3, next 0xB0, previous 0xB1).
+pub fn media_key(vk: u16) {
+    unsafe {
+        let key = |up: bool| INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: VIRTUAL_KEY(vk),
+                    wScan: 0,
+                    dwFlags: if up { KEYEVENTF_KEYUP } else { KEYBD_EVENT_FLAGS(0) },
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        };
+        SendInput(&[key(false), key(true)], std::mem::size_of::<INPUT>() as i32);
+    }
+}
+
+pub fn log_media(msg: &str) {
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(crate::store::data_dir().join("media.log")) {
+        let _ = writeln!(f, "{msg}");
+    }
+}
+
 fn log_brightness(msg: &str) {
     use std::io::Write;
     if let Ok(mut f) = std::fs::OpenOptions::new()
