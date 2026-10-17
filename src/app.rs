@@ -2042,4 +2042,117 @@ mod preview {
         }
         std::fs::write(format!("{dir}/panel_idle.raw"), out).unwrap();
     }
+
+    /// Draws the frames of the README demo GIF from the real UI code (no screen capture).
+    /// PREVIEW_DIR=... cargo test --release preview::render_gif -- --ignored
+    #[test]
+    #[ignore]
+    fn render_gif() {
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        }
+        let dir = std::env::var("PREVIEW_DIR").expect("PREVIEW_DIR");
+        let scale = 2.0f32;
+        let mut a = App::new(HWND::default(), scale).expect("app");
+        a.expanded = true;
+        a.todos = vec![
+            Todo { done: false, text: "Review the pull request".into() },
+            Todo { done: false, text: "Reply to Sam".into() },
+            Todo { done: true, text: "Buy groceries".into() },
+        ];
+        a.clips = vec![
+            "https://github.com/Akhilesh-Varute/Nock".into(),
+            "Standup at 10:30, room 4".into(),
+            "cargo build --release".into(),
+            "hello@example.com".into(),
+        ];
+        a.pins = vec!["C:\\Projects\\notes.txt".into()];
+        a.stat_cpu = 23;
+        a.stat_mem = 61;
+        a.stat_hist = (0..40).map(|i| 0.15 + 0.12 * ((i as f32) * 0.5).sin().abs() + (i as f32 % 7.0) * 0.02).collect();
+        a.radios.wifi = Some(true);
+        a.radios.bluetooth = Some(false);
+        a.stats = Some((23, 61));
+        let mut list: Vec<String> = Vec::new();
+        let mut n = 0;
+        let mut shot = |a: &App, w: f32, h: f32, ms: u32, caption: &str| {
+            let (pw, ph) = ((w * scale) as i32, (h * scale) as i32);
+            a.gfx.begin(pw, ph).unwrap();
+            let mut hits = Vec::new();
+            crate::ui::draw(a, w, h, &mut hits);
+            let _ = a.gfx.end();
+            let (bw, _bh, buf) = a.gfx.snapshot();
+            let mut out = Vec::new();
+            out.extend_from_slice(&(pw as u32).to_le_bytes());
+            out.extend_from_slice(&(ph as u32).to_le_bytes());
+            for y in 0..ph {
+                let row = (y * bw * 4) as usize;
+                out.extend_from_slice(&buf[row..row + (pw * 4) as usize]);
+            }
+            std::fs::write(format!("{dir}/gif_{n:03}.raw"), out).unwrap();
+            list.push(format!("{n:03}|{ms}|{caption}"));
+            n += 1;
+        };
+        let ch = a.col_h();
+        let full = |a: &mut App, page: Page| {
+            a.page = page;
+            a.expanded = true;
+            a.sh = Spring::new(EXP_H);
+            a.sw = Spring::new(EXP_W);
+        };
+
+        // 1. the idle pill, then it opens
+        a.expanded = false;
+        a.sh = Spring::new(ch);
+        shot(&a, COL_IDLE_W, ch, 1400, "A quiet little clock at the top of your screen...");
+        a.expanded = true;
+        a.page = Page::Tasks;
+        for e in [0.35f32, 0.7, 0.93] {
+            let (w, h) = (COL_IDLE_W + (EXP_W - COL_IDLE_W) * e, ch + (EXP_H - ch) * e);
+            a.sh = Spring::new(h);
+            shot(&a, w, h, 70, "A quiet little clock at the top of your screen...");
+        }
+        full(&mut a, Page::Tasks);
+        shot(&a, EXP_W, EXP_H, 1100, "...that is also your task list and focus timer");
+
+        // 2. quick add: type a task
+        let text = "Ship the demo";
+        for k in [0usize, 4, 8, 13] {
+            a.entering = Some(text.chars().take(k).collect::<String>().encode_utf16().collect());
+            shot(&a, EXP_W, EXP_H, if k == 13 { 700 } else { 380 }, "Press Ctrl+Alt+T from any app and type: a task in two seconds");
+        }
+        a.entering = None;
+        a.todos.insert(0, Todo { done: false, text: text.into() });
+        shot(&a, EXP_W, EXP_H, 1000, "Press Ctrl+Alt+T from any app and type: a task in two seconds");
+        a.todos[1].done = true;
+        shot(&a, EXP_W, EXP_H, 1000, "Tick it off when it is done");
+
+        // 3. focus timer on that task
+        a.timer_task = Some(text.into());
+        a.timer_left_ms = 25 * 60 * 1000;
+        a.timer_start = Some(Instant::now());
+        shot(&a, EXP_W, EXP_H, 700, "One click starts a focus timer on a task");
+        a.timer_start = None;
+        a.timer_left_ms = (24 * 60 + 41) * 1000;
+        a.timer_start = Some(Instant::now());
+        shot(&a, EXP_W, EXP_H, 700, "One click starts a focus timer on a task");
+        a.expanded = false;
+        a.sh = Spring::new(ch);
+        shot(&a, COL_TIMER_W, ch, 1600, "Close the panel: the countdown rides in the notch");
+        a.timer_start = None;
+        a.timer_left_ms = 25 * 60 * 1000;
+        a.timer_task = None;
+
+        // 4. the other tabs
+        full(&mut a, Page::Stats);
+        shot(&a, EXP_W, EXP_H, 1000, "Live CPU, memory and battery");
+        full(&mut a, Page::Clipboard);
+        shot(&a, EXP_W, EXP_H, 1300, "Clipboard history with pins and search");
+        full(&mut a, Page::Apps);
+        a.picking = false;
+        shot(&a, EXP_W, EXP_H, 900, "Pin your apps");
+        full(&mut a, Page::Game);
+        shot(&a, EXP_W, EXP_H, 1100, "...and a quick game for your break");
+        std::fs::write(format!("{dir}/frames.txt"), list.join("\n")).unwrap();
+    }
 }

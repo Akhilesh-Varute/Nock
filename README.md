@@ -12,6 +12,8 @@ Written in Rust. No webview, no framework, no runtime. One small <code>.exe</cod
 <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
 </p>
 
+<p align="center"><img src="docs/demo.gif" width="760" alt="Nock demo: the idle clock opens into a task list, a task is added with Ctrl+Alt+T, a focus timer starts and keeps counting in the notch"></p>
+
 > **Status: early.** It builds in CI and works on the author's machine, but has had limited testing elsewhere. Expect rough edges and please [open an issue](../../issues).
 
 ## Features
