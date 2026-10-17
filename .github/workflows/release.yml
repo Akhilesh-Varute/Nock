@@ -11,7 +11,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --release
+      - name: Build installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $v = "${{ github.ref_name }}".TrimStart('v')
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$v" installer\nock.iss
       - uses: softprops/action-gh-release@v2
         with:
-          files: target/release/nock.exe
+          files: |
+            target/release/nock.exe
+            installer/Output/NockSetup-*.exe
           generate_release_notes: true

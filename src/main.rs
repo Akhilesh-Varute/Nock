@@ -177,6 +177,7 @@ fn main() -> Result<()> {
             a.sync_stats();
             a.sync_water();
             a.sync_eyes();
+            sys::sync_start_menu(a.cfg.start_menu);
             let mon_w = a.mon.right - a.mon.left;
             a.bar = bar::Bar::new(bar_hwnd, mon_w, a.scale);
             a.pop = pop::Pop::new(pop_hwnd, a.scale);
@@ -325,6 +326,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
         m if m == sys::WM_POP => a.on_pop_data(),
         m if m == sys::WM_EDGE => a.on_edge(),
         m if m == sys::WM_FSCHK => a.on_fullscreen_check(),
+        m if m == sys::WM_APPLIST => a.on_app_list(),
         m if m == sys::WM_BRIGHT => a.on_brightness(wp.0 != 0, lp.0 as u32),
         _ => return DefWindowProcW(hwnd, msg, wp, lp),
     }
@@ -462,6 +464,8 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
         }
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
         let _ = AppendMenuW(menu, MF_STRING | auto, 1, w!("Start with Windows"));
+        let sm = if a.cfg.start_menu { MF_CHECKED } else { MF_UNCHECKED };
+        let _ = AppendMenuW(menu, MF_STRING | sm, 14, w!("Show in Start menu and search"));
         let _ = AppendMenuW(menu, MF_STRING, 2, w!("Edit pinned apps"));
         let _ = AppendMenuW(menu, MF_STRING, 3, w!("Reload pinned apps"));
         let _ = AppendMenuW(menu, MF_STRING, 4, w!("Open settings folder"));
@@ -495,6 +499,11 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             7 => a.toggle_top_bar(),
             10 => a.toggle_stats(),
             13 => a.toggle_auto_break(),
+            14 => {
+                a.cfg.start_menu = !a.cfg.start_menu;
+                store::save_config(&a.cfg);
+                sys::sync_start_menu(a.cfg.start_menu);
+            }
             4 => sys::open(&store::data_dir().to_string_lossy(), ""),
             20..=29 => a.set_buddy((cmd.0 - 20) as u8),
             30 => a.toggle_scenes(),

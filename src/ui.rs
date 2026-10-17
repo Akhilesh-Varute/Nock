@@ -669,12 +669,100 @@ fn preview(s: &str) -> String {
 
 // ------------------------------------------------------------------ apps ----
 
+fn spinner(g: &Gfx, cx: f32, cy: f32, r: f32, t: f32, col: Color, ca: f32) {
+    for i in 0..10 {
+        let ang = t * 6.0 - i as f32 * 0.55;
+        g.fill_circle(cx + r * ang.cos(), cy + r * ang.sin(), 3.4 - i as f32 * 0.25, col.fade((1.0 - i as f32 / 10.0) * ca));
+    }
+}
+
 fn page_apps(a: &App, ca: f32, hits: &mut Vec<Hit>) {
+    if a.picking {
+        page_app_picker(a, ca, hits);
+        return;
+    }
     let g = &a.gfx;
     let f = &g.fonts;
-    if a.apps.is_empty() {
+    let (cols, tw, th) = (6usize, 88.0, 86.0);
+    let gap = (EXP_W - 56.0 - cols as f32 * tw) / (cols as f32 - 1.0);
+    let cell = |i: usize| {
+        let (c, r) = (i % cols, i / cols);
+        Rect::new(28.0 + c as f32 * (tw + gap), 6.0 + r as f32 * (th + 8.0), tw, th)
+    };
+    for (i, e) in a.apps.iter().enumerate().take(12) {
+        let rect = cell(i);
+        let act = Act::Launch(i);
+        hits.push(Hit { r: rect, act });
+        let x = Rect::new(rect.x + rect.w - 22.0, rect.y + 3.0, 19.0, 19.0);
+        let xact = Act::AppUnpin(i);
+        hits.push(Hit { r: x, act: xact });
+        let over = hot(a, act) || hot(a, xact);
+        g.fill_rrect(rect, 16.0, Color::white((if over { 0.12 } else { 0.05 }) * ca));
+        let ic = Rect::new(rect.cx() - 18.0, rect.y + 10.0, 36.0, 36.0);
+        match a.app_icons.get(i).and_then(|b| b.as_ref()) {
+            Some(bmp) => g.draw_bitmap(bmp, ic, 0.0, ca),
+            None => {
+                let hue = name_color(&e.name);
+                g.fill_circle(ic.cx(), ic.cy(), 18.0, hue.fade(ca));
+                let letter: String = e.name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
+                g.text(&letter, ic, &g.fonts.title, Color(0.0, 0.0, 0.0, 0.75 * ca), Align::Center);
+            }
+        }
+        g.text(&e.name, Rect::new(rect.x + 4.0, rect.y + 52.0, rect.w - 8.0, 24.0), &f.tiny, T2.fade(ca), Align::Center);
+        if over {
+            // unpin
+            g.fill_circle(x.cx(), x.cy(), 8.5, Color(0.0, 0.0, 0.0, 0.75 * ca));
+            g.icon('\u{E711}', x, &f.icon14, (if hot(a, xact) { Color(1.0, 0.5, 0.5, 1.0) } else { T1 }).fade(ca));
+        }
+    }
+    if a.apps.len() < 12 {
+        let rect = cell(a.apps.len());
+        hits.push(Hit { r: rect, act: Act::AppAdd });
+        let on = hot(a, Act::AppAdd);
+        g.fill_rrect(rect, 16.0, Color::white((if on { 0.12 } else { 0.04 }) * ca));
+        g.stroke_rrect(rect, 16.0, Color::white((if on { 0.35 } else { 0.14 }) * ca), 1.0);
+        g.fill_circle(rect.cx(), rect.y + 28.0, 18.0, a.accent.fade((if on { 0.4 } else { 0.22 }) * ca));
+        g.icon('\u{E710}', Rect::new(rect.cx() - 18.0, rect.y + 10.0, 36.0, 36.0), &f.icon14, a.accent.fade(ca));
+        g.text("Add app", Rect::new(rect.x + 4.0, rect.y + 52.0, rect.w - 8.0, 24.0), &f.tiny, T2.fade(ca), Align::Center);
+    }
+}
+
+fn page_app_picker(a: &App, ca: f32, hits: &mut Vec<Hit>) {
+    let g = &a.gfx;
+    let f = &g.fonts;
+    g.text("Add an app", Rect::new(28.0, 4.0, 160.0, 26.0), &f.body, T1.fade(ca), Align::Left);
+    // search chip (click, then type) and Done
+    let done = Rect::new(EXP_W - 24.0 - 76.0, 4.0, 76.0, 26.0);
+    hits.push(Hit { r: done, act: Act::AppDone });
+    g.fill_rrect(done, 13.0, (if hot(a, Act::AppDone) { Color::white(1.0) } else { Color::white(0.92) }).fade(ca));
+    g.text("Done", done, &f.small, Color(0.0, 0.0, 0.0, ca), Align::Center);
+    let sr = Rect::new(done.x - 12.0 - 210.0, 4.0, 210.0, 26.0);
+    let typing = a.entry_search;
+    if typing || !a.app_filter.is_empty() {
+        let mut t = a.app_filter.clone();
+        if typing {
+            t.push('\u{2502}');
+        }
+        g.fill_rrect(sr, 13.0, Color::white(0.14 * ca));
+        g.text(&t, Rect::new(sr.x + 12.0, sr.y, sr.w - 16.0, sr.h), &f.small, T1.fade(ca), Align::Left);
+    } else {
+        g.fill_rrect(sr, 13.0, Color::white((if hot(a, Act::AppSearch) { 0.12 } else { 0.07 }) * ca));
+        g.icon('\u{E721}', Rect::new(sr.x + 6.0, sr.y, 24.0, sr.h), &f.icon14, T3.fade(ca));
+        g.text("Search apps", Rect::new(sr.x + 34.0, sr.y, sr.w - 40.0, sr.h), &f.small, T3.fade(ca), Align::Left);
+    }
+    hits.push(Hit { r: sr, act: Act::AppSearch });
+
+    let list = Rect::new(24.0, 40.0, EXP_W - 48.0, PICK_ROWS as f32 * 32.0);
+    let Some(_) = &a.app_list else {
+        // still asking Windows for the list
+        spinner(g, EXP_W / 2.0, 100.0, 16.0, a.spin_t, a.accent, ca);
+        g.text("Finding your apps\u{2026}", Rect::new(0.0, 126.0, EXP_W, 22.0), &f.small, T2.fade(ca), Align::Center);
+        return;
+    };
+    let view = a.app_view();
+    if view.is_empty() {
         g.text(
-            "No pinned apps. Edit apps.txt from the tray menu.",
+            if a.app_filter.is_empty() { "No apps found" } else { "No apps match that search" },
             Rect::new(0.0, 90.0, EXP_W, 24.0),
             &f.body,
             T3.fade(ca),
@@ -682,47 +770,38 @@ fn page_apps(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         );
         return;
     }
-    let (cols, tw, th) = (6usize, 88.0, 86.0);
-    let gap = (EXP_W - 56.0 - cols as f32 * tw) / (cols as f32 - 1.0);
-    for (i, e) in a.apps.iter().enumerate() {
-        let (c, r) = (i % cols, i / cols);
-        let rect = Rect::new(
-            28.0 + c as f32 * (tw + gap),
-            6.0 + r as f32 * (th + 8.0),
-            tw,
-            th,
-        );
-        let act = Act::Launch(i);
-        hits.push(Hit { r: rect, act });
-        g.fill_rrect(rect, 16.0, Color::white((if hot(a, act) { 0.12 } else { 0.05 }) * ca));
-        let ic = Rect::new(rect.cx() - 18.0, rect.y + 10.0, 36.0, 36.0);
-        match a.app_icons.get(i).and_then(|b| b.as_ref()) {
+    for row in 0..PICK_ROWS {
+        let idx = a.app_scroll + row;
+        let Some((name, id)) = view.get(idx) else { break };
+        let r = Rect::new(list.x, list.y + row as f32 * 32.0, list.w - 10.0, 28.0);
+        let target = format!("shell:AppsFolder\\{id}");
+        let pinned = a.apps.iter().any(|p| p.target == target);
+        let act = Act::AppPick(idx);
+        if !pinned {
+            hits.push(Hit { r, act });
+        }
+        let on = hot(a, act) && !pinned;
+        g.fill_rrect(r, 10.0, Color::white((if on { 0.12 } else if row % 2 == 0 { 0.05 } else { 0.0 }) * ca));
+        let ic = Rect::new(r.x + 10.0, r.y + 3.0, 22.0, 22.0);
+        match a.picker_icons.iter().find(|(k, _)| k == id).and_then(|(_, b)| b.as_ref()) {
             Some(bmp) => g.draw_bitmap(bmp, ic, 0.0, ca),
             None => {
-                let hue = name_color(&e.name);
-                g.fill_circle(ic.cx(), ic.cy(), 18.0, hue.fade(ca));
-                let letter: String = e
-                    .name
-                    .chars()
-                    .next()
-                    .map(|c| c.to_uppercase().collect())
-                    .unwrap_or_default();
-                g.text(
-                    &letter,
-                    ic,
-                    &g.fonts.title,
-                    Color(0.0, 0.0, 0.0, 0.75 * ca),
-                    Align::Center,
-                );
+                g.fill_circle(ic.cx(), ic.cy(), 11.0, name_color(name).fade(ca));
+                let letter: String = name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
+                g.text(&letter, ic, &f.tiny, Color(0.0, 0.0, 0.0, 0.75 * ca), Align::Center);
             }
         }
-        g.text(
-            &e.name,
-            Rect::new(rect.x + 4.0, rect.y + 52.0, rect.w - 8.0, 24.0),
-            &f.tiny,
-            T2.fade(ca),
-            Align::Center,
-        );
+        g.text(name, Rect::new(r.x + 44.0, r.y, r.w - 150.0, r.h), &f.body, (if pinned { T3 } else { T1 }).fade(ca), Align::Left);
+        let (label, col) = if pinned { ("\u{2713} Pinned", T3) } else if on { ("Pin to panel", a.accent) } else { ("", T3) };
+        g.text(label, Rect::new(r.x + r.w - 130.0, r.y, 120.0, r.h), &f.small, col.fade(ca), Align::Right);
+    }
+    // a thin scroll bar when there is more than fits
+    if view.len() > PICK_ROWS {
+        let track = Rect::new(list.x + list.w - 5.0, list.y, 3.0, PICK_ROWS as f32 * 32.0 - 4.0);
+        g.fill_rrect(track, 1.5, Color::white(0.08 * ca));
+        let hgt = track.h * PICK_ROWS as f32 / view.len() as f32;
+        let y = track.y + (track.h - hgt) * a.app_scroll as f32 / (view.len() - PICK_ROWS) as f32;
+        g.fill_rrect(Rect::new(track.x, y, 3.0, hgt), 1.5, Color::white(0.3 * ca));
     }
 }
 

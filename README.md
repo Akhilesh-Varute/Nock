@@ -20,6 +20,12 @@ Written in Rust. No webview, no framework, no runtime. One small <code>.exe</cod
 - **Zero idle cost**: event driven, no polling loop. Hides itself in full-screen video and games, with a top-edge reveal.
 - Follows the Windows light/dark theme.
 
+## Install
+
+Download **`NockSetup-<version>.exe`** from the [latest release](../../releases/latest) and run it. It installs just for you (no admin rights), adds Nock to the Start menu so you can find it by searching "Nock", and can start it with Windows. Uninstall it from Windows Settings → Apps like any other app.
+
+Prefer no installer? The same release also has the plain **`nock.exe`**: put it in a folder you will keep and run it.
+
 ## Build
 
 1. Install Rust from <https://rustup.rs> (choose the default **MSVC** toolchain). If asked, also install the Visual Studio Build Tools with the "Desktop development with C++" workload.

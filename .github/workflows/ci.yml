@@ -12,7 +12,27 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release
       - run: cargo test --release
+      - name: Build installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=0.0.0-ci" installer\nock.iss
+      - name: Installer smoke test (silent install, check, uninstall)
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "NockInstallTest"
+          Start-Process -Wait -FilePath "installer\Output\NockSetup-0.0.0-ci.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/DIR=$dir"
+          if (-not (Test-Path "$dir\nock.exe")) { throw "nock.exe was not installed" }
+          $lnk = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Nock.lnk"
+          if (-not (Test-Path $lnk)) { throw "Start menu shortcut missing" }
+          Start-Process -Wait -FilePath "$dir\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART"
+          Start-Sleep -Seconds 2
+          if (Test-Path "$dir\nock.exe") { throw "uninstall left nock.exe behind" }
+          if (Test-Path $lnk) { throw "uninstall left the shortcut behind" }
+          "installer OK"
       - uses: actions/upload-artifact@v4
         with:
           name: nock-windows
-          path: target/release/nock.exe
+          path: |
+            target/release/nock.exe
+            installer/Output/NockSetup-*.exe

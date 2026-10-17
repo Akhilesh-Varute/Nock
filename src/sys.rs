@@ -1237,3 +1237,112 @@ pub fn shutdown_pc() {
 pub fn uptime_secs() -> u64 {
     unsafe { windows::Win32::System::SystemInformation::GetTickCount64() / 1000 }
 }
+
+pub const WM_APPLIST: u32 = 0x8000 + 8; // WM_APP + 8
+
+/// Installed apps for the picker: (name, app id). Filled by `list_start_apps`.
+pub static START_APPS: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(Vec::new());
+
+/// Ask Windows for every app in the Start menu (classic, Store and game launchers) in
+/// the background, then post WM_APPLIST. Takes about a second.
+pub fn list_start_apps(hwnd: isize) {
+    std::thread::spawn(move || {
+        let out = powershell("[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-StartApps | ForEach-Object { $_.Name + '|' + $_.AppID }").unwrap_or_default();
+        let mut v: Vec<(String, String)> = out
+            .lines()
+            .filter_map(|l| {
+                let (n, id) = l.split_once('|')?;
+                let (n, id) = (n.trim(), id.trim());
+                (!n.is_empty() && !id.is_empty()).then(|| (n.to_string(), id.to_string()))
+            })
+            .collect();
+        // hide the entries nobody wants to pin
+        let noisy = ["uninstall", "verifier", "readme", "release notes", "documentation", "eula"];
+        v.retain(|(n, _)| {
+            let l = n.to_lowercase();
+            !noisy.iter().any(|x| l.contains(x))
+        });
+        v.sort_by_key(|(n, _)| n.to_lowercase());
+        v.dedup_by(|a, b| a.0.eq_ignore_ascii_case(&b.0));
+        *START_APPS.lock().unwrap() = v;
+        unsafe {
+            let _ = PostMessageW(Some(HWND(hwnd as *mut _)), WM_APPLIST, WPARAM(0), LPARAM(0));
+        }
+    });
+}
+
+/// Icon of a Start-menu app (works for Store apps too) from its `shell:AppsFolder\...` name.
+pub fn shell_icon(parse_name: &str) -> Option<HICON> {
+    use windows::Win32::UI::Shell::Common::ITEMIDLIST;
+    use windows::Win32::UI::Shell::{SHParseDisplayName, SHGFI_PIDL};
+    unsafe {
+        let name = HSTRING::from(parse_name);
+        let mut pidl: *mut ITEMIDLIST = std::ptr::null_mut();
+        SHParseDisplayName(&name, None::<&windows::Win32::System::Com::IBindCtx>, &mut pidl, 0, None).ok()?;
+        let mut sfi = SHFILEINFOW::default();
+        let r = SHGetFileInfoW(
+            PCWSTR(pidl as *const u16),
+            FILE_FLAGS_AND_ATTRIBUTES(0),
+            Some(&mut sfi),
+            std::mem::size_of::<SHFILEINFOW>() as u32,
+            SHGFI_PIDL | SHGFI_ICON | SHGFI_LARGEICON,
+        );
+        windows::Win32::System::Com::CoTaskMemFree(Some(pidl as *const _));
+        if r == 0 || sfi.hIcon.is_invalid() {
+            None
+        } else {
+            Some(sfi.hIcon)
+        }
+    }
+}
+
+/// Where the Start Menu shortcut lives (per user, so no admin rights are needed).
+fn start_menu_link() -> Option<std::path::PathBuf> {
+    let base = std::env::var_os("APPDATA")?;
+    Some(std::path::PathBuf::from(base).join(r"Microsoft\Windows\Start Menu\Programs\Nock.lnk"))
+}
+
+/// Add (or remove) a Start Menu shortcut so typing "Nock" in Windows search finds it. A
+/// plain .exe is invisible to search; a shortcut in this folder is what makes an app
+/// "installed". Rewritten at every start so it follows the exe if it is moved.
+pub fn sync_start_menu(on: bool) {
+    use windows::core::Interface;
+    use windows::Win32::System::Com::{CoCreateInstance, IPersistFile, CLSCTX_INPROC_SERVER};
+    use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
+    let Some(lnk) = start_menu_link() else { return };
+    if !on {
+        let _ = std::fs::remove_file(&lnk);
+        return;
+    }
+    let Ok(exe) = std::env::current_exe() else { return };
+    unsafe {
+        let Ok(link) = CoCreateInstance::<_, IShellLinkW>(&ShellLink, None, CLSCTX_INPROC_SERVER) else { return };
+        let _ = link.SetPath(&HSTRING::from(exe.as_os_str().to_string_lossy().as_ref()));
+        if let Some(dir) = exe.parent() {
+            let _ = link.SetWorkingDirectory(&HSTRING::from(dir.as_os_str().to_string_lossy().as_ref()));
+        }
+        let _ = link.SetDescription(w!("Nock - a dynamic island and menu bar for Windows"));
+        let _ = link.SetIconLocation(&HSTRING::from(exe.as_os_str().to_string_lossy().as_ref()), 0);
+        if let Ok(file) = link.cast::<IPersistFile>() {
+            let _ = file.Save(&HSTRING::from(lnk.as_os_str().to_string_lossy().as_ref()), true);
+        }
+    }
+}
+
+#[cfg(test)]
+mod start_menu_tests {
+    #[test]
+    #[ignore]
+    fn creates_and_removes_the_shortcut() {
+        unsafe {
+            let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED);
+        }
+        super::sync_start_menu(true);
+        let lnk = super::start_menu_link().unwrap();
+        let made = lnk.exists();
+        println!("PROBE created={made} path={}", lnk.display());
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        super::sync_start_menu(false);
+        println!("PROBE removed={}", !lnk.exists());
+    }
+}

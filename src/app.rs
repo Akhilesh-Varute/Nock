@@ -30,6 +30,9 @@ pub const COL_TIMER_W: f32 = 132.0;
 pub const MARGIN: f32 = 24.0; // room for spring overshoot
 pub const MAX_TODO: usize = 5;
 
+/// Rows the app picker shows at once.
+pub const PICK_ROWS: usize = 5;
+
 /// Settings pages the Controls tab links to (display, sound, network, power, all settings).
 pub const SETTINGS_PAGES: [&str; 5] = [
     "ms-settings:display",
@@ -102,6 +105,12 @@ pub enum Act {
     TodoFocus(usize),
     /// open a Windows Settings page: an index into `SETTINGS_PAGES`
     OpenSettings(usize),
+    /// Apps tab: open the picker / pin the n-th listed app / unpin the n-th pinned app / leave
+    AppAdd,
+    AppPick(usize),
+    AppUnpin(usize),
+    AppDone,
+    AppSearch,
     /// restart / shut down (asks to click twice)
     PowerRestart,
     PowerShutdown,
@@ -252,6 +261,16 @@ pub struct App {
     /// what the pill says while it pulses ("Time's up", "Drink water")
     pub alert_msg: &'static str,
     pub hub: crate::games::Hub,
+    /// Apps tab picker: open?, the installed apps (None while loading), search text, scroll
+    pub picking: bool,
+    pub app_list: Option<Vec<(String, String)>>,
+    app_loading: bool,
+    pub app_filter: String,
+    pub app_scroll: usize,
+    /// icons of the rows shown so far, by app id
+    pub picker_icons: Vec<(String, Option<windows::Win32::Graphics::Direct2D::ID2D1Bitmap>)>,
+    /// seconds, for spinners
+    pub spin_t: f32,
     /// which power button (1 restart, 2 shut down) was clicked once, and when
     pub power_confirm: Option<(u8, Instant)>,
     /// live numbers for the Stats page
@@ -360,6 +379,13 @@ impl App {
             confetti_start: None,
             alert_msg: "Time's up",
             hub: crate::games::Hub::new(store::load_bests()),
+            picking: false,
+            app_list: None,
+            app_loading: false,
+            app_filter: String::new(),
+            app_scroll: 0,
+            picker_icons: Vec::new(),
+            spin_t: 0.0,
             power_confirm: None,
             stat_cpu: 0,
             stat_mem: 0,
@@ -559,6 +585,7 @@ impl App {
             match self.page {
                 Page::Game if self.hub.is_playing() => 16,
                 Page::Stats => 1000,
+                Page::Apps if self.picking && self.app_list.is_none() => 33,
                 _ => 0,
             }
         } else {
@@ -1064,6 +1091,11 @@ impl App {
             let i = PAGES.iter().position(|p| *p == self.page).unwrap_or(0) as i32;
             let n = (i + if delta < 0 { 1 } else { -1 }).clamp(0, PAGES.len() as i32 - 1);
             self.select_page(PAGES[n as usize]);
+        } else if self.page == Page::Apps && self.picking {
+            let max = self.app_view().len().saturating_sub(PICK_ROWS);
+            self.app_scroll = if delta < 0 { (self.app_scroll + 1).min(max) } else { self.app_scroll.saturating_sub(1) };
+            self.ensure_picker_icons();
+            self.render();
         } else if self.page == Page::Clipboard {
             let max = self.clip_view().len().saturating_sub(CLIP_ROWS);
             if delta < 0 {
@@ -1083,6 +1115,10 @@ impl App {
         self.page = p;
         if p == Page::Controls {
             self.refresh_controls();
+        }
+        if p != Page::Apps {
+            self.picking = false;
+            self.app_filter.clear();
         }
         self.sync_timers();
         self.render();
@@ -1244,6 +1280,47 @@ impl App {
                 }
             }
             Act::TodoAdd => self.start_entry(),
+            Act::AppAdd => {
+                self.picking = true;
+                self.app_filter.clear();
+                self.app_scroll = 0;
+                if self.app_list.is_none() && !self.app_loading {
+                    self.app_loading = true;
+                    sys::list_start_apps(self.hwnd.0 as isize);
+                }
+                self.ensure_picker_icons();
+                self.sync_timers();
+            }
+            Act::AppDone => {
+                self.picking = false;
+                self.app_filter.clear();
+                self.sync_timers();
+            }
+            Act::AppSearch => {
+                self.start_entry();
+                if self.entering.is_some() {
+                    self.entry_search = true;
+                    self.entering = Some(self.app_filter.encode_utf16().collect());
+                }
+            }
+            Act::AppPick(i) => {
+                let item = self.app_view().get(i).map(|(n, id)| (n.clone(), id.clone()));
+                if let Some((name, id)) = item {
+                    let target = format!("shell:AppsFolder\\{id}");
+                    if !self.apps.iter().any(|a| a.target == target) {
+                        self.apps.push(store::AppEntry { name, target, args: String::new() });
+                        store::save_apps(&self.apps);
+                        self.load_app_icons();
+                    }
+                }
+            }
+            Act::AppUnpin(i) => {
+                if i < self.apps.len() {
+                    self.apps.remove(i);
+                    store::save_apps(&self.apps);
+                    self.load_app_icons();
+                }
+            }
             Act::OpenSettings(k) => sys::open(SETTINGS_PAGES[k.min(SETTINGS_PAGES.len() - 1)], ""),
             Act::PowerRestart => self.power_press(1),
             Act::PowerShutdown => self.power_press(2),
@@ -1267,6 +1344,7 @@ impl App {
         let now = Instant::now();
         let dt = now.duration_since(self.game_last).as_secs_f32().min(0.05);
         self.game_last = now;
+        self.spin_t += dt;
         match self.page {
             Page::Game => {
                 let ox = (EXP_W - crate::game::W) / 2.0;
@@ -1399,7 +1477,12 @@ impl App {
         let timer = std::mem::take(&mut self.entry_timer);
         let search = std::mem::take(&mut self.entry_search);
         if search && !commit {
-            self.clip_filter.clear(); // Esc drops the filter; Enter keeps it
+            // Esc drops the filter; Enter keeps it
+            if self.page == Page::Apps {
+                self.app_filter.clear();
+            } else {
+                self.clip_filter.clear();
+            }
         }
         if commit && timer {
             let mins = String::from_utf16_lossy(&buf).parse::<u32>().unwrap_or(0).min(600);
@@ -1459,8 +1542,17 @@ impl App {
         };
         if self.entry_search {
             if let Some(buf) = &self.entering {
-                self.clip_filter = String::from_utf16_lossy(buf);
-                self.clip_scroll = 0;
+                let t = String::from_utf16_lossy(buf);
+                if self.page == Page::Apps {
+                    self.app_filter = t;
+                    self.app_scroll = 0;
+                } else {
+                    self.clip_filter = t;
+                    self.clip_scroll = 0;
+                }
+            }
+            if self.page == Page::Apps {
+                self.ensure_picker_icons();
             }
         }
         match d {
@@ -1516,8 +1608,11 @@ impl App {
             .apps
             .iter()
             .map(|e| {
-                let path = sys::resolve_path(&e.target)?;
-                let icon = sys::file_icon(&path)?;
+                let icon = if e.target.starts_with("shell:AppsFolder") {
+                    sys::shell_icon(&e.target)?
+                } else {
+                    sys::file_icon(&sys::resolve_path(&e.target)?)?
+                };
                 let bmp = self.gfx.bitmap_from_hicon(icon).ok();
                 unsafe {
                     let _ = DestroyIcon(icon);
@@ -1525,6 +1620,43 @@ impl App {
                 bmp
             })
             .collect();
+    }
+
+    /// The installed apps matching the search text.
+    pub fn app_view(&self) -> Vec<&(String, String)> {
+        let q = self.app_filter.to_lowercase();
+        self.app_list
+            .as_ref()
+            .map(|l| l.iter().filter(|(n, _)| q.is_empty() || n.to_lowercase().contains(&q)).collect())
+            .unwrap_or_default()
+    }
+
+    /// Load the icons of the rows the picker is showing (a few at a time, not all 150).
+    pub fn ensure_picker_icons(&mut self) {
+        let ids: Vec<String> = self.app_view().iter().skip(self.app_scroll).take(PICK_ROWS).map(|(_, id)| id.clone()).collect();
+        for id in ids {
+            if self.picker_icons.iter().any(|(k, _)| *k == id) {
+                continue;
+            }
+            let bmp = sys::shell_icon(&format!("shell:AppsFolder\\{id}")).and_then(|icon| {
+                let b = self.gfx.bitmap_from_hicon(icon).ok();
+                unsafe {
+                    let _ = DestroyIcon(icon);
+                }
+                b
+            });
+            self.picker_icons.push((id, bmp));
+        }
+    }
+
+    /// The Start-menu list arrived.
+    pub fn on_app_list(&mut self) {
+        self.app_loading = false;
+        self.app_list = Some(sys::START_APPS.lock().unwrap().clone());
+        self.app_scroll = 0;
+        self.ensure_picker_icons();
+        self.sync_timers();
+        self.render();
     }
 
     pub fn reload_apps(&mut self) {
@@ -1831,5 +1963,27 @@ mod preview {
             }
             render(&a, &format!("play{k}"));
         }
+        // the app picker: loading, then the real list from Windows with icons
+        a.page = Page::Apps;
+        a.picking = true;
+        a.spin_t = 1.0;
+        render(&a, "apps_loading");
+        sys::list_start_apps(0);
+        for _ in 0..200 {
+            if !sys::START_APPS.lock().unwrap().is_empty() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        a.app_list = Some(sys::START_APPS.lock().unwrap().clone());
+        a.ensure_picker_icons();
+        render(&a, "apps_picker");
+        a.app_filter = "micro".into();
+        a.app_scroll = 0;
+        a.ensure_picker_icons();
+        render(&a, "apps_search");
+        a.picking = false;
+        a.app_filter.clear();
+        render(&a, "apps_grid");
     }
 }
