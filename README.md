@@ -140,6 +140,23 @@ Three more characters are drawn as detailed pixel art and **talk** in character 
 
 The first scene plays a minute or two after Nock starts, then one every few minutes (about every 5 by default; set `scene_min=` in `config.ini`), when there is room on the bar: the characters act out a short scripted story and then walk off while your buddy comes back. Each one is a random pick that never repeats the last, and only scenes that fit the free space are chosen. Play one right away from the tray menu → **Scenes**, or turn the automatic ones off there (`scenes=0` in `config.ini`). Nothing runs between scenes.
 
+<table>
+<tr>
+<td align="center"><img src="docs/scenes/showdown.gif" width="380" alt="Showdown"><br><sub>Showdown</sub></td>
+<td align="center"><img src="docs/scenes/heist.gif" width="380" alt="Heist"><br><sub>Heist</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/scenes/team-up.gif" width="380" alt="Team-up"><br><sub>Team-up</sub></td>
+<td align="center"><img src="docs/scenes/duel.gif" width="380" alt="Duel at dusk"><br><sub>Duel at dusk</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/scenes/rise.gif" width="380" alt="Rise"><br><sub>Rise</sub></td>
+<td align="center"><img src="docs/scenes/alley-fight.gif" width="380" alt="Alley fight"><br><sub>Alley fight</sub></td>
+</tr>
+</table>
+
+*(The clips are rendered from the scene code, a few at real speed, on a mock bar; the real thing plays on your actual top bar.)*
+
 - **Original characters**: *Showdown* (Cinder the ember knight vs Krag the obsidian brute), *Heist* (Veil the shadow thief vs Sparkplug the young inventor), *Team-up*, *Duel at dusk* (Ronin vs Courier), *Rise* (Necromancer vs Ronin) and *Alley fight*.
 - **Press conference**: a bobblehead answers a crowd of reporters with mics and a camera (needs about 420 px of free bar).
 - **Wizard-school fan art**: *Harry vs Voldemort*, *Owl post*, *Harry and friends vs Voldemort*, *Quidditch* and *Dementor*.

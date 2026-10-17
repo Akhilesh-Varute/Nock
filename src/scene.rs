@@ -638,6 +638,12 @@ fn draw_frame(g: &Gfx, sc: &Script, w: f32, face: &Option<ID2D1Bitmap>, t: f32, 
     }
 }
 
+/// Length of a scene in seconds (README demo GIFs).
+#[cfg(test)]
+pub fn demo_len(id: usize) -> f32 {
+    script(id).len
+}
+
 /// Draws a scene frame on a transparent background for the README demo (see app.rs tests).
 #[cfg(test)]
 pub fn demo_frame(g: &Gfx, id: usize, t: f32, w: f32, light: bool) {

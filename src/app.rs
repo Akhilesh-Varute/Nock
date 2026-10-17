@@ -2166,9 +2166,10 @@ mod preview {
         let dir = std::env::var("PREVIEW_DIR").expect("PREVIEW_DIR");
         let scale = 3.0f32;
         let g = crate::gfx::Gfx::new((400.0 * scale) as i32, (34.0 * scale) as i32, scale).expect("gfx");
-        for id in [0usize, 3, 5, 7] {
-            for k in 0..30 {
-                let t = 0.3 + k as f32 * 0.35;
+        for id in 0..6usize {
+            let steps = (crate::scene::demo_len(id) * 10.0) as usize + 4;
+            for k in 0..steps {
+                let t = k as f32 * 0.1;
                 let (pw, ph) = ((380.0 * scale) as i32, (32.0 * scale) as i32);
                 g.begin(pw, ph).unwrap();
                 crate::scene::demo_frame(&g, id, t, 380.0, false);
@@ -2181,7 +2182,7 @@ mod preview {
                     let row = (y * bw * 4) as usize;
                     out.extend_from_slice(&buf[row..row + (pw * 4) as usize]);
                 }
-                std::fs::write(format!("{dir}/scene_{id}_{k:02}.raw"), out).unwrap();
+                std::fs::write(format!("{dir}/s{id}_{k:03}.raw"), out).unwrap();
             }
         }
     }
