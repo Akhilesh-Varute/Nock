@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+
+- Top bar volume slider now follows the current default output device immediately (laptop speakers, Bluetooth, monitor).
+
 ## 0.5.0
 
 - Mini game on the notch: a click-to-flap game with your photo as the bird (new tab).

@@ -28,29 +28,40 @@ const CF_UNICODETEXT: u32 = 13;
 // ------------------------------------------------------------------ volume
 
 thread_local! {
-    static ENDPOINT: RefCell<Option<IAudioEndpointVolume>> = const { RefCell::new(None) };
+    static ENUMERATOR: RefCell<Option<IMMDeviceEnumerator>> = const { RefCell::new(None) };
+    static ENDPOINT: RefCell<Option<(IAudioEndpointVolume, String)>> = const { RefCell::new(None) };
 }
 
-fn acquire_endpoint() -> Option<IAudioEndpointVolume> {
-    unsafe {
-        let en: IMMDeviceEnumerator =
-            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
-        let dev = en.GetDefaultAudioEndpoint(eRender, eMultimedia).ok()?;
-        dev.Activate::<IAudioEndpointVolume>(CLSCTX_ALL, None).ok()
-    }
-}
-
+/// The volume control of whatever output device is the default *right now*. The
+/// default is looked up on every call (it is cheap) and the control is re-bound
+/// the moment it changes, so switching between laptop speakers, Bluetooth or a
+/// monitor is followed immediately.
 fn endpoint() -> Option<IAudioEndpointVolume> {
-    ENDPOINT.with(|e| {
-        if e.borrow().is_none() {
-            *e.borrow_mut() = acquire_endpoint();
-        }
-        e.borrow().clone()
-    })
+    unsafe {
+        let en = ENUMERATOR.with(|e| {
+            if e.borrow().is_none() {
+                *e.borrow_mut() = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok();
+            }
+            e.borrow().clone()
+        })?;
+        let dev = en.GetDefaultAudioEndpoint(eRender, eMultimedia).ok()?;
+        let id_ptr = dev.GetId().ok()?;
+        let id = id_ptr.to_string().unwrap_or_default();
+        windows::Win32::System::Com::CoTaskMemFree(Some(id_ptr.0 as *const _));
+        ENDPOINT.with(|e| {
+            let same = e.borrow().as_ref().map(|(_, cur)| *cur == id).unwrap_or(false);
+            if !same {
+                let ep = dev.Activate::<IAudioEndpointVolume>(CLSCTX_ALL, None).ok()?;
+                *e.borrow_mut() = Some((ep, id));
+            }
+            e.borrow().as_ref().map(|(ep, _)| ep.clone())
+        })
+    }
 }
 
 fn drop_endpoint() {
     ENDPOINT.with(|e| *e.borrow_mut() = None);
+    ENUMERATOR.with(|e| *e.borrow_mut() = None);
 }
 
 /// (volume 0..1, muted)
