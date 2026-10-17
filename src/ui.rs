@@ -19,7 +19,7 @@ pub const CONTENT_Y: f32 = 40.0;
 pub fn draw(a: &App, w: f32, h: f32, hits: &mut Vec<Hit>) {
     let g = &a.gfx;
     let t = a.t_expand();
-    let rad = a.col_rad() + (30.0 - a.col_rad()) * t;
+    let rad = a.col_rad() + (36.0 - a.col_rad()) * t;
 
     // Body. It starts above the window so the top corners are clipped away and
     // the shape hangs flush from the top edge of the screen like a notch.
@@ -35,6 +35,10 @@ pub fn draw(a: &App, w: f32, h: f32, hits: &mut Vec<Hit>) {
         Color::white(0.10),
         1.0,
     );
+    if t > 0.05 && a.page == Page::Media && a.mstate.has_track() {
+        // the panel takes a warm tint from the album art
+        g.fill_rrect(body, rad, a.accent.fade(0.10 * t));
+    }
     if beat > 0.01 {
         g.stroke_rrect(body, rad, Color(1.0, 0.4, 0.5, 0.85 * beat), 2.5);
     }
@@ -454,8 +458,9 @@ fn tile(a: &App, ca: f32, hits: &mut Vec<Hit>, r: Rect, act: Act, glyph: char, t
         g.fill_rrect(r, 18.0, Color::white(0.10 * ca));
     }
     let ic = Rect::new(r.x + 12.0, r.y + (r.h - 34.0) / 2.0, 34.0, 34.0);
-    g.fill_circle(ic.cx(), ic.cy(), 17.0, (if on { Color(0.0, 0.0, 0.0, 0.14) } else { Color::white(0.08) }).fade(ca));
-    g.icon(glyph, ic, &f.icon14, (if on { BLACK } else { T1 }).fade(ca));
+    let tint = match glyph { '\u{E722}' => Color(0.98, 0.45, 0.55, 1.0), '\u{E7F4}' => C_MEM, '\u{E767}' => C_UP, '\u{E774}' => C_CPU, '\u{E83F}' => C_BAT, _ => T1 };
+    g.fill_circle(ic.cx(), ic.cy(), 17.0, (if on { Color(0.0, 0.0, 0.0, 0.14) } else { tint.fade(0.16) }).fade(ca));
+    g.icon(glyph, ic, &f.icon14, (if on { BLACK } else { tint }).fade(ca));
     let (tc, sc) = if on { (BLACK, Color(0.0, 0.0, 0.0, 0.65)) } else { (T1, T3) };
     // title and state line stacked, centred beside the icon
     let ty = r.y + (r.h - 44.0) / 2.0;
@@ -513,65 +518,53 @@ fn page_power(a: &App, ca: f32, hits: &mut Vec<Hit>) {
 
 // ----------------------------------------------------------------- stats ----
 
-/// A 270 degree ring gauge from `frac` 0..1, drawn as a trail of dots.
-fn ring(g: &Gfx, cx: f32, cy: f32, r: f32, frac: f32, col: Color, ca: f32) {
-    let n = 120;
-    for i in 0..=n {
-        let u = i as f32 / n as f32;
-        let ang = (135.0 + 270.0 * u).to_radians();
-        let lit = u < frac.clamp(0.0, 1.0);
-        let c = if lit { col } else { Color::white(0.10) };
-        g.fill_circle(cx + r * ang.cos(), cy + r * ang.sin(), 3.6, c.fade(ca));
+/// Per-metric colours, so each stat reads at a glance.
+const C_CPU: Color = Color(0.30, 0.78, 0.98, 1.0);
+const C_MEM: Color = Color(0.98, 0.70, 0.20, 1.0);
+const C_BAT: Color = Color(0.40, 0.85, 0.50, 1.0);
+const C_UP: Color = Color(0.72, 0.58, 1.0, 1.0);
+
+/// One inset tile: coloured icon + dim label, bold value, thin bar underneath.
+#[allow(clippy::too_many_arguments)]
+fn stat_tile(g: &Gfx, r: Rect, glyph: char, label: &str, value: &str, note: &str, frac: Option<f32>, col: Color, ca: f32) {
+    let f = &g.fonts;
+    g.fill_rrect(r, 20.0, SURF.fade(ca));
+    g.icon(glyph, Rect::new(r.x + 14.0, r.y + 12.0, 22.0, 22.0), &f.icon14, col.fade(ca));
+    g.text(label, Rect::new(r.x + 42.0, r.y + 12.0, 120.0, 22.0), &f.small, T3.fade(ca), Align::Left);
+    g.text(note, Rect::new(r.x + r.w - 150.0, r.y + 12.0, 136.0, 22.0), &f.tiny, T3.fade(ca), Align::Right);
+    g.text(value, Rect::new(r.x + 16.0, r.y + 36.0, r.w - 32.0, 34.0), &f.big, T1.fade(ca), Align::Left);
+    if let Some(fr) = frac {
+        let bar = Rect::new(r.x + 16.0, r.y + r.h - 18.0, r.w - 32.0, 5.0);
+        g.fill_rrect(bar, 2.5, Color::white(0.10 * ca));
+        g.fill_rrect(Rect::new(bar.x, bar.y, (bar.w * fr.clamp(0.0, 1.0)).max(5.0), bar.h), 2.5, col.fade(ca));
     }
 }
 
 fn page_stats(a: &App, ca: f32) {
     let g = &a.gfx;
-    let f = &g.fonts;
-    let card = |x: f32, w: f32| {
-        let r = Rect::new(x, 4.0, w, 190.0);
-        g.fill_rrect(r, 20.0, SURF.fade(ca));
-        r
-    };
-    let gauge = |r: Rect, label: &str, pct: u32, hist: Option<&Vec<f32>>| {
-        let (cx, cy) = (r.cx(), r.y + 84.0);
-        ring(g, cx, cy, 48.0, pct as f32 / 100.0, a.accent, ca);
-        g.text(&format!("{pct}%"), Rect::new(cx - 40.0, cy - 20.0, 80.0, 40.0), &f.big, T1.fade(ca), Align::Center);
-        g.text(label, Rect::new(r.x, r.y + 138.0, r.w, 22.0), &f.body, T2.fade(ca), Align::Center);
-        if let Some(h) = hist {
-            let n = h.len();
-            for (i, v) in h.iter().enumerate() {
-                let bh = 2.0 + v.clamp(0.0, 1.0) * 16.0;
-                g.fill_rrect(Rect::new(r.x + 20.0 + i as f32 * 3.5, r.y + r.h - 12.0 - bh, 2.4, bh), 1.0, a.accent.fade(((i + 1) as f32 / n.max(1) as f32) * 0.8 * ca));
-            }
-        }
-    };
-    gauge(card(20.0, 180.0), "CPU", a.stat_cpu, Some(&a.stat_hist));
-    gauge(card(210.0, 180.0), "Memory", a.stat_mem, None);
-    let r = card(400.0, 180.0);
-    // battery
-    g.text("Battery", Rect::new(r.x + 16.0, r.y + 12.0, r.w - 32.0, 20.0), &f.small, T3.fade(ca), Align::Left);
+    let (w, h, gap) = (280.0, 92.0, 12.0);
+    let at = |c: f32, r: f32| Rect::new(14.0 + c * (w + gap), 6.0 + r * (h + gap), w, h);
+    stat_tile(g, at(0.0, 0.0), '\u{E9D9}', "CPU", &format!("{}%", a.stat_cpu), "", Some(a.stat_cpu as f32 / 100.0), C_CPU, ca);
+    stat_tile(g, at(1.0, 0.0), '\u{E964}', "Memory", &format!("{}%", a.stat_mem), "", Some(a.stat_mem as f32 / 100.0), C_MEM, ca);
+    // CPU history beside the value
+    let r = at(0.0, 0.0);
+    let n = a.stat_hist.len();
+    for (i, v) in a.stat_hist.iter().enumerate() {
+        let bh = 2.0 + v.clamp(0.0, 1.0) * 22.0;
+        g.fill_rrect(Rect::new(r.x + r.w - 16.0 - (n - i) as f32 * 4.6, r.y + 62.0 - bh, 3.0, bh), 1.5, C_CPU.fade(((i + 1) as f32 / n.max(1) as f32) * 0.7 * ca));
+    }
     match sys::battery_info() {
         Some(b) => {
-            g.text(&format!("{}%", b.percent), Rect::new(r.x + 16.0, r.y + 32.0, 90.0, 40.0), &f.big, T1.fade(ca), Align::Left);
             let state = if b.charging { "Charging" } else if b.plugged { "Plugged in" } else { "On battery" };
-            g.text(state, Rect::new(r.x + 16.0, r.y + 74.0, r.w - 32.0, 18.0), &f.tiny, T2.fade(ca), Align::Left);
-            let bar = Rect::new(r.x + 16.0, r.y + 98.0, r.w - 32.0, 8.0);
-            g.fill_rrect(bar, 4.0, Color::white(0.10 * ca));
-            let col = if b.percent <= 20 && !b.charging { Color(1.0, 0.45, 0.4, 1.0) } else { a.accent };
-            g.fill_rrect(Rect::new(bar.x, bar.y, bar.w * (b.percent as f32 / 100.0), bar.h), 4.0, col.fade(ca));
+            let col = if b.percent <= 20 && !b.charging { Color(1.0, 0.45, 0.4, 1.0) } else { C_BAT };
+            stat_tile(g, at(0.0, 1.0), '\u{E83F}', "Battery", &format!("{}%", b.percent), state, Some(b.percent as f32 / 100.0), col, ca);
         }
-        None => {
-            g.text("Plugged in", Rect::new(r.x + 16.0, r.y + 38.0, r.w - 32.0, 30.0), &f.body, T1.fade(ca), Align::Left);
-            g.text("No battery", Rect::new(r.x + 16.0, r.y + 66.0, r.w - 32.0, 18.0), &f.tiny, T3.fade(ca), Align::Left);
-        }
+        None => stat_tile(g, at(0.0, 1.0), '\u{E83F}', "Power", "Plugged in", "No battery", None, C_BAT, ca),
     }
-    // uptime
     let up = sys::uptime_secs();
-    let (d, h, m) = (up / 86400, (up % 86400) / 3600, (up % 3600) / 60);
-    let text = if d > 0 { format!("{d}d {h}h {m}m") } else { format!("{h}h {m}m") };
-    g.text("Uptime", Rect::new(r.x + 16.0, r.y + 128.0, r.w - 32.0, 20.0), &f.small, T3.fade(ca), Align::Left);
-    g.text(&text, Rect::new(r.x + 16.0, r.y + 148.0, r.w - 32.0, 30.0), &f.body, T1.fade(ca), Align::Left);
+    let (d, hh, m) = (up / 86400, (up % 86400) / 3600, (up % 3600) / 60);
+    let text = if d > 0 { format!("{d}d {hh}h {m}m") } else { format!("{hh}h {m}m") };
+    stat_tile(g, at(1.0, 1.0), '\u{E916}', "Uptime", &text, "", None, C_UP, ca);
 }
 
 // ------------------------------------------------------------- clipboard ----
