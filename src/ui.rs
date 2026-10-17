@@ -754,9 +754,17 @@ fn page_app_picker(a: &App, ca: f32, hits: &mut Vec<Hit>) {
 
     let list = Rect::new(24.0, 40.0, EXP_W - 48.0, PICK_ROWS as f32 * 32.0);
     let Some(_) = &a.app_list else {
-        // still asking Windows for the list
-        spinner(g, EXP_W / 2.0, 100.0, 16.0, a.spin_t, a.accent, ca);
-        g.text("Finding your apps\u{2026}", Rect::new(0.0, 126.0, EXP_W, 22.0), &f.small, T2.fade(ca), Align::Center);
+        // still asking Windows for the list; after 15 s offer to try again
+        if a.app_load_t0.is_some_and(|t| t.elapsed().as_secs() >= 15) {
+            g.text("Windows is taking longer than usual to list your apps.", Rect::new(0.0, 84.0, EXP_W, 24.0), &f.body, T2.fade(ca), Align::Center);
+            let r = Rect::new(EXP_W / 2.0 - 60.0, 120.0, 120.0, 32.0);
+            hits.push(Hit { r, act: Act::AppRetry });
+            g.fill_rrect(r, 16.0, Color::white((if hot(a, Act::AppRetry) { 1.0 } else { 0.92 }) * ca));
+            g.text("Try again", r, &f.small, Color(0.0, 0.0, 0.0, ca), Align::Center);
+        } else {
+            spinner(g, EXP_W / 2.0, 100.0, 16.0, a.spin_t, a.accent, ca);
+            g.text("Finding your apps\u{2026}", Rect::new(0.0, 126.0, EXP_W, 22.0), &f.small, T2.fade(ca), Align::Center);
+        }
         return;
     };
     let view = a.app_view();

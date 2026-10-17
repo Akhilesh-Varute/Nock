@@ -1238,7 +1238,7 @@ pub fn uptime_secs() -> u64 {
     unsafe { windows::Win32::System::SystemInformation::GetTickCount64() / 1000 }
 }
 
-pub const WM_APPLIST: u32 = 0x8000 + 8; // WM_APP + 8
+pub const WM_APPLIST: u32 = 0x8000 + 9; // WM_APP + 9 (8 is radio::WM_BTDONE)
 
 /// Installed apps for the picker: (name, app id). Filled by `list_start_apps`.
 pub static START_APPS: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(Vec::new());

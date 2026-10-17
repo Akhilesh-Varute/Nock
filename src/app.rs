@@ -111,6 +111,8 @@ pub enum Act {
     AppUnpin(usize),
     AppDone,
     AppSearch,
+    /// the app list took too long: ask again
+    AppRetry,
     /// restart / shut down (asks to click twice)
     PowerRestart,
     PowerShutdown,
@@ -265,6 +267,8 @@ pub struct App {
     pub picking: bool,
     pub app_list: Option<Vec<(String, String)>>,
     app_loading: bool,
+    /// when the current app-list request started (for the "taking too long" retry)
+    pub app_load_t0: Option<Instant>,
     pub app_filter: String,
     pub app_scroll: usize,
     /// icons of the rows shown so far, by app id
@@ -382,6 +386,7 @@ impl App {
             picking: false,
             app_list: None,
             app_loading: false,
+            app_load_t0: None,
             app_filter: String::new(),
             app_scroll: 0,
             picker_icons: Vec::new(),
@@ -1286,10 +1291,17 @@ impl App {
                 self.app_scroll = 0;
                 if self.app_list.is_none() && !self.app_loading {
                     self.app_loading = true;
+                    self.app_load_t0 = Some(Instant::now());
                     sys::list_start_apps(self.hwnd.0 as isize);
                 }
                 self.ensure_picker_icons();
                 self.sync_timers();
+            }
+            Act::AppRetry => {
+                self.app_list = None;
+                self.app_loading = true;
+                self.app_load_t0 = Some(Instant::now());
+                sys::list_start_apps(self.hwnd.0 as isize);
             }
             Act::AppDone => {
                 self.picking = false;
@@ -1652,6 +1664,7 @@ impl App {
     /// The Start-menu list arrived.
     pub fn on_app_list(&mut self) {
         self.app_loading = false;
+        self.app_load_t0 = None;
         self.app_list = Some(sys::START_APPS.lock().unwrap().clone());
         self.app_scroll = 0;
         self.ensure_picker_icons();

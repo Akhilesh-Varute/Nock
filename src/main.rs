@@ -521,3 +521,28 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn window_messages_are_all_different() {
+        let all = [
+            ("media", media::WM_MEDIA),
+            ("brightness", sys::WM_BRIGHT),
+            ("tray", WM_TRAY),
+            ("radio", radio::WM_RADIO),
+            ("popup", sys::WM_POP),
+            ("edge", sys::WM_EDGE),
+            ("fullscreen", sys::WM_FSCHK),
+            ("bluetooth done", radio::WM_BTDONE),
+            ("app list", sys::WM_APPLIST),
+        ];
+        for (i, (na, a)) in all.iter().enumerate() {
+            for (nb, b) in &all[i + 1..] {
+                assert_ne!(a, b, "{na} and {nb} use the same message number");
+            }
+        }
+    }
+}
