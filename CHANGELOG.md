@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1
+
+- Controls: removed the Wi-Fi, Bluetooth, Dark mode and Night light tiles (the top bar and Windows' quick settings cover them). The page is now shortcuts: Screenshot, Display, Sound, Network, Power & battery and All settings.
+
 ## 0.7.0
 
 - New look for the open panel: a labelled tab row on top (Media, Controls, Today, Stats, Clipboard, Apps, Games, Power) and rounded cards on every page.

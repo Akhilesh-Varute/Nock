@@ -457,27 +457,25 @@ fn tile(a: &App, ca: f32, hits: &mut Vec<Hit>, r: Rect, act: Act, glyph: char, t
     g.fill_circle(ic.cx(), ic.cy(), 17.0, (if on { Color(0.0, 0.0, 0.0, 0.14) } else { Color::white(0.08) }).fade(ca));
     g.icon(glyph, ic, &f.icon14, (if on { BLACK } else { T1 }).fade(ca));
     let (tc, sc) = if on { (BLACK, Color(0.0, 0.0, 0.0, 0.65)) } else { (T1, T3) };
-    g.text(title, Rect::new(r.x + 56.0, r.y + 9.0, r.w - 64.0, 22.0), &f.body, tc.fade(ca), Align::Left);
-    g.text(sub, Rect::new(r.x + 56.0, r.y + r.h - 28.0, r.w - 64.0, 18.0), &f.tiny, sc.fade(ca), Align::Left);
+    // title and state line stacked, centred beside the icon
+    let ty = r.y + (r.h - 44.0) / 2.0;
+    g.text(title, Rect::new(r.x + 56.0, ty, r.w - 64.0, 22.0), &f.body, tc.fade(ca), Align::Left);
+    g.text(sub, Rect::new(r.x + 56.0, ty + 24.0, r.w - 64.0, 18.0), &f.tiny, sc.fade(ca), Align::Left);
 }
 
 fn page_controls(a: &App, ca: f32, hits: &mut Vec<Hit>) {
+    // Wi-Fi, Bluetooth, sound and brightness live in the top bar and Windows' own
+    // quick settings, so this page is shortcuts to the screenshot tool and the
+    // Settings pages people actually go looking for.
     let (w, h, gap) = (270.0, 54.0, 12.0);
     let (x0, y0) = (24.0, 6.0);
     let at = |col: f32, row: f32| Rect::new(x0 + col * (w + gap), y0 + row * (h + 8.0), w, h);
-    let state = |s: Option<bool>| match s {
-        Some(true) => ("On", true),
-        Some(false) => ("Off", false),
-        None => ("Not available", false),
-    };
-    let (ws, won) = state(a.radios.wifi);
-    tile(a, ca, hits, at(0.0, 0.0), Act::Quick(0), '\u{E701}', "Wi-Fi", ws, won);
-    let (bs, bon) = state(a.radios.bluetooth);
-    tile(a, ca, hits, at(1.0, 0.0), Act::Quick(1), '\u{E702}', "Bluetooth", bs, bon);
-    tile(a, ca, hits, at(0.0, 1.0), Act::DarkMode, '\u{E708}', "Dark mode", if a.dark_mode { "On" } else { "Off" }, a.dark_mode);
-    tile(a, ca, hits, at(1.0, 1.0), Act::Open(0), '\u{E706}', "Night light", "Open settings", false);
-    tile(a, ca, hits, at(0.0, 2.0), Act::Quick(2), '\u{E722}', "Screenshot", "Snip a region", false);
-    tile(a, ca, hits, at(1.0, 2.0), Act::Open(1), '\u{E713}', "Settings", "Windows settings", false);
+    tile(a, ca, hits, at(0.0, 0.0), Act::Quick(2), '\u{E722}', "Screenshot", "Snip a region", false);
+    tile(a, ca, hits, at(1.0, 0.0), Act::OpenSettings(0), '\u{E7F4}', "Display", "Resolution, scale, night light", false);
+    tile(a, ca, hits, at(0.0, 1.0), Act::OpenSettings(1), '\u{E767}', "Sound", "Output, devices, volume mixer", false);
+    tile(a, ca, hits, at(1.0, 1.0), Act::OpenSettings(2), '\u{E774}', "Network", "Wi-Fi, Ethernet, VPN", false);
+    tile(a, ca, hits, at(0.0, 2.0), Act::OpenSettings(3), '\u{E83F}', "Power & battery", "Sleep, plan, battery saver", false);
+    tile(a, ca, hits, at(1.0, 2.0), Act::OpenSettings(4), '\u{E713}', "All settings", "Open Windows Settings", false);
 }
 
 // ----------------------------------------------------------------- power ----

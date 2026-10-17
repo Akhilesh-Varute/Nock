@@ -29,6 +29,15 @@ pub const COL_MEDIA_W: f32 = 296.0;
 pub const COL_TIMER_W: f32 = 132.0;
 pub const MARGIN: f32 = 24.0; // room for spring overshoot
 pub const MAX_TODO: usize = 5;
+
+/// Settings pages the Controls tab links to (display, sound, network, power, all settings).
+pub const SETTINGS_PAGES: [&str; 5] = [
+    "ms-settings:display",
+    "ms-settings:sound",
+    "ms-settings:network",
+    "ms-settings:powersleep",
+    "ms-settings:",
+];
 pub const CLIP_ROWS: usize = 5;
 
 const T_ANIM: usize = 1;
@@ -91,10 +100,8 @@ pub enum Act {
     ClipSearchClear,
     /// start a focus session on the n-th to-do
     TodoFocus(usize),
-    /// toggle Windows dark mode
-    DarkMode,
-    /// open a Windows Settings page (0 night light, 1 settings)
-    Open(u8),
+    /// open a Windows Settings page: an index into `SETTINGS_PAGES`
+    OpenSettings(usize),
     /// restart / shut down (asks to click twice)
     PowerRestart,
     PowerShutdown,
@@ -245,8 +252,6 @@ pub struct App {
     /// what the pill says while it pulses ("Time's up", "Drink water")
     pub alert_msg: &'static str,
     pub hub: crate::games::Hub,
-    /// Windows is in dark mode (cached; the Controls tile shows it)
-    pub dark_mode: bool,
     /// which power button (1 restart, 2 shut down) was clicked once, and when
     pub power_confirm: Option<(u8, Instant)>,
     /// live numbers for the Stats page
@@ -355,7 +360,6 @@ impl App {
             confetti_start: None,
             alert_msg: "Time's up",
             hub: crate::games::Hub::new(store::load_bests()),
-            dark_mode: !sys::light_theme(),
             power_confirm: None,
             stat_cpu: 0,
             stat_mem: 0,
@@ -1240,11 +1244,7 @@ impl App {
                 }
             }
             Act::TodoAdd => self.start_entry(),
-            Act::DarkMode => {
-                self.dark_mode = !self.dark_mode;
-                sys::set_dark_mode(self.dark_mode);
-            }
-            Act::Open(k) => sys::open(if k == 0 { "ms-settings:nightlight" } else { "ms-settings:" }, ""),
+            Act::OpenSettings(k) => sys::open(SETTINGS_PAGES[k.min(SETTINGS_PAGES.len() - 1)], ""),
             Act::PowerRestart => self.power_press(1),
             Act::PowerShutdown => self.power_press(2),
             Act::GameClick => self.hub.click(),

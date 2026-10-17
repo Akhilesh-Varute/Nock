@@ -173,7 +173,6 @@ impl App {
 
     /// Windows switched light/dark (or another system setting changed).
     pub fn on_theme_change(&mut self) {
-        self.dark_mode = !sys::light_theme();
         if !self.bar_visible() {
             return;
         }
