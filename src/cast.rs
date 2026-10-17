@@ -36,8 +36,9 @@ pub enum Who {
     Owl,
     Snitch,
     Dementor,
-    // the games' hero (see skins.rs)
+    // the games' heroes (see skins.rs)
     Thor,
+    Superman,
 }
 
 impl Who {
@@ -388,6 +389,7 @@ fn spec(who: Who) -> Spec {
         Who::Hermione => Spec { h: 30.0, hr: 5.2, t: 0.30, hw: 2.7, sw: 3.3, th: 2.7, ath: 2.5 },
         Who::Ron => Spec { h: 33.0, hr: 5.4, t: 0.30, hw: 3.0, sw: 3.7, th: 2.9, ath: 2.7 },
         Who::Dumbledore => Spec { h: 36.0, hr: 5.6, t: 0.31, hw: 3.4, sw: 4.0, th: 3.1, ath: 2.9 },
+        Who::Superman => Spec { h: 34.0, hr: 5.8, t: 0.30, hw: 3.2, sw: 5.0, th: 3.5, ath: 3.3 },
         Who::Thor => Spec { h: 34.0, hr: 6.2, t: 0.30, hw: 3.5, sw: 5.0, th: 3.8, ath: 3.5 },
         Who::Voldemort => Spec { h: 36.0, hr: 5.3, t: 0.31, hw: 2.6, sw: 3.4, th: 2.5, ath: 2.3 },
         _ => Spec { h: 30.0, hr: 5.0, t: 0.3, hw: 3.0, sw: 4.0, th: 3.0, ath: 3.0 },
@@ -499,6 +501,7 @@ fn body(cx: &Ctx, d: &Draw, sk: &Sk, sp: &Spec, j: &J) {
     match d.who {
         Who::Spark => spark(cx, d, sk, sp, j),
         Who::Thor => thor(cx, d, sk, sp, j),
+        Who::Superman => superman(cx, d, sk, sp, j),
         Who::Cinder => cinder(cx, d, sk, sp, j),
         Who::Krag => krag(cx, d, sk, sp, j),
         Who::Veil => veil(cx, d, sk, sp, j),
@@ -737,6 +740,97 @@ fn thor(cx: &Ctx, d: &Draw, sk: &Sk, sp: &Spec, j: &J) {
         cx.line(hd(3.0, 5.0), hd(7.0, 7.5 + z), 0.9, c(0.7, 0.9, 1.0));
         cx.line(hd(3.0, -5.0), hd(8.0, -6.5 - z), 0.9, c(0.7, 0.9, 1.0));
         cx.circ(hd(0.0, 0.0), 6.0, ca(0.6, 0.85, 1.0, 0.18));
+    }
+}
+
+fn superman(cx: &Ctx, d: &Draw, sk: &Sk, sp: &Spec, j: &J) {
+    let t = d.t;
+    let skin = c(1.0, 0.82, 0.68);
+    let blue = c(0.12, 0.34, 0.80);
+    let red = c(0.85, 0.10, 0.14);
+    let redd = c(0.55, 0.06, 0.10);
+    let gold = c(1.0, 0.82, 0.20);
+    let hair = c(0.09, 0.08, 0.12);
+    let ink = c(0.12, 0.10, 0.14);
+    let (hc, hr) = (j.head, j.hr);
+    let (sh, hip) = (j.sh, j.hip);
+
+    // cape streaming behind, rippling
+    let rip = (t * 9.0).sin();
+    let back = 14.0 + 10.0 * sk.lean.abs().min(1.4);
+    let tip = (sh.0 - back + rip * 1.6, hip.1 + 3.0 - sk.lean * 3.5 + (t * 6.0).cos());
+    let low = (hip.0 - back * 0.55, hip.1 + 5.5 + rip);
+    cx.poly(&[(sh.0 - 0.5, sh.1 - 2.4), (sh.0 + 1.2, sh.1 + 1.6), low, tip, ((sh.0 + tip.0) / 2.0, sh.1 - 3.0 + rip * 0.8)], redd);
+    cx.poly(&[(sh.0 - 0.5, sh.1 - 2.1), (sh.0 + 0.8, sh.1 + 0.9), ((low.0 + sh.0) / 2.0, low.1 - 1.7), (tip.0 + 3.2, tip.1 - 0.8), ((sh.0 + tip.0) / 2.0 + 1.5, sh.1 - 2.3)], red);
+    // back arm and leg
+    cx.limb(j.sh, j.e_b, sp.ath, dim(blue, 0.8));
+    cx.limb(j.e_b, j.h_b, sp.ath - 0.2, dim(blue, 0.8));
+    cx.circ(j.h_b, 2.0, dim(skin, 0.8));
+    cx.limb(j.hip, j.k_b, sp.th, dim(blue, 0.8));
+    cx.limb(j.k_b, j.f_b, sp.th - 0.1, dim(red, 0.8));
+    cx.circ((j.f_b.0 + 2.0, j.f_b.1 + 0.4), 2.1, dim(red, 0.7));
+    // torso, chest shield with an S, belt and trunks
+    cx.poly(&torso_quad(j, sp.hw, sp.sw), blue);
+    let m = |a: V, b: V| ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
+    let chest = m(m(j.sh, j.hip), j.sh);
+    let (fx, fy) = ((j.sh.0 - j.hip.0) * 0.3, (j.sh.1 - j.hip.1) * 0.3); // up the body
+    let (sx, sy) = (-fy, fx); // across the body
+    let pt = |a: f32, b: f32| (chest.0 + sx * a + fx * b, chest.1 + sy * a + fy * b);
+    cx.poly(&[pt(-0.15, 0.5), pt(0.55, 0.5), pt(0.62, -0.05), pt(0.2, -0.6), pt(-0.2, -0.05)], gold);
+    cx.poly(&[pt(-0.05, 0.38), pt(0.42, 0.38), pt(0.48, -0.03), pt(0.2, -0.46), pt(-0.08, -0.03)], red);
+    cx.line(pt(0.36, 0.22), pt(0.08, 0.14), 0.9, gold);
+    cx.line(pt(0.08, 0.14), pt(0.34, -0.12), 0.9, gold);
+    cx.line(pt(0.34, -0.12), pt(0.06, -0.24), 0.9, gold);
+    cx.poly(&[(hip.0 - sp.hw - 0.4, hip.1 - 1.6), (hip.0 + sp.hw + 0.4, hip.1 + 1.6), (hip.0 + sp.hw * 0.8, hip.1 + 4.2), (hip.0 - sp.hw * 0.8, hip.1 + 3.6)], red);
+    cx.line((hip.0 - sp.hw - 0.2, hip.1 - 1.0), (hip.0 + sp.hw + 0.2, hip.1 + 1.0), 1.6, gold);
+    // front leg and boot
+    cx.limb(j.hip, j.k_f, sp.th, blue);
+    cx.limb(j.k_f, j.f_f, sp.th - 0.1, red);
+    cx.circ(j.f_f, 2.5, red);
+    cx.circ((j.f_f.0 + 2.2, j.f_f.1 + 0.4), 2.3, red);
+    // head: face, black hair with the curl, eyes
+    cx.circ(hc, hr, skin);
+    cx.poly(
+        &[
+            (hc.0 - hr * 1.05, hc.1 + hr * 0.35),
+            (hc.0 - hr * 1.0, hc.1 - hr * 0.7),
+            (hc.0 - hr * 0.2, hc.1 - hr * 1.15),
+            (hc.0 + hr * 0.8, hc.1 - hr * 0.85),
+            (hc.0 + hr * 1.0, hc.1 - hr * 0.35),
+            (hc.0 + hr * 0.25, hc.1 - hr * 0.45),
+            (hc.0 - hr * 0.35, hc.1 - hr * 0.15),
+            (hc.0 - hr * 0.6, hc.1 + hr * 0.4),
+        ],
+        hair,
+    );
+    cx.circ((hc.0 + hr * 0.45, hc.1 - hr * 0.62), hr * 0.2, hair); // the curl
+    let (ex, ey) = (hc.0 + hr * 0.5, hc.1 + hr * 0.12);
+    match sk.face {
+        Face::Hurt => {
+            cx.line((ex - 1.1, ey - 0.6), (ex + 1.0, ey + 0.6), 0.8, ink);
+            cx.line((ex - 1.1, ey + 0.6), (ex + 1.0, ey - 0.6), 0.8, ink);
+        }
+        _ => {
+            cx.circ((ex, ey), 1.3, c(1.0, 1.0, 1.0));
+            cx.circ((ex + 0.35, ey), 0.75, c(0.2, 0.45, 0.85));
+            cx.circ((ex + 0.4, ey), 0.38, ink);
+            cx.line((ex - 1.5, ey - 1.7), (ex + 1.6, ey - 1.1), 0.9, hair);
+        }
+    }
+    cx.line((ex - 0.4, ey + 2.4), (ex + 1.6, ey + 2.2), 0.7, ink);
+    // front arm: fist leading the flight
+    cx.limb(j.sh, j.e_f, sp.ath, blue);
+    cx.limb(j.e_f, j.h_f, sp.ath - 0.2, blue);
+    cx.line((j.e_f.0 + (j.h_f.0 - j.e_f.0) * 0.55, j.e_f.1 + (j.h_f.1 - j.e_f.1) * 0.55), j.h_f, sp.ath - 0.1, red);
+    cx.circ(j.h_f, 2.5, skin);
+    if d.act == Act::Fly {
+        // speed streaks behind
+        for k in 0..3 {
+            let kf = k as f32;
+            let y = hip.1 - 4.0 + kf * 4.5 + (t * 12.0 + kf).sin() * 0.6;
+            let l = 8.0 + kf * 3.0 + (t * 15.0 + kf * 2.0).sin() * 2.0;
+            cx.line((hip.0 - 14.0 - kf * 3.0, y), (hip.0 - 14.0 - kf * 3.0 - l, y), 0.9, ca(1.0, 1.0, 1.0, 0.35));
+        }
     }
 }
 

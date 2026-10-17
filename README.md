@@ -79,7 +79,7 @@ The pill itself reacts: it squishes when you click it, jiggles when the pointer 
 - **Clipboard**: the last 20 things you copied. Click one to paste it into the app you were using. **Star** an item to pin it: pinned items stay at the top, survive "Clear" and restarts, and work as saved snippets. **Search** filters the list as you type (Enter keeps the filter, Esc clears it). Recent history lives in memory only, and copies from password managers are skipped; only the items you pin are written to disk.
 - **Apps**: pinned launcher tiles with the real app icons. Click **+ Add app** to pick from every installed app (Start menu apps, Store apps, game launchers) with a search box; click an app to pin it, and use the small **×** on a tile to unpin. The list refreshes each time you open the picker, and has a refresh button. Up to 12 tiles.
 - **Games**: pick one on the arcade screen; all are mouse only and each keeps a best score.
-  - *Thor Flight*: click to flap through the pipes.
+  - *Super Flight*: click to flap through the pipes.
   - *Brick Breaker*: move the mouse to steer the paddle, click to launch; power-ups, levels and combos.
   - *Slicer*: swipe the mouse fast through flying fruit, avoid the bombs.
   - *Viking Run*: click to jump, click again in the air to double jump, hold to jump higher.
@@ -142,7 +142,7 @@ The first scene plays a minute or two after Nock starts, then one every few minu
 
 ### Fan art and images
 
-The wizard-school scenes and the Thor, Viking and other characters in the arcade are **unofficial fan art** drawn from simple shapes, not affiliated with or endorsed by their owners; all names and trademarks belong to their respective rights holders. The press conference scene uses a small photo cut-out bundled in `assets/face.png`. If you hold rights to anything in this repository and would like it changed or removed, please [open an issue](../../issues).
+The wizard-school scenes and the Thor, caped-flyer and other characters in the arcade are **unofficial fan art** drawn from simple shapes, not affiliated with or endorsed by their owners; all names and trademarks belong to their respective rights holders. The press conference scene uses a small photo cut-out bundled in `assets/face.png`. If you hold rights to anything in this repository and would like it changed or removed, please [open an issue](../../issues).
 
 ## Icon
 

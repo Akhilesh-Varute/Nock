@@ -6,7 +6,7 @@
 use crate::game::{Game, State as FlightState, H, W};
 use crate::gfx::*;
 
-pub const NAMES: [&str; 4] = ["Thor Flight", "Brick Breaker", "Slicer", "Viking Run"];
+pub const NAMES: [&str; 4] = ["Super Flight", "Brick Breaker", "Slicer", "Viking Run"];
 
 // ---------------------------------------------------------------- helpers --
 
