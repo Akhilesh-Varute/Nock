@@ -6,6 +6,7 @@
 //! posts one window message to the UI thread. No polling.
 
 use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// Posted to the UI window whenever `MediaState` changed.
@@ -97,6 +98,8 @@ mod imp {
         hooked: Mutex<HashSet<usize>>,
         /// Serialises refreshes coming from different WinRT threads.
         lock: Mutex<()>,
+        /// A delayed re-check of the play/pause state is already scheduled.
+        verifying: AtomicBool,
     }
 
     pub fn run(hwnd: isize, st: Arc<Mutex<MediaState>>, rx: Receiver<Cmd>) {
@@ -113,6 +116,7 @@ mod imp {
             mgr: mgr.clone(),
             hooked: Mutex::new(HashSet::new()),
             lock: Mutex::new(()),
+            verifying: AtomicBool::new(false),
         });
 
         hook_sessions(&ctx);
@@ -289,6 +293,8 @@ mod imp {
         }
         fill_playback(ctx, &session);
         notify(ctx);
+        drop(_g);
+        verify_later(ctx);
     }
 
     /// Re-read just the artwork for the track called `expect`.
@@ -320,12 +326,38 @@ mod imp {
         notify(ctx);
     }
 
-    fn refresh_playback(ctx: &Ctx) {
-        let _g = ctx.lock.lock().unwrap();
-        if let Ok(session) = ctx.mgr.GetCurrentSession() {
-            fill_playback(ctx, &session);
-            notify(ctx);
+    fn refresh_playback(ctx: &Arc<Ctx>) {
+        {
+            let _g = ctx.lock.lock().unwrap();
+            if let Ok(session) = ctx.mgr.GetCurrentSession() {
+                fill_playback(ctx, &session);
+                notify(ctx);
+            }
         }
+        verify_later(ctx);
+    }
+
+    /// Browsers (YouTube especially) can fire the "playback changed" event a moment
+    /// before the new play/pause state is readable, which left the notch showing the
+    /// opposite of reality until the next event. So look again shortly afterwards.
+    fn verify_later(ctx: &Arc<Ctx>) {
+        if ctx.verifying.swap(true, Ordering::AcqRel) {
+            return; // a re-check is already pending
+        }
+        let c = ctx.clone();
+        std::thread::spawn(move || {
+            let mut waited = 0u64;
+            for at in [250u64, 700, 1500] {
+                std::thread::sleep(std::time::Duration::from_millis(at - waited));
+                waited = at;
+                let _g = c.lock.lock().unwrap();
+                if let Ok(session) = c.mgr.GetCurrentSession() {
+                    fill_playback(&c, &session);
+                    notify(&c);
+                }
+            }
+            c.verifying.store(false, Ordering::Release);
+        });
     }
 
     fn fill_playback(ctx: &Ctx, s: &Session) {

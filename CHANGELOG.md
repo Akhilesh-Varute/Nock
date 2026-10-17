@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2
+
+- Media: the notch no longer shows the opposite of what the browser is doing after you pause or resume from a tab (the play/pause state is re-checked shortly after each change).
+
 ## 0.5.1
 
 - Top bar volume slider now follows the current default output device immediately (laptop speakers, Bluetooth, monitor).
