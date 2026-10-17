@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.1
+
+- Tray menu → Check for updates: finds the latest GitHub release and, for the installer version, downloads, installs and restarts Nock for you (the plain exe opens the download page). Only runs when you click it.
+
 ## 0.9.0
 
 - A softer, more colourful panel: Stats are inset tiles with a colour per metric, Today, Clipboard (colour by kind of item), Controls and Power (colour by severity) all picked up colour, the Media panel is tinted from the album art, and corners are rounder.

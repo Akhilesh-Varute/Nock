@@ -31,6 +31,8 @@ Prefer no installer? The same release also has the plain **`nock.exe`**: put it 
 
 Right-click the tray icon → **Start with Windows** to launch it at login.
 
+**Updates:** right-click the tray icon → **Check for updates**. If a newer release exists Nock offers to update; for a copy installed with the installer it downloads the new installer, runs it silently and restarts itself. A plain `nock.exe` just opens the download page. It only checks when you click, never in the background.
+
 ## Build
 
 1. Install Rust from <https://rustup.rs> (choose the default **MSVC** toolchain). If asked, also install the Visual Studio Build Tools with the "Desktop development with C++" workload (this includes the Windows SDK, which embeds the exe icon).

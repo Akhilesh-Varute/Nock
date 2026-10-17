@@ -1346,3 +1346,84 @@ mod start_menu_tests {
         println!("PROBE removed={}", !lnk.exists());
     }
 }
+
+// ------------------------------------------------------------------ updates ----
+
+pub const WM_UPDATE: u32 = 0x8000 + 10; // WM_APP + 10
+const REPO: &str = "Akhilesh-Varute/Nock";
+
+/// Newest release tag found by `check_update` (e.g. "v0.9.1").
+pub static LATEST: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
+/// True if `latest` ("v1.2.3" or "1.2.3") is a higher version than `current`.
+pub fn is_newer(latest: &str, current: &str) -> bool {
+    let nums = |s: &str| -> Vec<u32> { s.trim().trim_start_matches('v').split('.').map(|p| p.parse().unwrap_or(0)).collect() };
+    nums(latest) > nums(current)
+}
+
+/// Ask GitHub for the latest release in the background, then post WM_UPDATE:
+/// WPARAM 0 = could not reach GitHub, 1 = up to date, 2 = a newer version exists.
+pub fn check_update(hwnd: isize) {
+    std::thread::spawn(move || {
+        let cmd = format!(
+            "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (Invoke-RestMethod -UseBasicParsing -Headers @{{'User-Agent'='Nock'}} -Uri 'https://api.github.com/repos/{REPO}/releases/latest').tag_name"
+        );
+        let tag = powershell(&cmd).unwrap_or_default().trim().to_string();
+        let code = if !tag.starts_with('v') {
+            0
+        } else if is_newer(&tag, env!("CARGO_PKG_VERSION")) {
+            2
+        } else {
+            1
+        };
+        if code != 0 {
+            *LATEST.lock().unwrap() = tag;
+        }
+        unsafe {
+            let _ = PostMessageW(Some(HWND(hwnd as *mut _)), WM_UPDATE, WPARAM(code), LPARAM(0));
+        }
+    });
+}
+
+/// Whether this exe is the one the installer put in place (so the installer can replace it).
+pub fn installed_by_setup() -> bool {
+    let (Ok(exe), Ok(local)) = (std::env::current_exe(), std::env::var("LOCALAPPDATA")) else { return false };
+    exe.starts_with(Path::new(&local).join("Programs").join("Nock"))
+}
+
+/// Download the installer for `tag`, run it silently (it stops this Nock and replaces the
+/// exe), then start Nock again. Runs in a detached PowerShell so it outlives this process.
+pub fn install_update(tag: &str) {
+    let tag = tag.to_string();
+    let exe = std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_default().replace('\'', "''");
+    std::thread::spawn(move || {
+        let ver = tag.trim_start_matches('v');
+        let cmd = format!(
+            "$ErrorActionPreference='Stop'; try {{ [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
+             $f = Join-Path $env:TEMP 'NockSetup-update.exe'; \
+             Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/{REPO}/releases/download/{tag}/NockSetup-{ver}.exe' -OutFile $f; \
+             Start-Process -FilePath $f -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait }} catch {{}}; \
+             Start-Process -FilePath '{exe}'"
+        );
+        let _ = powershell(&cmd);
+    });
+}
+
+/// Open the releases page (for copies that were not installed by the installer).
+pub fn open_releases() {
+    open(&format!("https://github.com/{REPO}/releases/latest"), "");
+}
+
+#[cfg(test)]
+mod update_tests {
+    use super::is_newer;
+
+    #[test]
+    fn version_compare() {
+        assert!(is_newer("v0.9.1", "0.9.0"));
+        assert!(is_newer("v0.10.0", "0.9.9"));
+        assert!(is_newer("1.0.0", "0.9.9"));
+        assert!(!is_newer("v0.9.0", "0.9.0"));
+        assert!(!is_newer("v0.8.1", "0.9.0"));
+    }
+}

@@ -240,6 +240,33 @@ fn main() -> Result<()> {
 }
 
 /// Remove everything we registered and terminate the process immediately.
+/// Result of the background update check (see sys::check_update).
+fn on_update(hwnd: HWND, code: usize) {
+    let cur = env!("CARGO_PKG_VERSION");
+    let latest = sys::LATEST.lock().unwrap().clone();
+    let show = |text: &str, flags: MESSAGEBOX_STYLE| unsafe { MessageBoxW(Some(hwnd), &HSTRING::from(text), w!("Nock"), flags | MB_SETFOREGROUND) };
+    match code {
+        0 => {
+            show("Couldn't check for updates. Are you online?", MB_OK | MB_ICONINFORMATION);
+        }
+        1 => {
+            show(&format!("Nock {cur} is the latest version."), MB_OK | MB_ICONINFORMATION);
+        }
+        _ if sys::installed_by_setup() => {
+            let q = format!("Nock {} is available (you have {cur}).\n\nUpdate now? Nock restarts by itself in a few seconds.", latest.trim_start_matches('v'));
+            if show(&q, MB_YESNO | MB_ICONQUESTION) == IDYES {
+                sys::install_update(&latest);
+            }
+        }
+        _ => {
+            let q = format!("Nock {} is available (you have {cur}).\n\nOpen the download page?", latest.trim_start_matches('v'));
+            if show(&q, MB_YESNO | MB_ICONQUESTION) == IDYES {
+                sys::open_releases();
+            }
+        }
+    }
+}
+
 fn quit_now(hwnd: HWND) -> ! {
     unsafe {
         remove_tray(hwnd);
@@ -327,6 +354,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
         m if m == sys::WM_EDGE => a.on_edge(),
         m if m == sys::WM_FSCHK => a.on_fullscreen_check(),
         m if m == sys::WM_APPLIST => a.on_app_list(),
+        m if m == sys::WM_UPDATE => on_update(hwnd, wp.0),
         m if m == sys::WM_BRIGHT => a.on_brightness(wp.0 != 0, lp.0 as u32),
         _ => return DefWindowProcW(hwnd, msg, wp, lp),
     }
@@ -470,6 +498,7 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
         let _ = AppendMenuW(menu, MF_STRING, 3, w!("Reload pinned apps"));
         let _ = AppendMenuW(menu, MF_STRING, 4, w!("Open settings folder"));
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
+        let _ = AppendMenuW(menu, MF_STRING, 15, w!("Check for updates"));
         let _ = AppendMenuW(menu, MF_STRING, 9, w!("Quit"));
 
         let mut pt = POINT::default();
@@ -505,6 +534,7 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
                 sys::sync_start_menu(a.cfg.start_menu);
             }
             4 => sys::open(&store::data_dir().to_string_lossy(), ""),
+            15 => sys::check_update(hwnd.0 as isize),
             20..=29 => a.set_buddy((cmd.0 - 20) as u8),
             30 => a.toggle_scenes(),
             60..=63 => a.set_clock_style((cmd.0 - 60) as u8),
@@ -538,6 +568,7 @@ mod tests {
             ("fullscreen", sys::WM_FSCHK),
             ("bluetooth done", radio::WM_BTDONE),
             ("app list", sys::WM_APPLIST),
+            ("update", sys::WM_UPDATE),
         ];
         for (i, (na, a)) in all.iter().enumerate() {
             for (nb, b) in &all[i + 1..] {

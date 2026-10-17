@@ -1,6 +1,6 @@
 [package]
 name = "nock"
-version = "0.9.0"
+version = "0.9.1"
 edition = "2021"
 description = "A tiny native Windows dynamic island and macOS-style menu bar, written in Rust"
 
