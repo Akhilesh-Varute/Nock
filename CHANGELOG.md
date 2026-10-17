@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0
+
+- A softer, more colourful panel: Stats are inset tiles with a colour per metric, Today, Clipboard (colour by kind of item), Controls and Power (colour by severity) all picked up colour, the Media panel is tinted from the album art, and corners are rounder.
+- The idle pill is wider and shows the date next to a bold time.
+- Games: Thor in Viking Run and a new caped flyer in Super Flight (formerly Thor Flight) are drawn like the scene characters, with outlines, capes and proper poses; richer icons on the game hub.
+- README: added measured idle CPU and memory use.
+
 ## 0.8.1
 
 - Apps tab: the app picker now looks for new and changed apps every time you open it (the old list stays visible while it updates), and has a Refresh button, so you no longer need to restart Nock to see new apps or fixed icons.
