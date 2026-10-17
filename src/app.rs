@@ -2155,4 +2155,34 @@ mod preview {
         shot(&a, EXP_W, EXP_H, 1100, "...and a quick game for your break");
         std::fs::write(format!("{dir}/frames.txt"), list.join("\n")).unwrap();
     }
+
+    /// Scene frames for the README demo GIF: PREVIEW_DIR=... cargo test --release preview::render_scenes -- --ignored
+    #[test]
+    #[ignore]
+    fn render_scenes() {
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        }
+        let dir = std::env::var("PREVIEW_DIR").expect("PREVIEW_DIR");
+        let scale = 3.0f32;
+        let g = crate::gfx::Gfx::new((400.0 * scale) as i32, (34.0 * scale) as i32, scale).expect("gfx");
+        for id in [0usize, 3, 5, 7] {
+            for k in 0..30 {
+                let t = 0.3 + k as f32 * 0.35;
+                let (pw, ph) = ((380.0 * scale) as i32, (32.0 * scale) as i32);
+                g.begin(pw, ph).unwrap();
+                crate::scene::demo_frame(&g, id, t, 380.0, false);
+                let _ = g.end();
+                let (bw, _bh, buf) = g.snapshot();
+                let mut out = Vec::new();
+                out.extend_from_slice(&(pw as u32).to_le_bytes());
+                out.extend_from_slice(&(ph as u32).to_le_bytes());
+                for y in 0..ph {
+                    let row = (y * bw * 4) as usize;
+                    out.extend_from_slice(&buf[row..row + (pw * 4) as usize]);
+                }
+                std::fs::write(format!("{dir}/scene_{id}_{k:02}.raw"), out).unwrap();
+            }
+        }
+    }
 }

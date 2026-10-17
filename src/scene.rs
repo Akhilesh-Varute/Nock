@@ -572,6 +572,80 @@ fn sample(tk: &Track, t: f32) -> Option<(f32, Act, f32, f32, f32)> {
     Some((x, k.act, k.dir, u, (t - k.t).max(0.0)))
 }
 
+
+/// One frame of a scene at time `t` (seconds) on a stage `w` logical px wide.
+#[allow(clippy::too_many_arguments)]
+fn draw_frame(g: &Gfx, sc: &Script, w: f32, face: &Option<ID2D1Bitmap>, t: f32, tick: u32, th: &crate::bar::Theme, light: bool) {
+    let mut draws: Vec<Option<Draw>> = Vec::new();
+    for tk in &sc.tracks {
+        draws.push(sample(tk, t).map(|(fx, act, dir, u, _since)| {
+            let lift = if act == Act::Jump { (u * std::f32::consts::PI).sin() * 7.0 } else { 0.0 };
+            let charge = if matches!(act, Act::Cast | Act::Throw | Act::Slash) {
+                (u * std::f32::consts::PI).sin()
+            } else {
+                0.0
+            };
+            Draw {
+                who: tk.who,
+                x: fx * w,
+                y: GROUND - lift,
+                dir,
+                act,
+                p: if matches!(act, Act::Walk | Act::Run | Act::Stand | Act::Cheer | Act::Block | Act::Kneel) {
+                    0.0
+                } else {
+                    u
+                },
+                t,
+                charge,
+            }
+        }));
+    }
+    // far actors first so the nearer one overlaps
+    let mut order: Vec<usize> = (0..draws.len()).collect();
+    order.sort_by(|a, b| {
+        let ya = draws[*a].map(|d| d.x).unwrap_or(0.0);
+        let yb = draws[*b].map(|d| d.x).unwrap_or(0.0);
+        ya.partial_cmp(&yb).unwrap_or(std::cmp::Ordering::Equal)
+    });
+    for i in order {
+        let Some(d) = &draws[i] else { continue };
+        match d.who {
+            Who::Face => {
+                if let Some(f) = &face {
+                    let (bob, tilt) = face_motion(d.act, d.t);
+                    draw_face_at(g, f, d.x, d.y, bob, tilt);
+                }
+            }
+            Who::Press(v) => draw_reporter(g, d, v),
+            Who::Owl => draw_owl(g, d),
+            Who::Snitch => draw_snitch(g, d),
+            Who::Dementor => draw_dementor(g, d),
+            _ => cast::draw_actor(g, d),
+        }
+    }
+    for e in &sc.evs {
+        if t >= e.t && t <= e.t + e.dur {
+            draw_fx(g, e, ((t - e.t) / e.dur).clamp(0.0, 1.0), &draws, tick);
+        }
+    }
+    for sy in &sc.says {
+        if sy.dur > 0.0 && t >= sy.t && t <= sy.t + sy.dur {
+            if let Some(Some(d)) = draws.get(sy.who) {
+                draw_bubble(g, &th, light, sy.text, d.x, w);
+            }
+        }
+    }
+}
+
+/// Draws a scene frame on a transparent background for the README demo (see app.rs tests).
+#[cfg(test)]
+pub fn demo_frame(g: &Gfx, id: usize, t: f32, w: f32, light: bool) {
+    let th = theme(light);
+    let sc = script(id);
+    draw_frame(g, &sc, w, &None, t, (t * 30.0) as u32, &th, light);
+}
+
 // -------------------------------------------------------------------- stage --
 
 pub struct Stage {
@@ -1154,66 +1228,7 @@ impl App {
         if g.begin(pw, ph).is_err() {
             return;
         }
-        let mut draws: Vec<Option<Draw>> = Vec::new();
-        for tk in &sc.tracks {
-            draws.push(sample(tk, t).map(|(fx, act, dir, u, _since)| {
-                let lift = if act == Act::Jump { (u * std::f32::consts::PI).sin() * 7.0 } else { 0.0 };
-                let charge = if matches!(act, Act::Cast | Act::Throw | Act::Slash) {
-                    (u * std::f32::consts::PI).sin()
-                } else {
-                    0.0
-                };
-                Draw {
-                    who: tk.who,
-                    x: fx * s.w,
-                    y: GROUND - lift,
-                    dir,
-                    act,
-                    p: if matches!(act, Act::Walk | Act::Run | Act::Stand | Act::Cheer | Act::Block | Act::Kneel) {
-                        0.0
-                    } else {
-                        u
-                    },
-                    t,
-                    charge,
-                }
-            }));
-        }
-        // far actors first so the nearer one overlaps
-        let mut order: Vec<usize> = (0..draws.len()).collect();
-        order.sort_by(|a, b| {
-            let ya = draws[*a].map(|d| d.x).unwrap_or(0.0);
-            let yb = draws[*b].map(|d| d.x).unwrap_or(0.0);
-            ya.partial_cmp(&yb).unwrap_or(std::cmp::Ordering::Equal)
-        });
-        for i in order {
-            let Some(d) = &draws[i] else { continue };
-            match d.who {
-                Who::Face => {
-                    if let Some(f) = &s.face {
-                        let (bob, tilt) = face_motion(d.act, d.t);
-                        draw_face_at(g, f, d.x, d.y, bob, tilt);
-                    }
-                }
-                Who::Press(v) => draw_reporter(g, d, v),
-                Who::Owl => draw_owl(g, d),
-                Who::Snitch => draw_snitch(g, d),
-                Who::Dementor => draw_dementor(g, d),
-                _ => cast::draw_actor(g, d),
-            }
-        }
-        for e in &sc.evs {
-            if t >= e.t && t <= e.t + e.dur {
-                draw_fx(g, e, ((t - e.t) / e.dur).clamp(0.0, 1.0), &draws, tick);
-            }
-        }
-        for sy in &sc.says {
-            if sy.dur > 0.0 && t >= sy.t && t <= sy.t + sy.dur {
-                if let Some(Some(d)) = draws.get(sy.who) {
-                    draw_bubble(g, &th, light, sy.text, d.x, s.w);
-                }
-            }
-        }
+        draw_frame(g, &sc, s.w, &s.face, t, tick, &th, light);
         let _ = g.end();
         let _ = g.present(s.hwnd, (mon.left as f32 + s.left * scale).round() as i32, mon.top, pw, ph);
     }
