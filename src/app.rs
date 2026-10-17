@@ -43,6 +43,7 @@ const T_FSCHK: usize = 10;
 const T_STATS: usize = 18;
 const T_GAME: usize = 19;
 const T_WATER: usize = 20;
+const T_EYES: usize = 21;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Page {
@@ -79,8 +80,19 @@ pub enum Act {
     TimerPreset(u32),
     /// type any number of minutes
     TimerCustom,
-    /// click inside the mini game
-    GameFlap,
+    /// pin / unpin the n-th clipboard row
+    ClipPin(usize),
+    /// type to filter the clipboard list
+    ClipSearch,
+    ClipSearchClear,
+    /// start a focus session on the n-th to-do
+    TodoFocus(usize),
+    /// click inside the running game
+    GameClick,
+    /// pick a game on the arcade screen
+    GamePick(usize),
+    /// back to the arcade screen
+    GameBack,
     TimerToggle,
     TimerReset,
     TodoToggle(usize),
@@ -182,6 +194,10 @@ pub struct App {
 
     // clipboard
     pub clips: Vec<String>,
+    /// pinned items: kept first, never cleared, saved between runs (also works as snippets)
+    pub pins: Vec<String>,
+    pub clip_filter: String,
+    pub entry_search: bool,
     pub clip_scroll: usize,
     ignore_clip: Option<String>,
 
@@ -191,12 +207,22 @@ pub struct App {
 
     // tasks
     pub timer_total_s: u32,
+    /// the task being focused on, and whether the timer is running a break
+    pub timer_task: Option<String>,
+    pub break_mode: bool,
+    /// focus length to come back to after an automatic break
+    cycle_focus_s: u32,
+    /// today's focus minutes and finished tasks
+    pub focus_today: u32,
+    pub done_today: u32,
     timer_left_ms: i64,
     timer_start: Option<Instant>,
     pub todos: Vec<Todo>,
     pub entering: Option<Vec<u16>>,
     /// the text being typed is a timer length in minutes, not a task
     pub entry_timer: bool,
+    /// the notch was opened by the quick-add hotkey, so close it again afterwards
+    capture_open: bool,
     /// output level 0..1 driving the music glow, smoothed
     pub level: f32,
     /// click squish and hover jiggle, both decaying 1 -> 0
@@ -207,8 +233,11 @@ pub struct App {
     confetti_start: Option<Instant>,
     /// what the pill says while it pulses ("Time's up", "Drink water")
     pub alert_msg: &'static str,
-    pub game: crate::game::Game,
-    pub game_face: Option<windows::Win32::Graphics::Direct2D::ID2D1Bitmap>,
+    pub hub: crate::games::Hub,
+    /// pointer inside the open panel (logical px) and whether the button is held, for the games
+    cursor_x: f32,
+    cursor_y: f32,
+    mouse_down: bool,
     /// interval of the page animation timer (0 = off)
     page_ms: u32,
     game_last: Instant,
@@ -279,16 +308,25 @@ impl App {
             brightness: None,
             bri_asked: false,
             clips: Vec::new(),
+            pins: store::load_pins(),
+            clip_filter: String::new(),
+            entry_search: false,
             clip_scroll: 0,
             ignore_clip: None,
             apps: store::load_apps(),
             app_icons: Vec::new(),
             timer_total_s: 25 * 60,
+            timer_task: None,
+            break_mode: false,
+            cycle_focus_s: 25 * 60,
+            focus_today: store::load_focus_today().0,
+            done_today: store::load_focus_today().1,
             timer_left_ms: 25 * 60 * 1000,
             timer_start: None,
             todos: store::load_todos(),
             entering: None,
             entry_timer: false,
+            capture_open: false,
             level: 0.0,
             squish: 0.0,
             jiggle: 0.0,
@@ -296,8 +334,10 @@ impl App {
             beat_start: None,
             confetti_start: None,
             alert_msg: "Time's up",
-            game: crate::game::Game::new(store::load_game_best()),
-            game_face: None,
+            hub: crate::games::Hub::new(store::load_bests()),
+            cursor_x: 0.0,
+            cursor_y: 0.0,
+            mouse_down: false,
             page_ms: 0,
             game_last: Instant::now(),
             prev_fg: HWND::default(),
@@ -400,6 +440,18 @@ impl App {
             || self.confetti_t().is_some()
     }
 
+    /// What the clipboard page lists: pinned items first, then recent ones, filtered
+    /// by the search text. Each entry is (text, pinned).
+    pub fn clip_view(&self) -> Vec<(&str, bool)> {
+        let q = self.clip_filter.to_lowercase();
+        self.pins
+            .iter()
+            .map(|t| (t.as_str(), true))
+            .chain(self.clips.iter().map(|t| (t.as_str(), false)))
+            .filter(|(t, _)| q.is_empty() || t.to_lowercase().contains(&q))
+            .collect()
+    }
+
     pub fn alerting(&self) -> bool {
         self.alert_until.is_some_and(|t| Instant::now() < t)
     }
@@ -475,7 +527,7 @@ impl App {
         // the mini game ticks at 60 Hz only while its tab is open
         let want: u32 = if self.expanded && !self.hidden {
             match self.page {
-                Page::Game => 16,
+                Page::Game if self.hub.is_playing() => 16,
                 _ => 0,
             }
         } else {
@@ -486,9 +538,6 @@ impl App {
                 self.kill_timer(T_GAME);
             } else {
                 self.game_last = Instant::now();
-                if self.page == Page::Game && self.game_face.is_none() {
-                    self.game_face = self.gfx.decode_image(crate::game::FACE_PNG).ok().map(|f| f.0);
-                }
                 self.set_timer(T_GAME, want);
             }
             self.page_ms = want;
@@ -590,6 +639,7 @@ impl App {
             T_PEEK => self.on_peek_tick(),
             T_GAME => self.on_game_tick(),
             T_WATER => self.water_reminder(),
+            T_EYES => self.eye_reminder(),
             T_STATS => self.on_stats_tick(),
             T_FSCHK => {
                 self.kill_timer(T_FSCHK);
@@ -681,6 +731,22 @@ impl App {
     }
 
     /// Hide the notch completely (Ctrl+Alt+H / tray) or bring it back.
+    /// Ctrl+Alt+T: open the notch straight into the to-do box. Enter saves, Esc
+    /// cancels, and the notch closes again if the hotkey was what opened it.
+    pub fn quick_capture(&mut self) {
+        if self.todos.len() >= MAX_TODO {
+            self.buddy_say("To-do list is full", 3000);
+            return;
+        }
+        self.tucked = false;
+        let was_open = self.expanded;
+        self.set_expanded(true);
+        self.select_page(Page::Tasks);
+        self.start_entry();
+        self.capture_open = !was_open && self.entering.is_some();
+        self.render();
+    }
+
     pub fn toggle_tucked(&mut self) {
         self.tucked = !self.tucked;
         if self.tucked {
@@ -727,6 +793,31 @@ impl App {
             self.set_timer(T_WATER, self.cfg.water_min as u32 * 60_000);
         } else {
             self.kill_timer(T_WATER);
+        }
+    }
+
+    /// (Re)arm the repeating look-away reminder (the 20-20-20 rule) to match the setting.
+    pub fn sync_eyes(&mut self) {
+        if self.cfg.eye_min > 0 {
+            self.set_timer(T_EYES, self.cfg.eye_min as u32 * 60_000);
+        } else {
+            self.kill_timer(T_EYES);
+        }
+    }
+
+    pub fn set_eye_min(&mut self, mins: u16) {
+        self.cfg.eye_min = mins;
+        store::save_config(&self.cfg);
+        self.sync_eyes();
+    }
+
+    fn eye_reminder(&mut self) {
+        self.buddy_say("Look at something far away for 20 seconds", 7000);
+        if !self.expanded && !self.timer_running() {
+            self.alert_msg = "Look away";
+            self.alert_until = Some(Instant::now() + std::time::Duration::from_secs(20));
+            self.retarget();
+            self.render();
         }
     }
 
@@ -815,6 +906,8 @@ impl App {
 
     pub fn on_mouse_move(&mut self, px: i32, py: i32) {
         let (x, y) = (px as f32 / self.scale, py as f32 / self.scale);
+        self.cursor_x = x;
+        self.cursor_y = y;
         self.kill_timer(T_LEAVE);
         if !self.tracking {
             unsafe {
@@ -869,6 +962,7 @@ impl App {
     }
 
     pub fn on_lbutton_down(&mut self, px: i32, py: i32) {
+        self.mouse_down = true;
         let (x, y) = (px as f32 / self.scale, py as f32 / self.scale);
         if !self.expanded {
             self.squish = 1.0;
@@ -887,6 +981,7 @@ impl App {
     }
 
     pub fn on_lbutton_up(&mut self) {
+        self.mouse_down = false;
         let Some(d) = self.drag.take() else { return };
         unsafe {
             let _ = ReleaseCapture();
@@ -939,7 +1034,7 @@ impl App {
             let n = (i + if delta < 0 { 1 } else { -1 }).clamp(0, PAGES.len() as i32 - 1);
             self.select_page(PAGES[n as usize]);
         } else if self.page == Page::Clipboard {
-            let max = self.clips.len().saturating_sub(CLIP_ROWS);
+            let max = self.clip_view().len().saturating_sub(CLIP_ROWS);
             if delta < 0 {
                 self.clip_scroll = (self.clip_scroll + 1).min(max);
             } else {
@@ -1009,11 +1104,14 @@ impl App {
                 _ => sys::sleep_pc(),
             },
             Act::ClipItem(i) => {
-                if let Some(t) = self.clips.get(i).cloned() {
+                let item = self.clip_view().get(i).map(|(t, p)| (t.to_string(), *p));
+                if let Some((t, pinned)) = item {
                     self.ignore_clip = Some(t.clone());
                     if sys::set_clipboard_text(self.hwnd, &t) {
-                        self.clips.remove(i);
-                        self.clips.insert(0, t);
+                        if !pinned {
+                            self.clips.retain(|c| *c != t);
+                            self.clips.insert(0, t);
+                        }
                         self.clip_scroll = 0;
                         self.pinned = false;
                         self.set_expanded(false);
@@ -1021,6 +1119,31 @@ impl App {
                         self.set_timer(T_PASTE, 170);
                     }
                 }
+            }
+            Act::ClipPin(i) => {
+                let item = self.clip_view().get(i).map(|(t, p)| (t.to_string(), *p));
+                if let Some((t, pinned)) = item {
+                    if pinned {
+                        self.pins.retain(|p| *p != t);
+                        self.clips.insert(0, t);
+                    } else {
+                        self.clips.retain(|c| *c != t);
+                        self.pins.insert(0, t);
+                        self.pins.truncate(20);
+                    }
+                    store::save_pins(&self.pins);
+                }
+            }
+            Act::ClipSearch => {
+                self.start_entry();
+                if self.entering.is_some() {
+                    self.entry_search = true;
+                    self.entering = Some(self.clip_filter.encode_utf16().collect());
+                }
+            }
+            Act::ClipSearchClear => {
+                self.clip_filter.clear();
+                self.clip_scroll = 0;
             }
             Act::ClipClear => {
                 self.clips.clear();
@@ -1034,6 +1157,8 @@ impl App {
                 }
             }
             Act::TimerPreset(mins) => {
+                self.timer_task = None;
+                self.break_mode = false;
                 self.timer_total_s = mins * 60;
                 self.timer_left_ms = mins as i64 * 60_000;
                 self.timer_start = Some(Instant::now());
@@ -1052,6 +1177,8 @@ impl App {
                 self.after_timer_change();
             }
             Act::TimerReset => {
+                self.break_mode = false;
+                self.timer_total_s = self.cycle_focus_s;
                 self.timer_start = None;
                 self.timer_left_ms = self.timer_total_s as i64 * 1000;
                 self.after_timer_change();
@@ -1059,7 +1186,24 @@ impl App {
             Act::TodoToggle(i) => {
                 if let Some(t) = self.todos.get_mut(i) {
                     t.done = !t.done;
+                    if t.done {
+                        self.done_today += 1;
+                    } else {
+                        self.done_today = self.done_today.saturating_sub(1);
+                    }
                     store::save_todos(&self.todos);
+                    store::save_focus_today(self.focus_today, self.done_today);
+                }
+            }
+            Act::TodoFocus(i) => {
+                if let Some(t) = self.todos.get(i) {
+                    self.timer_task = Some(t.text.clone());
+                    self.break_mode = false;
+                    self.cycle_focus_s = 25 * 60;
+                    self.timer_total_s = 25 * 60;
+                    self.timer_left_ms = 25 * 60_000;
+                    self.timer_start = Some(Instant::now());
+                    self.after_timer_change();
                 }
             }
             Act::TodoDel(i) => {
@@ -1069,7 +1213,15 @@ impl App {
                 }
             }
             Act::TodoAdd => self.start_entry(),
-            Act::GameFlap => self.game.flap(),
+            Act::GameClick => self.hub.click(),
+            Act::GamePick(k) => {
+                self.hub.pick(k);
+                self.sync_timers();
+            }
+            Act::GameBack => {
+                self.hub.back();
+                self.sync_timers();
+            }
             Act::TimerCustom => {
                 self.start_entry();
                 self.entry_timer = self.entering.is_some();
@@ -1083,9 +1235,13 @@ impl App {
         self.game_last = now;
         match self.page {
             Page::Game => {
-                if self.game.step(dt) {
-                    store::save_game_best(self.game.best);
+                let ox = (EXP_W - crate::game::W) / 2.0;
+                let inp = crate::games::Input { x: self.cursor_x - ox, y: self.cursor_y - 14.0, down: self.mouse_down };
+                let out = self.hub.step(dt, &inp);
+                if out.new_best {
+                    store::save_bests(&self.hub.best);
                 }
+                play_sfx(out.sfx);
             }
             _ => {}
         }
@@ -1100,6 +1256,11 @@ impl App {
     fn timer_done(&mut self) {
         self.timer_start = None;
         self.timer_left_ms = 0;
+        let was_break = self.break_mode;
+        if !was_break {
+            self.focus_today += self.timer_total_s / 60;
+            store::save_focus_today(self.focus_today, self.done_today);
+        }
         alarm_sound();
         self.confetti_start = Some(Instant::now());
         self.buddy_event(crate::buddy::BuddyEv::TimerDone);
@@ -1113,9 +1274,28 @@ impl App {
             // pulse the pill for 30 s (or until it is clicked)
             self.alert_until = Some(Instant::now() + std::time::Duration::from_secs(30));
         }
+        if self.cfg.auto_break {
+            // focus -> 5 minute break -> focus again, until paused or reset
+            if was_break {
+                self.break_mode = false;
+                self.timer_total_s = self.cycle_focus_s;
+            } else {
+                self.cycle_focus_s = self.timer_total_s;
+                self.break_mode = true;
+                self.timer_total_s = 5 * 60;
+            }
+            self.timer_left_ms = self.timer_total_s as i64 * 1000;
+            self.timer_start = Some(Instant::now());
+            self.alert_msg = if was_break { "Back to focus" } else { "Break time" };
+        }
         self.retarget();
         self.sync_timers();
         self.render();
+    }
+
+    pub fn toggle_auto_break(&mut self) {
+        self.cfg.auto_break = !self.cfg.auto_break;
+        store::save_config(&self.cfg);
     }
 
     // ------------------------------------------------------ text entry (todo) --
@@ -1135,6 +1315,7 @@ impl App {
 
     fn start_entry(&mut self) {
         self.entry_timer = false;
+        self.entry_search = false;
         unsafe {
             self.prev_fg = GetForegroundWindow();
         }
@@ -1154,15 +1335,21 @@ impl App {
         };
         self.make_activatable(false);
         let timer = std::mem::take(&mut self.entry_timer);
+        let search = std::mem::take(&mut self.entry_search);
+        if search && !commit {
+            self.clip_filter.clear(); // Esc drops the filter; Enter keeps it
+        }
         if commit && timer {
             let mins = String::from_utf16_lossy(&buf).parse::<u32>().unwrap_or(0).min(600);
             if mins > 0 {
+                self.timer_task = None;
+                self.break_mode = false;
                 self.timer_total_s = mins * 60;
                 self.timer_left_ms = mins as i64 * 60_000;
                 self.timer_start = Some(Instant::now());
                 self.after_timer_change();
             }
-        } else if commit {
+        } else if commit && !search {
             let s = String::from_utf16_lossy(&buf).trim().to_string();
             if !s.is_empty() && self.todos.len() < MAX_TODO {
                 self.todos.push(Todo {
@@ -1178,6 +1365,9 @@ impl App {
             }
         }
         self.prev_fg = HWND::default();
+        if std::mem::take(&mut self.capture_open) {
+            self.set_expanded(false);
+        }
     }
 
     pub fn on_char(&mut self, c: u16) {
@@ -1205,6 +1395,12 @@ impl App {
                 _ => Do::Redraw,
             }
         };
+        if self.entry_search {
+            if let Some(buf) = &self.entering {
+                self.clip_filter = String::from_utf16_lossy(buf);
+                self.clip_scroll = 0;
+            }
+        }
         match d {
             Do::Commit => self.finish_entry(true, true),
             Do::Cancel => self.finish_entry(false, true),
@@ -1292,6 +1488,9 @@ impl App {
         if text.starts_with("http://") || text.starts_with("https://") {
             self.beat_start = Some(Instant::now());
             self.retarget();
+        }
+        if self.pins.contains(&text) {
+            return; // already pinned
         }
         self.clips.retain(|c| *c != text);
         self.clips.insert(0, text);
@@ -1477,6 +1676,23 @@ fn boost(c: Color) -> Color {
 
 /// Three clear tones, independent of the Windows sound scheme (which is often
 /// muted). Runs on its own thread because Beep() blocks for its duration.
+/// Short game sounds, played one batch at a time so they never pile up.
+fn play_sfx(list: Vec<(u32, u32)>) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static BUSY: AtomicBool = AtomicBool::new(false);
+    if list.is_empty() || BUSY.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    std::thread::spawn(move || {
+        for (hz, ms) in list.into_iter().take(3) {
+            unsafe {
+                let _ = Beep(hz.clamp(37, 32_000), ms.clamp(10, 400));
+            }
+        }
+        BUSY.store(false, Ordering::Release);
+    });
+}
+
 fn alarm_sound() {
     std::thread::spawn(|| unsafe {
         for _ in 0..3 {

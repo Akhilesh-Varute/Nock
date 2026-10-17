@@ -102,6 +102,9 @@ pub struct Gfx {
     dib: HBITMAP,
     old: HGDIOBJ,
     pub fonts: Fonts,
+    /// backing bitmap size; only the test snapshot helper reads it
+    #[allow(dead_code)]
+    dims: (i32, i32),
 }
 
 impl Gfx {
@@ -151,7 +154,26 @@ impl Gfx {
                 dib,
                 old,
                 fonts,
+                dims: (max_w, max_h),
             })
+        }
+    }
+
+    /// Test helper: the whole backing bitmap as top-down BGRA (premultiplied), plus its size.
+    #[cfg(test)]
+    pub fn snapshot(&self) -> (i32, i32, Vec<u8>) {
+        unsafe {
+            let (w, h) = self.dims;
+            let mut bmi = BITMAPINFO::default();
+            bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+            bmi.bmiHeader.biWidth = w;
+            bmi.bmiHeader.biHeight = -h;
+            bmi.bmiHeader.biPlanes = 1;
+            bmi.bmiHeader.biBitCount = 32;
+            bmi.bmiHeader.biCompression = BI_RGB.0;
+            let mut buf = vec![0u8; (w * h * 4) as usize];
+            GetDIBits(self.memdc, self.dib, 0, h as u32, Some(buf.as_mut_ptr() as *mut _), &mut bmi, DIB_RGB_COLORS);
+            (w, h, buf)
         }
     }
 
@@ -341,6 +363,23 @@ impl Gfx {
                 self.rt.FillRoundedRectangle(&rr, &bb);
             }
         }
+    }
+
+    /// Run `f` with everything it draws rotated `deg` degrees about (cx, cy).
+    pub fn rotated(&self, cx: f32, cy: f32, deg: f32, f: impl FnOnce()) {
+        let (sn, cs) = deg.to_radians().sin_cos();
+        unsafe {
+            self.rt.SetTransform(&Matrix3x2 {
+                M11: cs,
+                M12: sn,
+                M21: -sn,
+                M22: cs,
+                M31: cx - (cx * cs - cy * sn),
+                M32: cy - (cx * sn + cy * cs),
+            });
+        }
+        f();
+        unsafe { self.rt.SetTransform(&Matrix3x2::identity()) };
     }
 
     /// `draw_bitmap` rotated about the rect's centre (degrees).

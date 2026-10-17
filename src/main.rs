@@ -5,6 +5,8 @@ mod bar;
 mod buddy;
 mod cast;
 mod game;
+mod games;
+mod skins;
 mod pixdata;
 mod scene;
 mod gfx;
@@ -174,6 +176,7 @@ fn main() -> Result<()> {
             a.plan_scene();
             a.sync_stats();
             a.sync_water();
+            a.sync_eyes();
             let mon_w = a.mon.right - a.mon.left;
             a.bar = bar::Bar::new(bar_hwnd, mon_w, a.scale);
             a.pop = pop::Pop::new(pop_hwnd, a.scale);
@@ -185,6 +188,13 @@ fn main() -> Result<()> {
             1,
             MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
             'N' as u32,
+        );
+        // Ctrl+Alt+T: quick-add a to-do from anywhere
+        let _ = RegisterHotKey(
+            Some(hwnd),
+            3,
+            MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
+            'T' as u32,
         );
         let _ = RegisterHotKey(
             Some(hwnd),
@@ -296,10 +306,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
         WM_CLIPBOARDUPDATE => a.on_clipboard(),
         WM_SETTINGCHANGE => a.on_theme_change(),
         WM_HOTKEY => {
-            if wp.0 == 2 {
-                a.toggle_tucked()
-            } else {
-                a.toggle_pinned_open()
+            match wp.0 {
+                2 => a.toggle_tucked(),
+                3 => a.quick_capture(),
+                _ => a.toggle_pinned_open(),
             }
         }
         WM_DPICHANGED => a.on_display_change((wp.0 & 0xffff) as f32 / 96.0),
@@ -388,6 +398,8 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
         let tb = if a.cfg.top_bar { MF_CHECKED } else { MF_UNCHECKED };
         let _ = AppendMenuW(menu, MF_STRING | tb, 7, w!("Top bar"));
         let st = if a.cfg.stats { MF_CHECKED } else { MF_UNCHECKED };
+        let ab = if a.cfg.auto_break { MF_CHECKED } else { MF_UNCHECKED };
+        let _ = AppendMenuW(menu, MF_STRING | ab, 13, w!("Auto break after focus (5 min)"));
         let _ = AppendMenuW(menu, MF_STRING | st, 10, w!("CPU and memory on the bar"));
         let res = if a.cfg.reserve_space { MF_CHECKED } else { MF_UNCHECKED };
         let _ = AppendMenuW(menu, MF_STRING | res, 6, w!("Reserve screen space (when top bar is off)"));
@@ -440,6 +452,14 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             }
             let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Water reminder"));
         }
+        if let Ok(sub) = CreatePopupMenu() {
+            let cur = a.cfg.eye_min;
+            for (i, (mins, name)) in [(0u16, w!("Off")), (20, w!("Every 20 minutes")), (30, w!("Every 30 minutes")), (45, w!("Every 45 minutes"))].into_iter().enumerate() {
+                let m = if cur == mins { MF_CHECKED } else { MF_UNCHECKED };
+                let _ = AppendMenuW(sub, MF_STRING | m, 80 + i, name);
+            }
+            let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Look-away reminder (eyes)"));
+        }
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
         let _ = AppendMenuW(menu, MF_STRING | auto, 1, w!("Start with Windows"));
         let _ = AppendMenuW(menu, MF_STRING, 2, w!("Edit pinned apps"));
@@ -474,10 +494,12 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             6 => a.toggle_reserve(),
             7 => a.toggle_top_bar(),
             10 => a.toggle_stats(),
+            13 => a.toggle_auto_break(),
             4 => sys::open(&store::data_dir().to_string_lossy(), ""),
             20..=29 => a.set_buddy((cmd.0 - 20) as u8),
             30 => a.toggle_scenes(),
             60..=63 => a.set_clock_style((cmd.0 - 60) as u8),
+            80..=83 => a.set_eye_min([0u16, 20, 30, 45][(cmd.0 - 80) as usize]),
             70..=74 => a.set_water_min([0u16, 30, 45, 60, 90][(cmd.0 - 70) as usize]),
             31..=42 => a.play_scene((cmd.0 - 31) as usize),
             9 => {

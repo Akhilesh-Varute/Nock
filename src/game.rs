@@ -2,12 +2,7 @@
 //! The "bird" is the photo buddy's face. Plain physics, stepped from a 60 Hz
 //! timer that only runs while the Game tab is open.
 
-use windows::Win32::Graphics::Direct2D::ID2D1Bitmap;
-
 use crate::gfx::*;
-
-/// The face that flies: cut out from the photo the user chose for the game.
-pub const FACE_PNG: &[u8] = include_bytes!("../assets/game_face.png");
 
 /// Playfield size (logical px).
 pub const W: f32 = 544.0;
@@ -116,7 +111,7 @@ impl Game {
     }
 
     /// Draw the playfield with its top-left corner at (ox, oy).
-    pub fn draw(&self, g: &Gfx, ox: f32, oy: f32, face: Option<&ID2D1Bitmap>, ca: f32) {
+    pub fn draw(&self, g: &Gfx, ox: f32, oy: f32, ca: f32) {
         let f = &g.fonts;
         let field = Rect::new(ox, oy, W, H);
         g.fill_rrect(field, 14.0, Color(0.1, 0.12, 0.2, 0.9 * ca));
@@ -138,13 +133,7 @@ impl Game {
         // bird
         let (bx, by) = (ox + BIRD_X, oy + self.y);
         let tilt = (self.vy / 400.0).clamp(-0.6, 1.0) * 35.0;
-        match face {
-            Some(bmp) => {
-                let (w, h) = (28.0 * 0.8, 28.0);
-                g.draw_bitmap_tilted(bmp, Rect::new(bx - w / 2.0, by - h / 2.0, w, h), tilt);
-            }
-            None => g.fill_circle(bx, by, R + 2.0, Color(1.0, 0.82, 0.25, ca)),
-        }
+        g.rotated(bx, by, tilt * 0.8, || crate::skins::draw(g, bx, by, self.t));
         g.text(
             &self.score.to_string(),
             Rect::new(ox + 18.0, oy + 8.0, 80.0, 36.0),

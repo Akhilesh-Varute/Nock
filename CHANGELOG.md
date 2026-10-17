@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0
+
+- Arcade on the Game tab: Brick Breaker, Slicer, Viking Run and Thor Flight, each with a saved best score.
+- Quick capture: press Ctrl+Alt+T anywhere to add a to-do straight from the keyboard.
+- Focus timer linked to to-dos: start a session on a task, daily focus and tasks-done stats, optional automatic 5 minute breaks (tray menu).
+- Clipboard: pin items (they stay and are saved between runs) and search the history.
+- Look-away reminder for your eyes (20-20-20), set from the tray menu.
+- The Game tab no longer uses a personal photo.
+
 ## 0.5.2
 
 - Media: the notch no longer shows the opposite of what the browser is doing after you pause or resume from a tab (the play/pause state is re-checked shortly after each change).

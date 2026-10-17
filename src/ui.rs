@@ -105,7 +105,13 @@ fn draw_collapsed(a: &App, w: f32, ca: f32) {
 
     if a.alerting() {
         let white = Color(1.0, 1.0, 1.0, ca);
-        if a.alert_msg == "Drink water" {
+        if a.alert_msg == "Look away" {
+            // a drawn eye
+            let (ex, ey) = (w / 2.0 - 50.0, ch / 2.0);
+            g.fill_rrect(Rect::new(ex - 8.0, ey - 5.0, 16.0, 10.0), 5.0, Color(1.0, 1.0, 1.0, ca));
+            g.fill_circle(ex, ey, 3.4, Color(0.25, 0.55, 0.9, ca));
+            g.fill_circle(ex, ey, 1.5, Color(0.0, 0.0, 0.0, ca));
+        } else if a.alert_msg == "Drink water" {
             // a drawn water drop
             let (dx, dy) = (w / 2.0 - 52.0, ch / 2.0 + 1.0);
             g.fill_circle(dx, dy + 2.0, 5.0, Color(0.45, 0.8, 1.0, ca));
@@ -260,8 +266,20 @@ fn draw_expanded(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         Page::Tasks => page_tasks(a, ca, hits),
         Page::Game => {
             let (ox, oy) = ((EXP_W - crate::game::W) / 2.0, 14.0);
-            hits.push(Hit { r: Rect::new(ox, oy, crate::game::W, crate::game::H), act: Act::GameFlap });
-            a.game.draw(g, ox, oy, a.game_face.as_ref(), ca);
+            if a.hub.is_playing() {
+                hits.push(Hit { r: Rect::new(ox, oy, crate::game::W, crate::game::H), act: Act::GameClick });
+                a.hub.draw(g, ox, oy, ca);
+                let r = Rect::new(ox + crate::game::W / 2.0 - 36.0, oy + 3.0, 72.0, 18.0);
+                hits.push(Hit { r, act: Act::GameBack });
+                g.fill_rrect(r, 9.0, (if hot(a, Act::GameBack) { HOVER } else { Color(0.0, 0.0, 0.0, 0.35) }).fade(ca));
+                g.text("\u{2039} Games", r, &f.tiny, T1.fade(ca), Align::Center);
+            } else {
+                let hot_tile = (0..4).find(|i| hot(a, Act::GamePick(*i)));
+                a.hub.draw_hub(g, ox, oy, ca, hot_tile);
+                for (i, r) in crate::games::Hub::tiles(ox, oy).iter().enumerate() {
+                    hits.push(Hit { r: *r, act: Act::GamePick(i) });
+                }
+            }
         }
     }
 
@@ -477,67 +495,82 @@ fn page_controls(a: &App, ca: f32, hits: &mut Vec<Hit>) {
 fn page_clipboard(a: &App, ca: f32, hits: &mut Vec<Hit>) {
     let g = &a.gfx;
     let f = &g.fonts;
+    let view = a.clip_view();
 
-    let head = if a.clips.is_empty() {
+    let total = a.pins.len() + a.clips.len();
+    let head = if total == 0 {
         "Clipboard".to_string()
     } else {
-        format!("Clipboard  \u{00B7}  {}", a.clips.len())
+        format!("Clipboard  \u{00B7}  {}", total)
     };
-    g.text(
-        &head,
-        Rect::new(28.0, 12.0, 300.0, 24.0),
-        &f.small,
-        T3.fade(ca),
-        Align::Left,
-    );
+    g.text(&head, Rect::new(28.0, 12.0, 200.0, 24.0), &f.small, T3.fade(ca), Align::Left);
     if !a.clips.is_empty() {
         let r = Rect::new(EXP_W - 112.0, 12.0, 64.0, 24.0);
-        hits.push(Hit {
-            r,
-            act: Act::ClipClear,
-        });
+        hits.push(Hit { r, act: Act::ClipClear });
         if hot(a, Act::ClipClear) {
             g.fill_rrect(r, 12.0, Color::white(0.10 * ca));
         }
         g.text("Clear", r, &f.small, T2.fade(ca), Align::Center);
     }
+    // search chip: click, type to filter, Enter keeps it, Esc clears it
+    let sr = Rect::new(EXP_W - 252.0, 12.0, 132.0, 24.0);
+    let typing = a.entry_search;
+    if typing || !a.clip_filter.is_empty() {
+        let mut t = a.clip_filter.clone();
+        if typing {
+            t.push('\u{2502}');
+        }
+        g.fill_rrect(sr, 12.0, Color::white(0.14 * ca));
+        g.text(&t, Rect::new(sr.x + 10.0, sr.y, sr.w - 30.0, sr.h), &f.small, T1.fade(ca), Align::Left);
+        if !typing {
+            let x = Rect::new(sr.x + sr.w - 24.0, sr.y, 24.0, sr.h);
+            hits.push(Hit { r: sr, act: Act::ClipSearch });
+            hits.push(Hit { r: x, act: Act::ClipSearchClear });
+            g.icon('\u{E711}', x, &f.icon14, (if hot(a, Act::ClipSearchClear) { T1 } else { T2 }).fade(ca));
+        }
+    } else {
+        hits.push(Hit { r: sr, act: Act::ClipSearch });
+        if hot(a, Act::ClipSearch) {
+            g.fill_rrect(sr, 12.0, Color::white(0.10 * ca));
+        }
+        g.icon('\u{E721}', Rect::new(sr.x + 4.0, sr.y, 24.0, sr.h), &f.icon14, T3.fade(ca));
+        g.text("Search", Rect::new(sr.x + 30.0, sr.y, sr.w - 34.0, sr.h), &f.small, T3.fade(ca), Align::Left);
+    }
 
-    if a.clips.is_empty() {
-        g.text(
-            "Copy something and it will appear here.",
-            Rect::new(0.0, 80.0, EXP_W, 24.0),
-            &f.body,
-            T3.fade(ca),
-            Align::Center,
-        );
-        g.text(
-            "Click an item to paste it into the app you were using.",
-            Rect::new(0.0, 104.0, EXP_W, 20.0),
-            &f.small,
-            T3.fade(ca * 0.8),
-            Align::Center,
-        );
+    if view.is_empty() {
+        let (l1, l2) = if a.clip_filter.is_empty() {
+            ("Copy something and it will appear here.", "Click an item to paste it. Click the star to pin it as a saved snippet.")
+        } else {
+            ("No matches.", "Press Esc in the search box to clear the filter.")
+        };
+        g.text(l1, Rect::new(0.0, 80.0, EXP_W, 24.0), &f.body, T3.fade(ca), Align::Center);
+        g.text(l2, Rect::new(0.0, 104.0, EXP_W, 20.0), &f.small, T3.fade(ca * 0.8), Align::Center);
         return;
     }
 
     for row in 0..CLIP_ROWS {
         let idx = a.clip_scroll + row;
-        let Some(text) = a.clips.get(idx) else { break };
+        let Some((text, pinned)) = view.get(idx) else { break };
         let r = Rect::new(24.0, 40.0 + row as f32 * 31.0, EXP_W - 48.0, 28.0);
         let act = Act::ClipItem(idx);
         hits.push(Hit { r, act });
-        if hot(a, act) {
+        let pin = Rect::new(r.x + r.w - 32.0, r.y, 30.0, r.h);
+        let pact = Act::ClipPin(idx);
+        hits.push(Hit { r: pin, act: pact });
+        if hot(a, act) || hot(a, pact) {
             g.fill_rrect(r, 10.0, Color::white(0.12 * ca));
         } else if row % 2 == 0 {
             g.fill_rrect(r, 10.0, Color::white(0.04 * ca));
         }
-        g.text(
-            &preview(text),
-            Rect::new(r.x + 14.0, r.y, r.w - 28.0, r.h),
-            &f.body,
-            T1.fade(ca),
-            Align::Left,
-        );
+        g.text(&preview(text), Rect::new(r.x + 14.0, r.y, r.w - 52.0, r.h), &f.body, T1.fade(ca), Align::Left);
+        let (glyph, col) = if *pinned {
+            ('\u{E735}', a.accent)
+        } else if hot(a, pact) {
+            ('\u{E734}', T1)
+        } else {
+            ('\u{E734}', T3)
+        };
+        g.icon(glyph, pin, &f.icon14, col.fade(ca * if *pinned || hot(a, act) || hot(a, pact) { 1.0 } else { 0.6 }));
     }
 }
 
@@ -634,10 +667,25 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
     let f = &g.fonts;
 
     // ---- focus timer
+    let title = if a.break_mode {
+        "Break".to_string()
+    } else if let Some(t) = &a.timer_task {
+        let short: String = t.chars().take(20).collect();
+        format!("Focus \u{00B7} {short}")
+    } else {
+        "Focus timer".to_string()
+    };
     g.text(
-        "Focus timer",
-        Rect::new(28.0, 12.0, 170.0, 22.0),
+        &title,
+        Rect::new(28.0, 12.0, 185.0, 22.0),
         &f.small,
+        (if a.break_mode { a.accent } else { T3 }).fade(ca),
+        Align::Left,
+    );
+    g.text(
+        &format!("Today: {} min focus \u{00B7} {} done", a.focus_today, a.done_today),
+        Rect::new(28.0, 176.0, 190.0, 16.0),
+        &f.tiny,
         T3.fade(ca),
         Align::Left,
     );
@@ -742,6 +790,10 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         let row = Rect::new(tx, y, tw, 26.0);
         let cb = Rect::new(tx, y, 26.0, 26.0);
         let del = Rect::new(tx + tw - 24.0, y, 24.0, 26.0);
+        let fb = Rect::new(tx + tw - 50.0, y, 24.0, 26.0);
+        if !t.done {
+            hits.push(Hit { r: fb, act: Act::TodoFocus(i) });
+        }
         hits.push(Hit {
             r: cb,
             act: Act::TodoToggle(i),
@@ -750,7 +802,7 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
             r: del,
             act: Act::TodoDel(i),
         });
-        let over = hot(a, Act::TodoToggle(i)) || hot(a, Act::TodoDel(i));
+        let over = hot(a, Act::TodoToggle(i)) || hot(a, Act::TodoDel(i)) || hot(a, Act::TodoFocus(i));
         if over {
             g.fill_rrect(row, 9.0, Color::white(0.07 * ca));
         }
@@ -759,11 +811,19 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         g.icon(glyph, cb, &f.icon14, gc.fade(ca));
         g.text(
             &t.text,
-            Rect::new(tx + 30.0, y, tw - 30.0 - 26.0, 26.0),
+            Rect::new(tx + 30.0, y, tw - 30.0 - 52.0, 26.0),
             &f.small,
             (if t.done { T3 } else { T1 }).fade(ca),
             Align::Left,
         );
+        if !t.done {
+            g.icon(
+                '\u{E768}',
+                fb,
+                &f.icon14,
+                (if hot(a, Act::TodoFocus(i)) { a.accent } else { T3 }).fade(ca * if over { 1.0 } else { 0.0 }),
+            );
+        }
         g.icon(
             '\u{E711}',
             del,

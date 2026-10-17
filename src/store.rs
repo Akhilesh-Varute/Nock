@@ -54,6 +54,10 @@ pub struct Config {
     pub clock_style: u8,
     /// Minutes between water reminders (0 = off).
     pub water_min: u16,
+    /// After a focus session, start a 5 minute break, then focus again.
+    pub auto_break: bool,
+    /// Minutes between look-away (20-20-20) reminders; 0 = off.
+    pub eye_min: u16,
 }
 
 const DEFAULT_CONFIG: &str = "\
@@ -75,6 +79,10 @@ stats=0
 clock_style=0
 # minutes between water reminders (0 = off)
 water_min=0
+# after a focus session start a 5 minute break, then focus again: 1 = on
+auto_break=0
+# minutes between look-away reminders for your eyes (0 = off)
+eye_min=0
 ";
 
 pub fn load_config() -> Config {
@@ -98,6 +106,8 @@ pub fn load_config() -> Config {
         stats: false,
         clock_style: 0,
         water_min: 0,
+        auto_break: false,
+        eye_min: 0,
     };
     for line in text.lines() {
         let line = line.trim();
@@ -114,6 +124,8 @@ pub fn load_config() -> Config {
                 "top_bar" => cfg.top_bar = on,
                 "scenes" => cfg.scenes = on,
                 "stats" => cfg.stats = on,
+                "auto_break" => cfg.auto_break = on,
+                "eye_min" => cfg.eye_min = v.trim().parse::<u16>().unwrap_or(0).min(600),
                 "clock_style" => cfg.clock_style = v.trim().parse::<u8>().unwrap_or(0).min(3),
                 "water_min" => cfg.water_min = v.trim().parse::<u16>().unwrap_or(0).min(600),
                 "scene_min" => cfg.scene_min = v.trim().parse::<u8>().unwrap_or(5).clamp(1, 60),
@@ -124,7 +136,7 @@ pub fn load_config() -> Config {
     }
     // A config file from an older version lacks the newer settings: write the
     // file back with every setting present (keeping the user's values).
-    let keys = ["hover_expand", "eq_animation", "clock_24h", "reserve_space", "top_bar", "buddy", "scenes", "scene_min", "stats", "clock_style", "water_min"];
+    let keys = ["hover_expand", "eq_animation", "clock_24h", "reserve_space", "top_bar", "buddy", "scenes", "scene_min", "stats", "clock_style", "water_min", "auto_break", "eye_min"];
     let present = |k: &str| text.lines().any(|l| l.trim().split_once('=').map(|(a, _)| a.trim() == k).unwrap_or(false));
     if keys.iter().any(|k| !present(k)) {
         save_config(&cfg);
@@ -135,7 +147,7 @@ pub fn load_config() -> Config {
 pub fn save_config(c: &Config) {
     let b = |v: bool| if v { 1 } else { 0 };
     let text = format!(
-        "# Nock settings (1 = on, 0 = off)\nhover_expand={}\neq_animation={}\nclock_24h={}\nreserve_space={}\ntop_bar={}\n# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer\nbuddy={}\n# fight scenes now and then (needs a buddy): 1 = on\nscenes={}\n# average minutes between scenes (1 to 60)\nscene_min={}\n# CPU and memory read-out on the top bar: 1 = on\nstats={}\n# top bar clock: 0 = digital, 1 = analog, 2 = binary, 3 = countdown to Friday\nclock_style={}\n# minutes between water reminders (0 = off)\nwater_min={}\n",
+        "# Nock settings (1 = on, 0 = off)\nhover_expand={}\neq_animation={}\nclock_24h={}\nreserve_space={}\ntop_bar={}\n# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer\nbuddy={}\n# fight scenes now and then (needs a buddy): 1 = on\nscenes={}\n# average minutes between scenes (1 to 60)\nscene_min={}\n# CPU and memory read-out on the top bar: 1 = on\nstats={}\n# top bar clock: 0 = digital, 1 = analog, 2 = binary, 3 = countdown to Friday\nclock_style={}\n# minutes between water reminders (0 = off)\nwater_min={}\n# after a focus session start a 5 minute break, then focus again: 1 = on\nauto_break={}\n# minutes between look-away reminders for your eyes (0 = off)\neye_min={}\n",
         b(c.hover_expand),
         b(c.eq_animation),
         b(c.clock_24h),
@@ -146,7 +158,9 @@ pub fn save_config(c: &Config) {
         c.scene_min,
         b(c.stats),
         c.clock_style,
-        c.water_min
+        c.water_min,
+        b(c.auto_break),
+        c.eye_min
     );
     let _ = fs::write(data_dir().join("config.ini"), text);
 }
@@ -221,16 +235,87 @@ pub fn load_todos() -> Vec<Todo> {
         .collect()
 }
 
+fn today_key() -> String {
+    let (y, m, d, ..) = crate::sys::local_time();
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
+/// (focus minutes, tasks finished) for today; resets itself on a new day.
+pub fn load_focus_today() -> (u32, u32) {
+    let text = fs::read_to_string(data_dir().join("focus_today.txt")).unwrap_or_default();
+    let mut it = text.trim().split('|');
+    if it.next() != Some(today_key().as_str()) {
+        return (0, 0);
+    }
+    let mins = it.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+    let done = it.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+    (mins, done)
+}
+
+pub fn save_focus_today(mins: u32, done: u32) {
+    let _ = fs::write(data_dir().join("focus_today.txt"), format!("{}|{mins}|{done}", today_key()));
+}
+
+/// One pinned item <-> one line of text: newlines and backslashes are escaped.
+fn pin_escape(p: &str) -> String {
+    p.replace('\\', "\\\\").replace('\n', "\\n").replace('\r', "\\r")
+}
+
+fn pin_unescape(l: &str) -> String {
+    let mut out = String::new();
+    let mut chars = l.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some('n') => out.push('\n'),
+                Some('r') => out.push('\r'),
+                Some(o) => out.push(o),
+                None => {}
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// Pinned clipboard items (they double as saved snippets) survive restarts.
+pub fn load_pins() -> Vec<String> {
+    fs::read_to_string(data_dir().join("pinned_clips.txt"))
+        .unwrap_or_default()
+        .lines()
+        .map(pin_unescape)
+        .filter(|s| !s.trim().is_empty())
+        .collect()
+}
+
+pub fn save_pins(pins: &[String]) {
+    let text: Vec<String> = pins.iter().map(|p| pin_escape(p)).collect();
+    let _ = fs::write(data_dir().join("pinned_clips.txt"), text.join("\n"));
+}
+
+/// Best scores of the four notch games (flight, bricks, slicer, run). The flying
+/// game's old single-score file is read once if the new one is missing.
+pub fn load_bests() -> [u32; 4] {
+    let text = fs::read_to_string(data_dir().join("games_best.txt")).unwrap_or_default();
+    let v: Vec<u32> = text.trim().split('|').filter_map(|p| p.parse().ok()).collect();
+    if v.len() == 4 {
+        [v[0], v[1], v[2], v[3]]
+    } else {
+        [load_game_best(), 0, 0, 0]
+    }
+}
+
+pub fn save_bests(b: &[u32; 4]) {
+    let _ = fs::write(data_dir().join("games_best.txt"), format!("{}|{}|{}|{}", b[0], b[1], b[2], b[3]));
+}
+
 /// Best score of the notch mini game.
 pub fn load_game_best() -> u32 {
     fs::read_to_string(data_dir().join("game_best.txt"))
         .ok()
         .and_then(|s| s.trim().parse().ok())
         .unwrap_or(0)
-}
-
-pub fn save_game_best(n: u32) {
-    let _ = fs::write(data_dir().join("game_best.txt"), n.to_string());
 }
 
 pub fn save_todos(todos: &[Todo]) {
@@ -241,4 +326,18 @@ pub fn save_todos(todos: &[Todo]) {
         s.push('\n');
     }
     let _ = fs::write(data_dir().join("todos.txt"), s);
+}
+
+#[cfg(test)]
+mod pin_tests {
+    use super::*;
+
+    #[test]
+    fn pins_survive_multiline_and_backslashes() {
+        for t in ["plain", "two\nlines", r"C:\Users\me\file.txt", "tab\there\r\nwindows", r"ends with \"] {
+            let one_line = pin_escape(t);
+            assert!(!one_line.contains('\n') && !one_line.contains('\r'));
+            assert_eq!(pin_unescape(&one_line), t);
+        }
+    }
 }
