@@ -36,6 +36,8 @@ pub enum Who {
     Owl,
     Snitch,
     Dementor,
+    // the games' hero (see skins.rs)
+    Thor,
 }
 
 impl Who {
@@ -67,6 +69,8 @@ pub enum Act {
     Throw,
     #[allow(dead_code)]
     Crouch,
+    /// flying forward, nearly horizontal (the flight game)
+    Fly,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -339,6 +343,17 @@ fn pose(act: Act, p: f32, t: f32, who: Who) -> Sk {
             s.leg_b = (-0.5, 0.1);
             s.face = Face::Shout;
         }
+        Act::Fly => {
+            let fl = (t * 14.0).sin() * 0.12;
+            s.lean = 1.28;
+            s.head = -0.95;
+            s.arm_f = (1.62, 0.1);
+            s.arm_b = (1.2 + fl, 0.35);
+            s.leg_f = (-1.38 + fl, 0.3);
+            s.leg_b = (-1.55 - fl, 0.1);
+            s.weap = 1.45;
+            s.face = Face::Shout;
+        }
         Act::Crouch => {
             s.leg_f = (0.95, -1.5);
             s.leg_b = (-0.2, -1.2);
@@ -373,6 +388,7 @@ fn spec(who: Who) -> Spec {
         Who::Hermione => Spec { h: 30.0, hr: 5.2, t: 0.30, hw: 2.7, sw: 3.3, th: 2.7, ath: 2.5 },
         Who::Ron => Spec { h: 33.0, hr: 5.4, t: 0.30, hw: 3.0, sw: 3.7, th: 2.9, ath: 2.7 },
         Who::Dumbledore => Spec { h: 36.0, hr: 5.6, t: 0.31, hw: 3.4, sw: 4.0, th: 3.1, ath: 2.9 },
+        Who::Thor => Spec { h: 34.0, hr: 6.2, t: 0.30, hw: 3.5, sw: 5.0, th: 3.8, ath: 3.5 },
         Who::Voldemort => Spec { h: 36.0, hr: 5.3, t: 0.31, hw: 2.6, sw: 3.4, th: 2.5, ath: 2.3 },
         _ => Spec { h: 30.0, hr: 5.0, t: 0.3, hw: 3.0, sw: 4.0, th: 3.0, ath: 3.0 },
     }
@@ -451,6 +467,11 @@ fn torso_quad(j: &J, hw: f32, sw: f32) -> [V; 4] {
 /// Draw one actor. Shadow first, then a thin dark outline (so it reads on any
 /// window behind it), then the figure itself.
 pub fn draw_actor(g: &Gfx, d: &Draw) {
+    draw_actor_k(g, d, K);
+}
+
+/// Same as `draw_actor` at another size (the games draw bigger than the top bar).
+pub fn draw_actor_k(g: &Gfx, d: &Draw, k: f32) {
     if let Some(id) = d.who.pixel_id() {
         draw_pixel(g, d, id);
         return;
@@ -458,23 +479,26 @@ pub fn draw_actor(g: &Gfx, d: &Draw) {
     let sk = pose(d.act, d.p, d.t, d.who);
     let sp = spec(d.who);
     let j = solve(&sk, &sp);
-    g.fill_rrect(
-        Rect::new(d.x - sp.h * 0.2 * K, d.y - 1.0, sp.h * 0.4 * K, 2.2),
-        1.1,
-        ca(0.0, 0.0, 0.0, 0.28),
-    );
+    if d.act != Act::Fly {
+        g.fill_rrect(
+            Rect::new(d.x - sp.h * 0.2 * k, d.y - 1.0, sp.h * 0.4 * k, 2.2),
+            1.1,
+            ca(0.0, 0.0, 0.0, 0.28),
+        );
+    }
     let sil = ca(0.04, 0.04, 0.07, 0.55);
     for (ox, oy) in [(-0.8, 0.0), (0.8, 0.0), (0.0, -0.8), (0.0, 0.8)] {
-        let cx = Ctx { g, x: d.x + ox, y: d.y + oy, d: d.dir, k: K, sil: Some(sil) };
+        let cx = Ctx { g, x: d.x + ox, y: d.y + oy, d: d.dir, k, sil: Some(sil) };
         body(&cx, d, &sk, &sp, &j);
     }
-    let cx = Ctx { g, x: d.x, y: d.y, d: d.dir, k: K, sil: None };
+    let cx = Ctx { g, x: d.x, y: d.y, d: d.dir, k, sil: None };
     body(&cx, d, &sk, &sp, &j);
 }
 
 fn body(cx: &Ctx, d: &Draw, sk: &Sk, sp: &Spec, j: &J) {
     match d.who {
         Who::Spark => spark(cx, d, sk, sp, j),
+        Who::Thor => thor(cx, d, sk, sp, j),
         Who::Cinder => cinder(cx, d, sk, sp, j),
         Who::Krag => krag(cx, d, sk, sp, j),
         Who::Veil => veil(cx, d, sk, sp, j),
@@ -601,6 +625,118 @@ fn spark(cx: &Ctx, d: &Draw, sk: &Sk, sp: &Spec, j: &J) {
     if d.charge > 0.0 || d.act == Act::Cast {
         cx.circ(j.h_f, 3.6, ca(0.6, 0.95, 1.0, 0.35));
         cx.circ(j.h_f, 2.0, ca(1.0, 1.0, 1.0, 0.8));
+    }
+}
+
+fn thor(cx: &Ctx, d: &Draw, sk: &Sk, sp: &Spec, j: &J) {
+    let t = d.t;
+    let skin = c(0.98, 0.78, 0.62);
+    let hair = c(0.86, 0.60, 0.22);
+    let tun = c(0.20, 0.40, 0.74);
+    let tund = c(0.12, 0.26, 0.52);
+    let cape = c(0.80, 0.12, 0.16);
+    let caped = c(0.52, 0.07, 0.12);
+    let gold = c(0.98, 0.78, 0.28);
+    let iron = c(0.78, 0.82, 0.90);
+    let irond = c(0.46, 0.50, 0.60);
+    let pant = c(0.30, 0.22, 0.17);
+    let boot = c(0.42, 0.27, 0.16);
+    let ink = c(0.12, 0.10, 0.14);
+    let (hc, hr) = (j.head, j.hr);
+    let (sh, hip) = (j.sh, j.hip);
+
+    // cape streaming behind, with a rippling hem
+    let rip = (t * 8.0).sin();
+    let back = 13.0 + 9.0 * sk.lean.abs().min(1.4);
+    let tip = (sh.0 - back + rip * 1.5, hip.1 + 3.0 - sk.lean * 3.0 + (t * 6.0).cos());
+    let low = (hip.0 - back * 0.55, hip.1 + 5.0 + rip);
+    cx.poly(&[(sh.0 - 0.5, sh.1 - 2.2), (sh.0 + 1.2, sh.1 + 1.5), low, tip, ((sh.0 + tip.0) / 2.0, sh.1 - 2.8 + rip * 0.8)], caped);
+    cx.poly(&[(sh.0 - 0.5, sh.1 - 2.0), (sh.0 + 0.8, sh.1 + 0.8), ((low.0 + sh.0) / 2.0, low.1 - 1.6), (tip.0 + 3.0, tip.1 - 0.8), ((sh.0 + tip.0) / 2.0 + 1.5, sh.1 - 2.2)], cape);
+    // back arm and leg
+    cx.limb(j.sh, j.e_b, sp.ath, dim(tund, 0.9));
+    cx.limb(j.e_b, j.h_b, sp.ath - 0.3, dim(skin, 0.8));
+    cx.limb(j.hip, j.k_b, sp.th, dim(pant, 0.8));
+    cx.limb(j.k_b, j.f_b, sp.th - 0.1, dim(boot, 0.8));
+    cx.circ((j.f_b.0 + 2.2, j.f_b.1 + 0.5), 2.2, dim(boot, 0.7));
+    // torso: blue tunic, silver chest plate, gold belt
+    cx.poly(&torso_quad(j, sp.hw, sp.sw), tun);
+    let q = torso_quad(j, sp.hw * 0.8, sp.sw * 0.95);
+    let m = |a: V, b: V| ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
+    let (m12, m03) = (m(q[1], q[2]), m(q[0], q[3]));
+    cx.poly(&[m03, m12, q[2], q[3]], iron);
+    cx.line(m(m03, q[3]), m(m12, q[2]), 0.9, irond);
+    cx.circ(m(m(m03, q[3]), m(m12, q[2])), 1.4, gold);
+    cx.line((hip.0 - sp.hw, hip.1 - 0.6), (hip.0 + sp.hw, hip.1 + 0.6), 1.9, gold);
+    // front leg
+    cx.limb(j.hip, j.k_f, sp.th, pant);
+    cx.limb(j.k_f, j.f_f, sp.th - 0.1, boot);
+    cx.circ(j.k_f, 1.9, irond);
+    cx.circ((j.f_f.0 + 2.4, j.f_f.1 + 0.5), 2.4, boot);
+    cx.circ(j.f_f, 2.6, boot);
+    // head: braid, face, beard, winged helm
+    cx.line((hc.0 - hr * 0.7, hc.1 + hr * 0.1), (hc.0 - hr * 1.6, hc.1 + hr * 1.5 + rip * 0.4), 1.8, hair);
+    cx.circ(hc, hr, skin);
+    cx.poly(
+        &[
+            (hc.0 + hr * 1.0, hc.1 + hr * 0.0),
+            (hc.0 + hr * 0.95, hc.1 + hr * 1.05),
+            (hc.0 + hr * 0.25, hc.1 + hr * 1.75),
+            (hc.0 - hr * 0.7, hc.1 + hr * 0.85),
+            (hc.0 - hr * 0.2, hc.1 + hr * 0.15),
+        ],
+        hair,
+    );
+    cx.circ((hc.0 + hr * 0.55, hc.1 + hr * 0.5), hr * 0.32, skin); // mouth gap
+    let hcap = (hc.0 - hr * 0.05, hc.1 - hr * 0.3);
+    cx.circ(hcap, hr * 1.02, iron);
+    cx.poly(&[(hc.0 - hr * 1.0, hc.1 - hr * 0.15), (hc.0 + hr * 1.05, hc.1 - hr * 0.2), (hc.0 + hr * 1.05, hc.1 + hr * 0.12), (hc.0 - hr * 1.0, hc.1 + hr * 0.12)], irond);
+    cx.line((hc.0, hc.1 - hr * 1.2), (hc.0, hc.1 - hr * 0.2), 0.9, irond);
+    // two curled horns
+    for (sx, up) in [(-0.95f32, -1.0f32), (0.9, -0.9)] {
+        let base = (hc.0 + hr * sx, hc.1 - hr * 0.55);
+        let mid = (base.0 + sx * hr * 0.65, base.1 - hr * 0.55);
+        let end = (mid.0 + sx * hr * 0.15, mid.1 + up * hr * 0.75);
+        cx.line(base, mid, 2.4, c(0.96, 0.94, 0.84));
+        cx.line(mid, end, 1.5, c(0.96, 0.94, 0.84));
+    }
+    let (ex, ey) = (hc.0 + hr * 0.5, hc.1 + hr * 0.05);
+    match sk.face {
+        Face::Hurt => {
+            cx.line((ex - 1.1, ey - 0.6), (ex + 1.0, ey + 0.6), 0.8, ink);
+            cx.line((ex - 1.1, ey + 0.6), (ex + 1.0, ey - 0.6), 0.8, ink);
+        }
+        Face::Grin => {
+            cx.line((ex - 1.3, ey + 0.5), (ex, ey - 0.6), 0.9, ink);
+            cx.line((ex, ey - 0.6), (ex + 1.3, ey + 0.5), 0.9, ink);
+        }
+        _ => {
+            cx.circ((ex, ey), 1.35, c(1.0, 1.0, 1.0));
+            cx.circ((ex + 0.35, ey), 0.8, c(0.25, 0.55, 0.9));
+            cx.circ((ex + 0.4, ey), 0.4, ink);
+            cx.line((ex - 1.5, ey - 1.7), (ex + 1.6, ey - 1.2), 0.9, hair);
+        }
+    }
+    // front arm and the hammer
+    cx.circ(j.sh, 2.9, iron);
+    cx.limb(j.sh, j.e_f, sp.ath, tund);
+    cx.limb(j.e_f, j.h_f, sp.ath - 0.3, skin);
+    cx.line((j.e_f.0 + (j.h_f.0 - j.e_f.0) * 0.45, j.e_f.1 + (j.h_f.1 - j.e_f.1) * 0.45), j.h_f, sp.ath, gold);
+    let w = sk.weap;
+    let hf = j.h_f;
+    let (dx, dy) = (w.sin(), w.cos());
+    let (px, py) = (dy, -dx);
+    let end = (hf.0 + dx * 11.0, hf.1 + dy * 11.0);
+    cx.line((hf.0 - dx * 2.0, hf.1 - dy * 2.0), end, 1.7, c(0.45, 0.30, 0.18));
+    let hd = |a: f32, b: f32| (end.0 + dx * a + px * b, end.1 + dy * a + py * b);
+    cx.poly(&[hd(-3.0, -5.2), hd(3.0, -5.2), hd(3.0, 5.2), hd(-3.0, 5.2)], irond);
+    cx.poly(&[hd(-2.0, -4.4), hd(2.4, -4.4), hd(2.4, 4.4), hd(-2.0, 4.4)], iron);
+    cx.line(hd(-0.2, -4.4), hd(-0.2, 4.4), 0.9, irond);
+    if d.act == Act::Fly || d.charge > 0.0 {
+        // lightning crackling off the hammer
+        let z = (t * 18.0).sin();
+        cx.line(hd(3.0, 5.0), hd(7.0, 7.5 + z), 0.9, c(0.7, 0.9, 1.0));
+        cx.line(hd(3.0, -5.0), hd(8.0, -6.5 - z), 0.9, c(0.7, 0.9, 1.0));
+        cx.circ(hd(0.0, 0.0), 6.0, ca(0.6, 0.85, 1.0, 0.18));
     }
 }
 
@@ -1212,7 +1348,7 @@ fn draw_pixel(g: &Gfx, d: &Draw, id: u8) {
                 flash = 0.65;
             }
         }
-        Act::Jump => {
+        Act::Jump | Act::Fly => {
             legs = 4;
             arms = 5;
         }

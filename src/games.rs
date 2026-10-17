@@ -1177,6 +1177,7 @@ impl Hub {
 
     pub fn draw_hub(&self, g: &Gfx, ox: f32, oy: f32, ca: f32, hot: Option<usize>) {
         let f = &g.fonts;
+        let hub_t = 0.35; // the hub is still, so the heroes are frozen mid-stride
         g.fill_rrect(Rect::new(ox, oy, W, H), 14.0, Color(0.05, 0.06, 0.11, 0.95 * ca));
         for (i, r) in Self::tiles(ox, oy).iter().enumerate() {
             let on = hot == Some(i);
@@ -1186,20 +1187,43 @@ impl Hub {
             }
             let (cx, cy) = (r.x + r.w / 2.0, r.y + 46.0);
             match i {
-                0 => crate::skins::draw(g, cx - 4.0, cy, 0.0),
+                0 => crate::skins::draw_k(g, cx - 4.0, cy + 2.0, hub_t, crate::skins::HUB_K),
                 1 => {
-                    for k in 0..3 {
-                        g.fill_rrect(Rect::new(cx - 33.0 + k as f32 * 23.0, cy - 22.0, 20.0, 8.0), 2.0, [Color(1.0, 0.35, 0.5, 1.0), Color(1.0, 0.8, 0.3, 1.0), Color(0.4, 0.9, 0.5, 1.0)][k].fade(ca));
+                    // two rows of glossy bricks, a glowing ball with a trail, a glossy paddle
+                    let cols = [Color(1.0, 0.35, 0.5, 1.0), Color(1.0, 0.8, 0.3, 1.0), Color(0.4, 0.9, 0.5, 1.0), Color(0.4, 0.75, 1.0, 1.0)];
+                    for row in 0..2 {
+                        for k in 0..4 {
+                            let br = Rect::new(cx - 46.0 + k as f32 * 24.0, cy - 26.0 + row as f32 * 11.0, 22.0, 9.0);
+                            g.fill_rrect(br, 3.0, cols[(k + row) % 4].fade(ca));
+                            g.fill_rrect(Rect::new(br.x + 2.0, br.y + 1.0, br.w - 4.0, 2.5), 1.2, Color::white(0.35 * ca));
+                        }
                     }
-                    g.fill_circle(cx + 6.0, cy + 4.0, 4.0, Color::white(ca));
-                    g.fill_rrect(Rect::new(cx - 20.0, cy + 18.0, 40.0, 6.0), 3.0, Color(0.88, 0.96, 1.0, ca));
+                    for k in 0..4 {
+                        g.fill_circle(cx + 14.0 - k as f32 * 5.0, cy + 6.0 + k as f32 * 4.5, 3.2 - k as f32 * 0.6, Color::white(0.28 * ca / (k as f32 + 1.0)));
+                    }
+                    g.fill_circle(cx + 14.0, cy + 6.0, 7.0, Color(0.7, 0.85, 1.0, 0.22 * ca));
+                    g.fill_circle(cx + 14.0, cy + 6.0, 4.0, Color::white(ca));
+                    g.fill_rrect(Rect::new(cx - 24.0, cy + 22.0, 48.0, 7.0), 3.5, Color(0.55, 0.78, 1.0, ca));
+                    g.fill_rrect(Rect::new(cx - 20.0, cy + 23.0, 40.0, 2.4), 1.2, Color::white(0.6 * ca));
                 }
                 2 => {
-                    g.fill_circle(cx - 14.0, cy + 2.0, 13.0, FRUIT[0].0.fade(ca));
-                    g.fill_circle(cx + 16.0, cy - 6.0, 11.0, FRUIT[2].0.fade(ca));
-                    g.line((cx - 34.0, cy + 20.0), (cx + 34.0, cy - 22.0), 2.4, Color(0.8, 0.97, 1.0, ca));
+                    // a fruit cut in two with juice and a bright slash
+                    let (lc, _) = FRUIT[0];
+                    g.fill_circle(cx - 18.0, cy + 8.0, 13.5, lc.fade(ca));
+                    g.fill_circle(cx - 18.0, cy + 8.0, 10.0, Color(1.0, 0.82, 0.45, ca));
+                    g.fill_circle(cx - 20.0, cy + 5.0, 3.0, Color::white(0.45 * ca));
+                    g.fill_circle(cx + 18.0, cy - 6.0, 12.0, FRUIT[2].0.fade(ca));
+                    g.fill_circle(cx + 18.0, cy - 6.0, 8.5, Color(0.85, 1.0, 0.7, ca));
+                    for k in 0..6 {
+                        let a = k as f32 * 1.05;
+                        g.fill_circle(cx + 18.0 + a.cos() * 5.0, cy - 6.0 + a.sin() * 5.0, 1.0, Color(0.15, 0.4, 0.2, 0.6 * ca));
+                    }
+                    g.line((cx - 40.0, cy + 26.0), (cx + 40.0, cy - 26.0), 5.0, Color(0.6, 0.9, 1.0, 0.25 * ca));
+                    g.line((cx - 40.0, cy + 26.0), (cx + 40.0, cy - 26.0), 2.2, Color::white(ca));
+                    g.fill_circle(cx + 2.0, cy - 2.0, 1.6, Color(1.0, 0.7, 0.3, 0.9 * ca));
+                    g.fill_circle(cx - 3.0, cy + 3.0, 1.2, Color(1.0, 0.55, 0.3, 0.8 * ca));
                 }
-                _ => crate::skins::draw_run(g, cx, cy + 22.0, 0.35, false, 0.0),
+                _ => crate::skins::draw_run_k(g, cx, cy + 30.0, 0.6, false, crate::skins::HUB_K),
             }
             g.text(NAMES[i], Rect::new(r.x, r.y + 82.0, r.w, 24.0), &f.body, Color::white(0.95 * ca), Align::Center);
             let b = self.best[i];
