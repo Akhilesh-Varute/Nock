@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.0
+
+- Installer: `NockSetup-<version>.exe` installs Nock just for you (no admin rights), adds it to the Start menu, can start it with Windows, and uninstalls from Windows Settings. The plain `nock.exe` is still published too.
+- Apps tab: add apps without editing a file. Click "+ Add app", search your installed apps, click one to pin it, and use the small x to unpin. Shows a spinner while the list loads, with a "Try again" if it takes too long.
+- Nock now has its own icon and file details in Explorer instead of the generic Windows icon.
+- Nock adds itself to the Start menu so Windows search finds it ("Show in Start menu and search" in the tray menu turns it off).
+
 ## 0.7.1
 
 - Controls: removed the Wi-Fi, Bluetooth, Dark mode and Night light tiles (the top bar and Windows' quick settings cover them). The page is now shortcuts: Screenshot, Display, Sound, Network, Power & battery and All settings.
