@@ -13,6 +13,9 @@ const T3: Color = Color::white(0.38);
 const SURF: Color = Color::white(0.09);
 const HOVER: Color = Color::white(0.17);
 
+/// How far the page area sits below the top of the open panel (the tab row is above it).
+pub const CONTENT_Y: f32 = 40.0;
+
 pub fn draw(a: &App, w: f32, h: f32, hits: &mut Vec<Hit>) {
     let g = &a.gfx;
     let t = a.t_expand();
@@ -229,41 +232,52 @@ fn draw_expanded(a: &App, ca: f32, hits: &mut Vec<Hit>) {
     let g = &a.gfx;
     let f = &g.fonts;
 
-    // chrome: pin (left) and collapse chevron (right), on the tab-bar row so
-    // they never sit on top of a page's title text
-    let chrome_y = EXP_H - 43.0;
-    let pin = Rect::new(14.0, chrome_y, 30.0, 26.0);
-    hits.push(Hit {
-        r: pin,
-        act: Act::Pin,
-    });
-    let pc = if a.pinned {
-        a.accent
-    } else if hot(a, Act::Pin) {
-        T1
-    } else {
-        T3
-    };
+    // top row: pin, labelled tabs, collapse. The pages sit below it.
+    let pin = Rect::new(12.0, 8.0, 28.0, 28.0);
+    hits.push(Hit { r: pin, act: Act::Pin });
+    let pc = if a.pinned { a.accent } else if hot(a, Act::Pin) { T1 } else { T3 };
     g.icon('\u{E718}', pin, &f.icon14, pc.fade(ca));
 
-    let chev = Rect::new(EXP_W - 44.0, chrome_y, 30.0, 26.0);
-    hits.push(Hit {
-        r: chev,
-        act: Act::Collapse,
-    });
-    g.icon(
-        '\u{E70E}',
-        chev,
-        &f.icon14,
-        (if hot(a, Act::Collapse) { T1 } else { T3 }).fade(ca),
-    );
+    let chev = Rect::new(EXP_W - 40.0, 8.0, 28.0, 28.0);
+    hits.push(Hit { r: chev, act: Act::Collapse });
+    g.icon('\u{E70E}', chev, &f.icon14, (if hot(a, Act::Collapse) { T1 } else { T3 }).fade(ca));
 
-    match a.page {
+    let labels = ["Media", "Controls", "Today", "Stats", "Clipboard", "Apps", "Games", "Power"];
+    // rough text width: narrow letters count less, so the gaps between tabs look even
+    let text_w = |s: &str| -> f32 {
+        s.chars().map(|c| match c { 'i' | 'l' | 't' | 'f' | 'j' | 'r' | 'I' => 3.4, 'm' | 'w' | 'M' | 'W' => 9.6, _ => 6.7 }).sum()
+    };
+    let widths: Vec<f32> = labels.iter().map(|l| text_w(l) + 24.0).collect();
+    let total: f32 = widths.iter().sum();
+    let (left, right) = (46.0, EXP_W - 46.0);
+    let gap = ((right - left - total) / (labels.len() as f32 - 1.0)).clamp(2.0, 12.0);
+    let used = total + gap * (labels.len() as f32 - 1.0);
+    let mut x = left + (right - left - used) / 2.0;
+    for (i, p) in PAGES.iter().enumerate() {
+        let r = Rect::new(x, 8.0, widths[i], 28.0);
+        x += widths[i] + gap;
+        let act = Act::Tab(*p);
+        hits.push(Hit { r, act });
+        let active = a.page == *p;
+        if active {
+            g.fill_rrect(r, 14.0, a.accent.fade(0.20 * ca));
+        } else if hot(a, act) {
+            g.fill_rrect(r, 14.0, Color::white(0.07 * ca));
+        }
+        let col = if active { a.accent } else if hot(a, act) { T2 } else { T3 };
+        g.text(labels[i], r, &f.small, col.fade(ca), Align::Center);
+    }
+
+    // the page itself, moved below the tab row; its hit boxes move with it
+    let start = hits.len();
+    g.shifted(0.0, CONTENT_Y, || match a.page {
         Page::Media => page_media(a, ca, hits),
         Page::Controls => page_controls(a, ca, hits),
         Page::Clipboard => page_clipboard(a, ca, hits),
         Page::Apps => page_apps(a, ca, hits),
         Page::Tasks => page_tasks(a, ca, hits),
+        Page::Stats => page_stats(a, ca),
+        Page::Power => page_power(a, ca, hits),
         Page::Game => {
             let (ox, oy) = ((EXP_W - crate::game::W) / 2.0, 14.0);
             if a.hub.is_playing() {
@@ -281,32 +295,9 @@ fn draw_expanded(a: &App, ca: f32, hits: &mut Vec<Hit>) {
                 }
             }
         }
-    }
-
-    // tab bar
-    let icons = ['\u{E768}', '\u{E713}', '\u{E77F}', '\u{E71D}', '\u{E73A}', '\u{E7FC}'];
-    let (tw, th, gap) = (52.0, 32.0, 8.0);
-    let n = PAGES.len() as f32;
-    let x0 = (EXP_W - (n * tw + (n - 1.0) * gap)) / 2.0;
-    let y0 = EXP_H - 46.0;
-    for (i, p) in PAGES.iter().enumerate() {
-        let r = Rect::new(x0 + i as f32 * (tw + gap), y0, tw, th);
-        let act = Act::Tab(*p);
-        hits.push(Hit { r, act });
-        let active = a.page == *p;
-        if active {
-            g.fill_rrect(r, 16.0, Color::white(0.14 * ca));
-        } else if hot(a, act) {
-            g.fill_rrect(r, 16.0, Color::white(0.07 * ca));
-        }
-        let c = if active {
-            T1
-        } else if hot(a, act) {
-            T2
-        } else {
-            T3
-        };
-        g.icon(icons[i], r, &f.icon18, c.fade(ca));
+    });
+    for h in &mut hits[start..] {
+        h.r.y += CONTENT_Y;
     }
 }
 
@@ -450,44 +441,139 @@ fn page_media(a: &App, ca: f32, hits: &mut Vec<Hit>) {
 
 // -------------------------------------------------------------- controls ----
 
-fn page_controls(a: &App, ca: f32, hits: &mut Vec<Hit>) {
+/// One rounded tile: round icon, title, small state line. `on` fills it with the accent.
+#[allow(clippy::too_many_arguments)]
+fn tile(a: &App, ca: f32, hits: &mut Vec<Hit>, r: Rect, act: Act, glyph: char, title: &str, sub: &str, on: bool) {
     let g = &a.gfx;
     let f = &g.fonts;
-
-    // quick buttons
-    // (volume, brightness, Wi-Fi and Bluetooth live in the top bar now.)
-    let items = [
-        ('\u{E722}', "Screenshot"),
-        ('\u{E72E}', "Lock"),
-        ('\u{E708}', "Sleep"),
-    ];
-    let gap = 10.0;
-    let bw = (EXP_W - 56.0 - 2.0 * gap) / 3.0;
-    for (i, (glyph, label)) in items.iter().enumerate() {
-        let r = Rect::new(28.0 + i as f32 * (bw + gap), 64.0, bw, 96.0);
-        let act = Act::Quick(i as u8 + 2);
-        hits.push(Hit { r, act });
-        let on = false;
-        let bg = if hot(a, act) {
-            HOVER
-        } else {
-            SURF
-        };
-        g.fill_rrect(r, 16.0, bg.fade(ca));
-        g.icon(
-            *glyph,
-            Rect::new(r.x, r.y + 16.0, r.w, 32.0),
-            &f.icon22,
-            (if on { a.accent } else { T1 }).fade(ca),
-        );
-        g.text(
-            label,
-            Rect::new(r.x, r.y + 56.0, r.w, 24.0),
-            &f.small,
-            T2.fade(ca),
-            Align::Center,
-        );
+    hits.push(Hit { r, act });
+    let hovered = hot(a, act);
+    let bg = if on { a.accent } else if hovered { HOVER } else { SURF };
+    g.fill_rrect(r, 18.0, bg.fade(ca));
+    if on && hovered {
+        g.fill_rrect(r, 18.0, Color::white(0.10 * ca));
     }
+    let ic = Rect::new(r.x + 12.0, r.y + (r.h - 34.0) / 2.0, 34.0, 34.0);
+    g.fill_circle(ic.cx(), ic.cy(), 17.0, (if on { Color(0.0, 0.0, 0.0, 0.14) } else { Color::white(0.08) }).fade(ca));
+    g.icon(glyph, ic, &f.icon14, (if on { BLACK } else { T1 }).fade(ca));
+    let (tc, sc) = if on { (BLACK, Color(0.0, 0.0, 0.0, 0.65)) } else { (T1, T3) };
+    g.text(title, Rect::new(r.x + 56.0, r.y + 9.0, r.w - 64.0, 22.0), &f.body, tc.fade(ca), Align::Left);
+    g.text(sub, Rect::new(r.x + 56.0, r.y + r.h - 28.0, r.w - 64.0, 18.0), &f.tiny, sc.fade(ca), Align::Left);
+}
+
+fn page_controls(a: &App, ca: f32, hits: &mut Vec<Hit>) {
+    let (w, h, gap) = (270.0, 54.0, 12.0);
+    let (x0, y0) = (24.0, 6.0);
+    let at = |col: f32, row: f32| Rect::new(x0 + col * (w + gap), y0 + row * (h + 8.0), w, h);
+    let state = |s: Option<bool>| match s {
+        Some(true) => ("On", true),
+        Some(false) => ("Off", false),
+        None => ("Not available", false),
+    };
+    let (ws, won) = state(a.radios.wifi);
+    tile(a, ca, hits, at(0.0, 0.0), Act::Quick(0), '\u{E701}', "Wi-Fi", ws, won);
+    let (bs, bon) = state(a.radios.bluetooth);
+    tile(a, ca, hits, at(1.0, 0.0), Act::Quick(1), '\u{E702}', "Bluetooth", bs, bon);
+    tile(a, ca, hits, at(0.0, 1.0), Act::DarkMode, '\u{E708}', "Dark mode", if a.dark_mode { "On" } else { "Off" }, a.dark_mode);
+    tile(a, ca, hits, at(1.0, 1.0), Act::Open(0), '\u{E706}', "Night light", "Open settings", false);
+    tile(a, ca, hits, at(0.0, 2.0), Act::Quick(2), '\u{E722}', "Screenshot", "Snip a region", false);
+    tile(a, ca, hits, at(1.0, 2.0), Act::Open(1), '\u{E713}', "Settings", "Windows settings", false);
+}
+
+// ----------------------------------------------------------------- power ----
+
+fn page_power(a: &App, ca: f32, hits: &mut Vec<Hit>) {
+    let g = &a.gfx;
+    let f = &g.fonts;
+    let armed = |k: u8| matches!(a.power_confirm, Some((p, t)) if p == k && t.elapsed().as_secs_f32() < 3.5);
+    let items: [(char, &str, Act, u8); 4] = [
+        ('\u{E72E}', "Lock", Act::Quick(3), 0),
+        ('\u{E708}', "Sleep", Act::Quick(4), 0),
+        ('\u{E777}', "Restart", Act::PowerRestart, 1),
+        ('\u{E7E8}', "Shut down", Act::PowerShutdown, 2),
+    ];
+    let (w, gap) = (129.0, 12.0);
+    for (i, (glyph, label, act, k)) in items.iter().enumerate() {
+        let r = Rect::new(24.0 + i as f32 * (w + gap), 28.0, w, 130.0);
+        hits.push(Hit { r, act: *act });
+        let danger = *k != 0 && armed(*k);
+        let bg = if danger { Color(0.85, 0.25, 0.28, 1.0) } else if hot(a, *act) { HOVER } else { SURF };
+        g.fill_rrect(r, 20.0, bg.fade(ca));
+        g.icon(*glyph, Rect::new(r.x, r.y + 22.0, r.w, 40.0), &f.icon22, (if danger { Color::white(1.0) } else { T1 }).fade(ca));
+        g.text(label, Rect::new(r.x, r.y + 70.0, r.w, 24.0), &f.body, (if danger { Color::white(1.0) } else { T1 }).fade(ca), Align::Center);
+        if *k != 0 {
+            g.text(
+                if danger { "Click again to confirm" } else { "Asks to confirm" },
+                Rect::new(r.x + 4.0, r.y + 96.0, r.w - 8.0, 20.0),
+                &f.tiny,
+                (if danger { Color::white(0.95) } else { T3 }).fade(ca),
+                Align::Center,
+            );
+        }
+    }
+}
+
+// ----------------------------------------------------------------- stats ----
+
+/// A 270 degree ring gauge from `frac` 0..1, drawn as a trail of dots.
+fn ring(g: &Gfx, cx: f32, cy: f32, r: f32, frac: f32, col: Color, ca: f32) {
+    let n = 120;
+    for i in 0..=n {
+        let u = i as f32 / n as f32;
+        let ang = (135.0 + 270.0 * u).to_radians();
+        let lit = u < frac.clamp(0.0, 1.0);
+        let c = if lit { col } else { Color::white(0.10) };
+        g.fill_circle(cx + r * ang.cos(), cy + r * ang.sin(), 3.6, c.fade(ca));
+    }
+}
+
+fn page_stats(a: &App, ca: f32) {
+    let g = &a.gfx;
+    let f = &g.fonts;
+    let card = |x: f32, w: f32| {
+        let r = Rect::new(x, 4.0, w, 190.0);
+        g.fill_rrect(r, 20.0, SURF.fade(ca));
+        r
+    };
+    let gauge = |r: Rect, label: &str, pct: u32, hist: Option<&Vec<f32>>| {
+        let (cx, cy) = (r.cx(), r.y + 84.0);
+        ring(g, cx, cy, 48.0, pct as f32 / 100.0, a.accent, ca);
+        g.text(&format!("{pct}%"), Rect::new(cx - 40.0, cy - 20.0, 80.0, 40.0), &f.big, T1.fade(ca), Align::Center);
+        g.text(label, Rect::new(r.x, r.y + 138.0, r.w, 22.0), &f.body, T2.fade(ca), Align::Center);
+        if let Some(h) = hist {
+            let n = h.len();
+            for (i, v) in h.iter().enumerate() {
+                let bh = 2.0 + v.clamp(0.0, 1.0) * 16.0;
+                g.fill_rrect(Rect::new(r.x + 20.0 + i as f32 * 3.5, r.y + r.h - 12.0 - bh, 2.4, bh), 1.0, a.accent.fade(((i + 1) as f32 / n.max(1) as f32) * 0.8 * ca));
+            }
+        }
+    };
+    gauge(card(20.0, 180.0), "CPU", a.stat_cpu, Some(&a.stat_hist));
+    gauge(card(210.0, 180.0), "Memory", a.stat_mem, None);
+    let r = card(400.0, 180.0);
+    // battery
+    g.text("Battery", Rect::new(r.x + 16.0, r.y + 12.0, r.w - 32.0, 20.0), &f.small, T3.fade(ca), Align::Left);
+    match sys::battery_info() {
+        Some(b) => {
+            g.text(&format!("{}%", b.percent), Rect::new(r.x + 16.0, r.y + 32.0, 90.0, 40.0), &f.big, T1.fade(ca), Align::Left);
+            let state = if b.charging { "Charging" } else if b.plugged { "Plugged in" } else { "On battery" };
+            g.text(state, Rect::new(r.x + 16.0, r.y + 74.0, r.w - 32.0, 18.0), &f.tiny, T2.fade(ca), Align::Left);
+            let bar = Rect::new(r.x + 16.0, r.y + 98.0, r.w - 32.0, 8.0);
+            g.fill_rrect(bar, 4.0, Color::white(0.10 * ca));
+            let col = if b.percent <= 20 && !b.charging { Color(1.0, 0.45, 0.4, 1.0) } else { a.accent };
+            g.fill_rrect(Rect::new(bar.x, bar.y, bar.w * (b.percent as f32 / 100.0), bar.h), 4.0, col.fade(ca));
+        }
+        None => {
+            g.text("Plugged in", Rect::new(r.x + 16.0, r.y + 38.0, r.w - 32.0, 30.0), &f.body, T1.fade(ca), Align::Left);
+            g.text("No battery", Rect::new(r.x + 16.0, r.y + 66.0, r.w - 32.0, 18.0), &f.tiny, T3.fade(ca), Align::Left);
+        }
+    }
+    // uptime
+    let up = sys::uptime_secs();
+    let (d, h, m) = (up / 86400, (up % 86400) / 3600, (up % 3600) / 60);
+    let text = if d > 0 { format!("{d}d {h}h {m}m") } else { format!("{h}h {m}m") };
+    g.text("Uptime", Rect::new(r.x + 16.0, r.y + 128.0, r.w - 32.0, 20.0), &f.small, T3.fade(ca), Align::Left);
+    g.text(&text, Rect::new(r.x + 16.0, r.y + 148.0, r.w - 32.0, 30.0), &f.body, T1.fade(ca), Align::Left);
 }
 
 // ------------------------------------------------------------- clipboard ----
@@ -604,15 +690,13 @@ fn page_apps(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         let (c, r) = (i % cols, i / cols);
         let rect = Rect::new(
             28.0 + c as f32 * (tw + gap),
-            12.0 + r as f32 * (th + 2.0),
+            6.0 + r as f32 * (th + 8.0),
             tw,
             th,
         );
         let act = Act::Launch(i);
         hits.push(Hit { r: rect, act });
-        if hot(a, act) {
-            g.fill_rrect(rect, 16.0, Color::white(0.11 * ca));
-        }
+        g.fill_rrect(rect, 16.0, Color::white((if hot(a, act) { 0.12 } else { 0.05 }) * ca));
         let ic = Rect::new(rect.cx() - 18.0, rect.y + 10.0, 36.0, 36.0);
         match a.app_icons.get(i).and_then(|b| b.as_ref()) {
             Some(bmp) => g.draw_bitmap(bmp, ic, 0.0, ca),
@@ -665,6 +749,11 @@ fn name_color(name: &str) -> Color {
 fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
     let g = &a.gfx;
     let f = &g.fonts;
+
+    // ---- cards
+    for r in [Rect::new(14.0, 2.0, 208.0, 198.0), Rect::new(230.0, 2.0, 190.0, 198.0), Rect::new(428.0, 2.0, 158.0, 198.0)] {
+        g.fill_rrect(r, 20.0, Color::white(0.05 * ca));
+    }
 
     // ---- focus timer
     let title = if a.break_mode {
@@ -776,8 +865,8 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
     g.icon('\u{E72C}', rb, &f.icon14, T1.fade(ca));
 
     // ---- to-do
-    let tx = 220.0;
-    let tw = 188.0;
+    let tx = 240.0;
+    let tw = 170.0;
     g.text(
         "To-do",
         Rect::new(tx, 12.0, 100.0, 22.0),
@@ -811,11 +900,14 @@ fn page_tasks(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         g.icon(glyph, cb, &f.icon14, gc.fade(ca));
         g.text(
             &t.text,
-            Rect::new(tx + 30.0, y, tw - 30.0 - 52.0, 26.0),
+            Rect::new(tx + 30.0, y, tw - 30.0 - 26.0, 26.0),
             &f.small,
             (if t.done { T3 } else { T1 }).fade(ca),
             Align::Left,
         );
+        if over {
+            g.fill_rrect(Rect::new(tx + tw - 52.0, y + 1.0, 52.0, 24.0), 8.0, Color(0.117, 0.117, 0.117, 1.0).fade(ca));
+        }
         if !t.done {
             g.icon(
                 '\u{E768}',

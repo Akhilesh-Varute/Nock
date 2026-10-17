@@ -1219,3 +1219,41 @@ pub fn audio_peak() -> Option<f32> {
         }
     })
 }
+
+/// Switch Windows between dark and light (apps and system) and tell running programs.
+pub fn set_dark_mode(dark: bool) {
+    use windows::Win32::System::Registry::{RegSetKeyValueW, REG_DWORD};
+    use windows::Win32::UI::WindowsAndMessaging::{SendMessageTimeoutW, HWND_BROADCAST, SMTO_ABORTIFHUNG, WM_SETTINGCHANGE};
+    let v: u32 = if dark { 0 } else { 1 };
+    unsafe {
+        for name in [w!("AppsUseLightTheme"), w!("SystemUsesLightTheme")] {
+            let _ = RegSetKeyValueW(
+                HKEY_CURRENT_USER,
+                w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"),
+                name,
+                REG_DWORD.0,
+                Some(&v as *const u32 as *const _),
+                4,
+            );
+        }
+        let _ = SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, WPARAM(0), LPARAM(w!("ImmersiveColorSet").as_ptr() as isize), SMTO_ABORTIFHUNG, 200, None);
+    }
+}
+
+fn shutdown_cmd(arg: &str) {
+    use std::os::windows::process::CommandExt;
+    let _ = std::process::Command::new("shutdown.exe").args([arg, "/t", "0"]).creation_flags(0x0800_0000).spawn();
+}
+
+pub fn restart_pc() {
+    shutdown_cmd("/r");
+}
+
+pub fn shutdown_pc() {
+    shutdown_cmd("/s");
+}
+
+/// Seconds since Windows started.
+pub fn uptime_secs() -> u64 {
+    unsafe { windows::Win32::System::SystemInformation::GetTickCount64() / 1000 }
+}

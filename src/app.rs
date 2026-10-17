@@ -53,15 +53,19 @@ pub enum Page {
     Apps,
     Tasks,
     Game,
+    Stats,
+    Power,
 }
 
-pub const PAGES: [Page; 6] = [
+pub const PAGES: [Page; 8] = [
     Page::Media,
     Page::Controls,
+    Page::Tasks,
+    Page::Stats,
     Page::Clipboard,
     Page::Apps,
-    Page::Tasks,
     Page::Game,
+    Page::Power,
 ];
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -87,6 +91,13 @@ pub enum Act {
     ClipSearchClear,
     /// start a focus session on the n-th to-do
     TodoFocus(usize),
+    /// toggle Windows dark mode
+    DarkMode,
+    /// open a Windows Settings page (0 night light, 1 settings)
+    Open(u8),
+    /// restart / shut down (asks to click twice)
+    PowerRestart,
+    PowerShutdown,
     /// click inside the running game
     GameClick,
     /// pick a game on the arcade screen
@@ -234,6 +245,15 @@ pub struct App {
     /// what the pill says while it pulses ("Time's up", "Drink water")
     pub alert_msg: &'static str,
     pub hub: crate::games::Hub,
+    /// Windows is in dark mode (cached; the Controls tile shows it)
+    pub dark_mode: bool,
+    /// which power button (1 restart, 2 shut down) was clicked once, and when
+    pub power_confirm: Option<(u8, Instant)>,
+    /// live numbers for the Stats page
+    pub stat_cpu: u32,
+    pub stat_mem: u32,
+    stat_prev: (u64, u64),
+    pub stat_hist: Vec<f32>,
     /// pointer inside the open panel (logical px) and whether the button is held, for the games
     cursor_x: f32,
     cursor_y: f32,
@@ -335,6 +355,12 @@ impl App {
             confetti_start: None,
             alert_msg: "Time's up",
             hub: crate::games::Hub::new(store::load_bests()),
+            dark_mode: !sys::light_theme(),
+            power_confirm: None,
+            stat_cpu: 0,
+            stat_mem: 0,
+            stat_prev: (0, 0),
+            stat_hist: Vec::new(),
             cursor_x: 0.0,
             cursor_y: 0.0,
             mouse_down: false,
@@ -528,6 +554,7 @@ impl App {
         let want: u32 = if self.expanded && !self.hidden {
             match self.page {
                 Page::Game if self.hub.is_playing() => 16,
+                Page::Stats => 1000,
                 _ => 0,
             }
         } else {
@@ -1028,8 +1055,8 @@ impl App {
             }
             return;
         }
-        if y > EXP_H - 56.0 {
-            // over the tab bar: switch pages
+        if y < crate::ui::CONTENT_Y {
+            // over the tab row: switch pages
             let i = PAGES.iter().position(|p| *p == self.page).unwrap_or(0) as i32;
             let n = (i + if delta < 0 { 1 } else { -1 }).clamp(0, PAGES.len() as i32 - 1);
             self.select_page(PAGES[n as usize]);
@@ -1213,6 +1240,13 @@ impl App {
                 }
             }
             Act::TodoAdd => self.start_entry(),
+            Act::DarkMode => {
+                self.dark_mode = !self.dark_mode;
+                sys::set_dark_mode(self.dark_mode);
+            }
+            Act::Open(k) => sys::open(if k == 0 { "ms-settings:nightlight" } else { "ms-settings:" }, ""),
+            Act::PowerRestart => self.power_press(1),
+            Act::PowerShutdown => self.power_press(2),
             Act::GameClick => self.hub.click(),
             Act::GamePick(k) => {
                 self.hub.pick(k);
@@ -1236,16 +1270,44 @@ impl App {
         match self.page {
             Page::Game => {
                 let ox = (EXP_W - crate::game::W) / 2.0;
-                let inp = crate::games::Input { x: self.cursor_x - ox, y: self.cursor_y - 14.0, down: self.mouse_down };
+                let inp = crate::games::Input { x: self.cursor_x - ox, y: self.cursor_y - 14.0 - crate::ui::CONTENT_Y, down: self.mouse_down };
                 let out = self.hub.step(dt, &inp);
                 if out.new_best {
                     store::save_bests(&self.hub.best);
                 }
                 play_sfx(out.sfx);
             }
+            Page::Stats => {
+                let (idle, total) = sys::cpu_times();
+                if self.stat_prev != (0, 0) {
+                    let (di, dt) = (idle.wrapping_sub(self.stat_prev.0), total.wrapping_sub(self.stat_prev.1));
+                    self.stat_cpu = if dt == 0 { 0 } else { (100 - (di.min(dt) * 100 / dt)) as u32 };
+                }
+                self.stat_prev = (idle, total);
+                self.stat_mem = sys::mem_percent();
+                self.stat_hist.push(self.stat_cpu as f32 / 100.0);
+                if self.stat_hist.len() > 40 {
+                    self.stat_hist.remove(0);
+                }
+            }
             _ => {}
         }
         self.render();
+    }
+
+    /// Restart / shut down only on a second click within a few seconds.
+    fn power_press(&mut self, k: u8) {
+        let armed = matches!(self.power_confirm, Some((p, t)) if p == k && t.elapsed().as_secs_f32() < 3.5);
+        if armed {
+            self.power_confirm = None;
+            if k == 1 {
+                sys::restart_pc();
+            } else {
+                sys::shutdown_pc();
+            }
+        } else {
+            self.power_confirm = Some((k, Instant::now()));
+        }
     }
 
     fn after_timer_change(&mut self) {
@@ -1701,4 +1763,73 @@ fn alarm_sound() {
         }
         let _ = MessageBeep(MB_ICONEXCLAMATION);
     });
+}
+
+/// Renders the open panel's pages to raw files for eyeballing (run with --ignored and
+/// PREVIEW_DIR set). Test-only: it builds the real app state without a window.
+#[cfg(test)]
+mod preview {
+    use super::*;
+    use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
+
+    #[test]
+    #[ignore]
+    fn render_pages() {
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        }
+        let dir = std::env::var("PREVIEW_DIR").expect("PREVIEW_DIR");
+        let scale = 2.0f32;
+        let mut a = App::new(HWND::default(), scale).expect("app");
+        a.expanded = true;
+        a.sw = Spring::new(EXP_W);
+        a.sh = Spring::new(EXP_H);
+        a.todos = vec![
+            Todo { done: false, text: "Review the pull request".into() },
+            Todo { done: true, text: "Buy groceries".into() },
+            Todo { done: false, text: "Call the dentist".into() },
+        ];
+        a.clips = vec!["https://example.com/some/long/link/to/read/later".into(), "Meeting at 11:00 in room 4".into(), "cargo build --release".into()];
+        a.pins = vec!["hello@example.com".into()];
+        a.mstate.has_session = true;
+        a.mstate.title = "lofi beats to study and relax".into();
+        a.mstate.artist = "lofi radio".into();
+        a.mstate.playing = true;
+        a.mstate.dur_ticks = 62 * 60 * 10_000_000 / 60;
+        a.radios.wifi = Some(true);
+        a.radios.bluetooth = Some(false);
+        a.stats = Some((23, 61));
+        let render = |a: &App, name: &str| {
+            let (pw, ph) = ((EXP_W * scale) as i32, (EXP_H * scale) as i32);
+            a.gfx.begin(pw, ph).unwrap();
+            let mut hits = Vec::new();
+            crate::ui::draw(a, EXP_W, EXP_H, &mut hits);
+            let _ = a.gfx.end();
+            let (bw, _bh, buf) = a.gfx.snapshot();
+            let mut out = Vec::new();
+            out.extend_from_slice(&(pw as u32).to_le_bytes());
+            out.extend_from_slice(&(ph as u32).to_le_bytes());
+            for y in 0..ph {
+                let row = (y * bw * 4) as usize;
+                out.extend_from_slice(&buf[row..row + (pw * 4) as usize]);
+            }
+            std::fs::write(format!("{dir}/panel_{name}.raw"), out).unwrap();
+        };
+        let pages: Vec<(String, Page)> = PAGES.iter().map(|p| (format!("{p:?}").to_lowercase(), *p)).collect();
+        for (name, page) in pages {
+            a.page = page;
+            render(&a, &name);
+        }
+        // each game while it is running
+        a.page = Page::Game;
+        for k in 0..4 {
+            a.hub.pick(k);
+            a.hub.click();
+            for i in 0..100 {
+                let inp = crate::games::Input { x: 150.0 + (i as f32 * 3.0), y: 80.0 + (i as f32 * 0.5).sin() * 40.0, down: i % 50 < 10 };
+                a.hub.step(0.016, &inp);
+            }
+            render(&a, &format!("play{k}"));
+        }
+    }
 }

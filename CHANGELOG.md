@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0
+
+- New look for the open panel: a labelled tab row on top (Media, Controls, Today, Stats, Clipboard, Apps, Games, Power) and rounded cards on every page.
+- Controls: tiles for Wi-Fi, Bluetooth, Dark mode, Night light, Screenshot and Settings, with their state shown.
+- New Stats page: CPU and memory gauges, battery and uptime.
+- New Power page: Lock, Sleep, Restart and Shut down (restart and shut down ask for a second click).
+- Today: timer, to-dos and calendar in cards.
+- Games: fixed text and the character drawing too high after the layout change; tidier corners.
+
 ## 0.6.0
 
 - Arcade on the Game tab: Brick Breaker, Slicer, Viking Run and Thor Flight, each with a saved best score.

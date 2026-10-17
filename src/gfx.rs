@@ -365,39 +365,55 @@ impl Gfx {
         }
     }
 
+    /// The current drawing transform, so helpers can nest and always put it back.
+    fn transform(&self) -> Matrix3x2 {
+        let mut m = Matrix3x2::identity();
+        unsafe { self.rt.GetTransform(&mut m) };
+        m
+    }
+
+    /// Draw with `local` applied first and the current transform (for example the
+    /// page shift) on top of it, then restore the current transform.
+    fn with_transform(&self, local: Matrix3x2, f: impl FnOnce()) {
+        let base = self.transform();
+        // row-vector convention: p' = p * local * base
+        let m = Matrix3x2 {
+            M11: local.M11 * base.M11 + local.M12 * base.M21,
+            M12: local.M11 * base.M12 + local.M12 * base.M22,
+            M21: local.M21 * base.M11 + local.M22 * base.M21,
+            M22: local.M21 * base.M12 + local.M22 * base.M22,
+            M31: local.M31 * base.M11 + local.M32 * base.M21 + base.M31,
+            M32: local.M31 * base.M12 + local.M32 * base.M22 + base.M32,
+        };
+        unsafe { self.rt.SetTransform(&m) };
+        f();
+        unsafe { self.rt.SetTransform(&base) };
+    }
+
+    /// Run `f` with everything it draws moved by (dx, dy).
+    pub fn shifted(&self, dx: f32, dy: f32, f: impl FnOnce()) {
+        self.with_transform(Matrix3x2 { M11: 1.0, M12: 0.0, M21: 0.0, M22: 1.0, M31: dx, M32: dy }, f);
+    }
+
     /// Run `f` with everything it draws rotated `deg` degrees about (cx, cy).
     pub fn rotated(&self, cx: f32, cy: f32, deg: f32, f: impl FnOnce()) {
         let (sn, cs) = deg.to_radians().sin_cos();
-        unsafe {
-            self.rt.SetTransform(&Matrix3x2 {
+        self.with_transform(
+            Matrix3x2 {
                 M11: cs,
                 M12: sn,
                 M21: -sn,
                 M22: cs,
                 M31: cx - (cx * cs - cy * sn),
                 M32: cy - (cx * sn + cy * cs),
-            });
-        }
-        f();
-        unsafe { self.rt.SetTransform(&Matrix3x2::identity()) };
+            },
+            f,
+        );
     }
 
     /// `draw_bitmap` rotated about the rect's centre (degrees).
     pub fn draw_bitmap_tilted(&self, bmp: &ID2D1Bitmap, r: Rect, deg: f32) {
-        let (sn, cs) = deg.to_radians().sin_cos();
-        let (cx, cy) = (r.cx(), r.cy());
-        unsafe {
-            self.rt.SetTransform(&Matrix3x2 {
-                M11: cs,
-                M12: sn,
-                M21: -sn,
-                M22: cs,
-                M31: cx - (cx * cs - cy * sn),
-                M32: cy - (cx * sn + cy * cs),
-            });
-        }
-        self.draw_bitmap(bmp, r, 0.0, 1.0);
-        unsafe { self.rt.SetTransform(&Matrix3x2::identity()) };
+        self.rotated(r.cx(), r.cy(), deg, || self.draw_bitmap(bmp, r, 0.0, 1.0));
     }
 
     // ------------------------------------------------------------ images ----

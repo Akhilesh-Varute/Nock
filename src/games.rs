@@ -83,8 +83,8 @@ fn field_bg(g: &Gfx, ox: f32, oy: f32, ca: f32, top: Color, bot: Color) {
     while y < H {
         let edge = if y < r { r - y } else if y > H - r { y - (H - r) } else { 0.0 };
         let inset = if edge > 0.0 { r - (r * r - edge * edge).max(0.0).sqrt() } else { 0.0 };
-        g.fill_rrect(Rect::new(ox + inset, oy + y, W - 2.0 * inset, 2.4), 0.0, mixc(top, bot, y / H).fade(ca));
-        y += 2.0;
+        g.fill_rrect(Rect::new(ox + inset, oy + y, W - 2.0 * inset, 1.4), 0.0, mixc(top, bot, y / H).fade(ca));
+        y += 1.0;
     }
 }
 
@@ -993,11 +993,14 @@ impl Runner {
             }
         }
         g.fill_rrect(Rect::new(ox, oy + GROUND, W, H - GROUND), 0.0, Color(0.85, 0.9, 1.0, 0.9 * ca));
-        g.fill_rrect(Rect::new(ox, oy + GROUND + 5.0, W, H - GROUND - 5.0), 8.0, Color(0.55, 0.62, 0.8, ca));
+        g.fill_rrect(Rect::new(ox, oy + GROUND + 5.0, W, H - GROUND - 5.0 - 14.0), 0.0, Color(0.55, 0.62, 0.8, ca));
+        g.fill_rrect(Rect::new(ox, oy + H - 28.0, W, 28.0), 14.0, Color(0.55, 0.62, 0.8, ca));
         let stripe = -(self.dist.rem_euclid(40.0));
         let mut x = stripe;
         while x < W {
-            g.fill_rrect(Rect::new(ox + x, oy + GROUND + 12.0, 16.0, 2.0), 1.0, Color::white(0.25 * ca));
+            if x >= 14.0 && x + 16.0 <= W - 14.0 {
+                g.fill_rrect(Rect::new(ox + x, oy + GROUND + 12.0, 16.0, 2.0), 1.0, Color::white(0.25 * ca));
+            }
             x += 40.0;
         }
         // obstacles
