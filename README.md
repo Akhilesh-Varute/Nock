@@ -182,13 +182,14 @@ The exe carries its own icon and file details (`assets/notch.ico`, embedded by `
 
 Everything is in `%APPDATA%\Nock\` (tray → *Open settings folder*). Most settings are in the tray menu; `config.ini` holds them too:
 
-- `config.ini`: `hover_expand` (open on hover instead of click), `eq_animation` (animate the equaliser bars), `clock_24h`, `reserve_space` (keep a thin strip at the top so maximised windows sit below the notch), `top_bar`, `buddy`, `scenes`, `scene_min`, `stats` (CPU/RAM on the bar), `clock_style` (0 digital, 1 analog, 2 binary, 3 until Friday), `water_min` and `eye_min` (minutes between reminders, 0 = off), `auto_break`, `start_menu` (the Start menu shortcut), and `fs_hide` (hide while a full-screen app or game is in front; also in the tray as *Hide in full-screen apps*).
+- `config.ini`: `hover_expand` (open on hover instead of click), `eq_animation` (animate the equaliser bars), `clock_24h`, `reserve_space` (keep a thin strip at the top so maximised windows sit below the notch), `top_bar`, `buddy`, `scenes`, `scene_min`, `stats` (CPU/RAM on the bar), `clock_style` (0 digital, 1 analog, 2 binary, 3 until Friday), `water_min` and `eye_min` (minutes between reminders, 0 = off), `auto_break`, `start_menu` (the Start menu shortcut), `fs_hide` (hide while a full-screen app or game is in front; also in the tray as *Hide in full-screen apps*), and `auto_close` (close the open panel when the pointer leaves it or another window comes to the front; tray: *Close the panel when the pointer leaves*).
 - `apps.txt`: pinned launcher entries, one per line: `Name|target|optional arguments`. The Apps tab edits it for you (+ and ×), but you can edit it by hand too: the target can be an exe, folder, URL or `ms-settings:` link. After editing, use tray → *Reload pinned apps*.
 - `todos.txt`: the to-do list.
 - `pinned_clips.txt`: the clipboard items you starred.
 - `focus_today.txt`: today's focus minutes and finished tasks (resets each day).
 - `games_best.txt`: best scores of the four games.
 - `brightness.log` and `scene.log`: only written if a brightness change or a scene fails to start, with the reason.
+- `visibility.log` also notes when the panel closed because another window came to the front.
 - `visibility.log`: written when Nock hides itself because it thinks a full-screen window is in front (class, size and style of that window), so "it hides for no reason" can be diagnosed.
 
 ## Why it is light

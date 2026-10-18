@@ -979,6 +979,15 @@ pub(crate) fn is_fullscreen_window(r: &RECT, mon: &RECT, style: u32) -> bool {
     exact && style & WS_CAPTION_BITS != WS_CAPTION_BITS
 }
 
+/// Window class name of `h` (for log lines).
+pub fn class_of(h: HWND) -> String {
+    unsafe {
+        let mut cls = [0u16; 64];
+        let n = GetClassNameW(h, &mut cls) as usize;
+        String::from_utf16_lossy(&cls[..n.min(64)])
+    }
+}
+
 static LAST_KIND: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
 pub fn log_visibility(msg: &str) {

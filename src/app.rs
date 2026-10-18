@@ -744,7 +744,7 @@ impl App {
             }
             T_LEAVE => {
                 self.kill_timer(T_LEAVE);
-                if self.expanded && !self.pinned && self.entering.is_none() && self.drag.is_none() {
+                if self.expanded && !self.pinned && self.entering.is_none() && self.drag.is_none() && self.cfg.auto_close {
                     self.set_expanded(false);
                 }
             }
@@ -823,6 +823,12 @@ impl App {
         self.cfg.fs_hide = !self.cfg.fs_hide;
         crate::store::save_config(&self.cfg);
         self.on_foreground();
+    }
+
+    /// Tray: close the open panel automatically (on by default) or keep it until closed.
+    pub fn toggle_auto_close(&mut self) {
+        self.cfg.auto_close = !self.cfg.auto_close;
+        crate::store::save_config(&self.cfg);
     }
 
     pub fn toggle_tucked(&mut self) {
@@ -1034,7 +1040,7 @@ impl App {
                 self.render();
             }
         }
-        if self.expanded && !self.pinned && self.entering.is_none() && self.drag.is_none() {
+        if self.expanded && !self.pinned && self.entering.is_none() && self.drag.is_none() && self.cfg.auto_close {
             self.set_timer(T_LEAVE, 450);
         }
     }
@@ -1819,7 +1825,9 @@ impl App {
         // Clicking into any other window closes an open dropdown / unpinned panel.
         if !ours && self.entering.is_none() {
             self.close_pop();
-            if self.expanded && !self.pinned && self.drag.is_none() && !self.cursor_inside() {
+            if self.expanded && !self.pinned && self.drag.is_none() && !self.cursor_inside() && self.cfg.auto_close {
+                // the "it closed by itself" case: say which window caused it
+                sys::log_visibility(&format!("panel closed: another window came to the front (class '{}')", sys::class_of(fgw)));
                 self.set_expanded(false);
             }
         }

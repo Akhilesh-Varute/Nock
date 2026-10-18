@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Tray: *Close the panel when the pointer leaves* (`auto_close` in config.ini). Turn it off and the open panel stays until you close it. When another window takes focus and closes the panel, `visibility.log` now says which window did it.
+
 ## 0.9.4
 
 - The joke scenes now have characters that fit them (developer, manager, coworkers, a bug, cricketers, a fan) instead of reusing the fantasy cast.
