@@ -988,6 +988,22 @@ pub fn class_of(h: HWND) -> String {
     }
 }
 
+/// Windows' own overlay windows (Start, Search, Task View, the Alt-Tab switcher, flyouts).
+/// They can cover the whole monitor, and some linger as the foreground window after a
+/// flyout closes, but they are not full-screen apps and must not hide Nock.
+pub(crate) fn is_shell_overlay(class: &str) -> bool {
+    matches!(
+        class,
+        "Windows.UI.Core.CoreWindow"
+            | "XamlExplorerHostIslandWindow"
+            | "MultitaskingViewFrame"
+            | "ForegroundStaging"
+            | "Windows.UI.Input.InputSite.WindowClass"
+            | "NativeHWNDHost"
+            | "TopLevelWindowForOverflowXamlIsland"
+    )
+}
+
 static LAST_KIND: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
 pub fn log_visibility(msg: &str) {
@@ -1022,9 +1038,15 @@ pub fn fullscreen_kind(skip: &[HWND], mon: &RECT) -> u8 {
         }
         let style = GetWindowLongPtrW(fg, GWL_STYLE) as u32;
         let kind = if is_fullscreen_window(&r, mon, style) {
-            match SHQueryUserNotificationState() {
-                Ok(s) if s == QUNS_RUNNING_D3D_FULL_SCREEN || s == QUNS_PRESENTATION_MODE => 2,
-                _ => 1,
+            // Windows itself says a game or presentation owns the screen: trust that.
+            // Otherwise a shell overlay (Start, Search, Task View...) is not full screen.
+            let hard = matches!(SHQueryUserNotificationState(), Ok(s) if s == QUNS_RUNNING_D3D_FULL_SCREEN || s == QUNS_PRESENTATION_MODE);
+            if hard {
+                2
+            } else if is_shell_overlay(&cls) {
+                0
+            } else {
+                1
             }
         } else {
             0
@@ -1055,6 +1077,14 @@ mod fullscreen_tests {
         assert!(!is_fullscreen_window(&rc(0, 0, 1920, 1080), &mon, 0x16CF_0000));
         // maximised normally: overhangs the monitor
         assert!(!is_fullscreen_window(&rc(-8, -8, 1928, 1040), &mon, 0x16CF_0000));
+    }
+
+    #[test]
+    fn windows_overlays_do_not_count_as_full_screen_apps() {
+        assert!(is_shell_overlay("Windows.UI.Core.CoreWindow"));
+        assert!(is_shell_overlay("MultitaskingViewFrame"));
+        assert!(!is_shell_overlay("Chrome_WidgetWin_1"));
+        assert!(!is_shell_overlay("ApplicationFrameWindow"));
     }
 
     #[test]

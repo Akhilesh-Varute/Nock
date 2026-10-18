@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed the notch hiding when a Windows overlay (Start, Search, Task View and similar flyouts, which can cover the whole screen) was in front. These are no longer treated as full-screen apps. `visibility.log` showed this on a real PC: a `Windows.UI.Core.CoreWindow` the size of the monitor.
+
 - Tray: *Close the panel when the pointer leaves* (`auto_close` in config.ini). Turn it off and the open panel stays until you close it. When another window takes focus and closes the panel, `visibility.log` now says which window did it.
 
 ## 0.9.4
