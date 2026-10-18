@@ -444,6 +444,12 @@ impl App {
             };
             if GetMonitorInfoW(mon, &mut mi).as_bool() {
                 self.mon = mi.rcMonitor;
+                // for "I can't see it" reports: which monitor Nock drew on, and how many there are
+                let count = GetSystemMetrics(SM_CMONITORS);
+                sys::log_visibility(&format!(
+                    "primary monitor {},{},{},{} (of {count} monitor(s)), scale {:.2}",
+                    mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right, mi.rcMonitor.bottom, self.scale
+                ));
             }
         }
     }

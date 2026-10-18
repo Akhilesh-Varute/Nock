@@ -981,7 +981,7 @@ pub(crate) fn is_fullscreen_window(r: &RECT, mon: &RECT, style: u32) -> bool {
 
 static LAST_KIND: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
-fn log_visibility(msg: &str) {
+pub fn log_visibility(msg: &str) {
     use std::io::Write;
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(crate::store::data_dir().join("visibility.log")) {
         let _ = writeln!(f, "{msg}");
