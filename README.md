@@ -2,7 +2,7 @@
 
 <h1 align="center">Nock</h1>
 
-<p align="center">A tiny, native Windows <b>dynamic island</b> and <b>macOS-style menu bar</b>.<br>
+<p align="center">A tiny, native <b>notch</b> and <b>top bar</b> made for Windows.<br>
 Written in Rust. No webview, no framework, no runtime. One small <code>.exe</code>, or a tiny installer.</p>
 
 <p align="center">
@@ -18,8 +18,8 @@ Written in Rust. No webview, no framework, no runtime. One small <code>.exe</cod
 
 ## Features
 
-- **Notch / dynamic island** at the top centre. Click it and a panel opens with tabs: **Media**, **Controls**, **Today** (focus timer, to-dos, calendar), **Stats**, **Clipboard**, **Apps**, **Games** and **Power**.
-- **Top bar** like the macOS menu bar: active app name, Wi-Fi, Bluetooth, sound, brightness, battery and clock, each with a dropdown (join Wi-Fi networks, connect Bluetooth devices, sliders, calendar). Optional clock styles and a CPU / memory read-out.
+- **Notch** at the top centre. Click it and a panel opens with tabs: **Media**, **Controls**, **Today** (focus timer, to-dos, calendar), **Stats**, **Clipboard**, **Apps**, **Games** and **Power**.
+- **Top bar** along the top of the screen: active app name, Wi-Fi, Bluetooth, sound, brightness, battery and clock, each with a dropdown (join Wi-Fi networks, connect Bluetooth devices, sliders, calendar). Optional clock styles and a CPU / memory read-out.
 - **A little life**: a buddy character on the bar, scripted scenes, an arcade with four mouse-only games, and small reactions on the pill (squish on click, glow with the music, confetti when the timer ends).
 - **Gentle reminders** (all off by default): drink water, and look away from the screen (20-20-20).
 - **Zero idle cost**: event driven, no polling loop; about 0% CPU and about 32 MB of memory while idle (see [Why it is light](#why-it-is-light)). Hides itself in full-screen video and games, with a top-edge reveal.
@@ -91,7 +91,7 @@ The pill itself reacts: it squishes when you click it, jiggles when the pointer 
 
 ## Top bar
 
-A thin translucent bar runs along the top of the screen (like the macOS menu bar) and the notch hangs from its middle. Left: the app you are in. Right: Wi-Fi, Bluetooth, volume, brightness, battery and the date and time. Clicking an icon opens a small dropdown right under it:
+A thin translucent bar runs along the top of the screen and the notch hangs from its middle. Left: the app you are in. Right: Wi-Fi, Bluetooth, volume, brightness, battery and the date and time. Clicking an icon opens a small dropdown right under it:
 
 - **Wi-Fi**: on/off switch, nearby networks with signal strength (the connected one marked). Click a saved network to join it, click the connected one to disconnect. A new password-protected network asks for its password right in the dropdown (paste works); an open network joins directly. Enterprise networks open Windows' own Wi-Fi settings.
 - **Bluetooth**: on/off switch, paired devices (connected ones marked). Click a device to connect or disconnect it. Pairing new devices is done in Windows' Bluetooth settings (linked).

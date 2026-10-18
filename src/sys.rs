@@ -1436,7 +1436,7 @@ pub fn sync_start_menu(on: bool) {
         if let Some(dir) = exe.parent() {
             let _ = link.SetWorkingDirectory(&HSTRING::from(dir.as_os_str().to_string_lossy().as_ref()));
         }
-        let _ = link.SetDescription(w!("Nock - a dynamic island and menu bar for Windows"));
+        let _ = link.SetDescription(w!("Nock - a notch and top bar for Windows"));
         let _ = link.SetIconLocation(&HSTRING::from(exe.as_os_str().to_string_lossy().as_ref()), 0);
         if let Ok(file) = link.cast::<IPersistFile>() {
             let _ = file.Save(&HSTRING::from(lnk.as_os_str().to_string_lossy().as_ref()), true);

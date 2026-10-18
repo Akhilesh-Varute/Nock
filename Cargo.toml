@@ -2,7 +2,7 @@
 name = "nock"
 version = "0.9.5"
 edition = "2021"
-description = "A tiny native Windows dynamic island and macOS-style menu bar, written in Rust"
+description = "A tiny native notch and top bar for Windows, written in Rust"
 
 [features]
 default = ["media"]

@@ -1,5 +1,5 @@
 //! Dropdown panels under the top-bar icons (Wi-Fi, Bluetooth, volume, battery,
-//! calendar), like the macOS menu-bar popovers. One small layered window that is
+//! calendar). One small layered window that is
 //! shown only while a dropdown is open. Closes when the pointer leaves it, when
 //! you click into another window, or when you click its icon again.
 

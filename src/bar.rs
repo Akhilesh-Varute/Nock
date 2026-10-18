@@ -1,4 +1,4 @@
-//! The top bar: a thin full-width strip (like the macOS menu bar) that the notch
+//! The top bar: a thin full-width strip that the notch
 //! hangs from. Left: name of the app you are in. Right: Wi-Fi, Bluetooth,
 //! volume, battery and the date/time. Redrawn only on events (foreground change,
 //! radio change, once a minute), never on a fast timer.

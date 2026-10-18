@@ -10,7 +10,7 @@ fn main() {
     let mut res = winresource::WindowsResource::new();
     res.set_icon("assets/notch.ico");
     res.set("ProductName", "Nock");
-    res.set("FileDescription", "Nock - a dynamic island and menu bar for Windows");
+    res.set("FileDescription", "Nock - a notch and top bar for Windows");
     res.set("OriginalFilename", "nock.exe");
     res.set("LegalCopyright", "Copyright (c) 2026 Akhilesh Varute. MIT License.");
     if let Err(e) = res.compile() {
