@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.6
+
+- Releases now publish the installer and a clearly named `Nock-portable-<version>.exe` instead of a bare `nock.exe`, with a note on the release page saying which to pick. Descriptions and file details now say "notch and top bar for Windows".
+
 ## 0.9.5
 
 - Fixed the notch hiding when a Windows overlay (Start, Search, Task View and similar flyouts, which can cover the whole screen) was in front. These are no longer treated as full-screen apps. `visibility.log` showed this on a real PC: a `Windows.UI.Core.CoreWindow` the size of the monitor.

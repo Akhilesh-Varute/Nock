@@ -29,11 +29,11 @@ Written in Rust. No webview, no framework, no runtime. One small <code>.exe</cod
 
 Download **`NockSetup-<version>.exe`** from the [latest release](../../releases/latest) and run it. It installs just for you (no admin rights), adds Nock to the Start menu so you can find it by searching "Nock", and can start it with Windows. Uninstall it from Windows Settings → Apps like any other app.
 
-Prefer no installer? The same release also has the plain **`nock.exe`**: put it in a folder you will keep and run it. (Nock adds its own Start menu shortcut when it runs, so search finds it either way; tray → *Show in Start menu and search* turns that off.)
+Prefer no installer? The same release also has **`Nock-portable-<version>.exe`**: put it in a folder you will keep and run it. (Nock adds its own Start menu shortcut when it runs, so search finds it either way; tray → *Show in Start menu and search* turns that off.)
 
 Right-click the tray icon → **Start with Windows** to launch it at login.
 
-**Updates:** right-click the tray icon → **Check for updates**. If a newer release exists Nock offers to update; for a copy installed with the installer it downloads the new installer, runs it silently and restarts itself. A plain `nock.exe` just opens the download page. It only checks when you click, never in the background.
+**Updates:** right-click the tray icon → **Check for updates**. If a newer release exists Nock offers to update; for a copy installed with the installer it downloads the new installer, runs it silently and restarts itself. The portable file just opens the download page. It only checks when you click, never in the background.
 
 ## Build
 

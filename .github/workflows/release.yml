@@ -17,9 +17,18 @@ jobs:
           choco install innosetup --no-progress -y
           $v = "${{ github.ref_name }}".TrimStart('v')
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$v" installer\nock.iss
+      - name: Name the no-install version clearly
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}".TrimStart('v')
+          Copy-Item target\release\nock.exe "Nock-portable-$v.exe"
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            target/release/nock.exe
             installer/Output/NockSetup-*.exe
+            Nock-portable-*.exe
+          body: |
+            **Most people: download `NockSetup-${{ github.ref_name }}` (the installer).** It adds Nock to the Start menu, can start with Windows, and updates itself from the tray menu.
+
+            **Don't want to install? Use `Nock-portable-...exe`.** Put it in a folder you'll keep and run it. No Start menu entry beyond the one Nock adds itself, and no in-app updating (it just opens this page).
           generate_release_notes: true
