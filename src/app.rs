@@ -2186,4 +2186,222 @@ mod preview {
             }
         }
     }
+
+
+    /// Real-UI pieces for the demo video: the full bar, dropdowns, every page, buddies.
+    /// PREVIEW_DIR=... cargo test --release preview::render_demo_assets -- --ignored
+    #[test]
+    #[ignore]
+    fn render_demo_assets() {
+        use crate::bar::{Bar, BarAct};
+        use crate::pop::Pop;
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        }
+        let dir = std::env::var("PREVIEW_DIR").expect("PREVIEW_DIR");
+        let scale = 3.0f32;
+        let save = |name: &str, w: i32, h: i32, stride: i32, buf: &[u8]| {
+            let mut out = Vec::new();
+            out.extend_from_slice(&(w as u32).to_le_bytes());
+            out.extend_from_slice(&(h as u32).to_le_bytes());
+            for y in 0..h {
+                let row = (y * stride * 4) as usize;
+                out.extend_from_slice(&buf[row..row + (w * 4) as usize]);
+            }
+            std::fs::write(format!("{dir}/{name}.raw"), out).unwrap();
+        };
+        let mut a = App::new(HWND::default(), scale).expect("app");
+        a.mon = RECT { left: 0, top: 0, right: (1920.0 * scale) as i32, bottom: (1080.0 * scale) as i32 };
+        a.cfg.top_bar = true;
+        a.hidden = false;
+        a.has_volume = true;
+        a.volume = 0.62;
+        a.brightness = Some(70);
+        a.radios.wifi = Some(true);
+        a.radios.bluetooth = Some(true);
+        a.todos = vec![
+            Todo { done: false, text: "Review the pull request".into() },
+            Todo { done: false, text: "Reply to Sam".into() },
+            Todo { done: true, text: "Buy groceries".into() },
+        ];
+        a.clips = vec![
+            "https://github.com/Akhilesh-Varute/Nock".into(),
+            "Standup at 10:30, room 4".into(),
+            "cargo build --release".into(),
+            "hello@example.com".into(),
+        ];
+        a.pins = vec!["C:\\Projects\\notes.txt".into()];
+        a.mstate.has_session = true;
+        a.mstate.title = "Midnight City".into();
+        a.mstate.artist = "M83".into();
+        a.mstate.app = "Spotify".into();
+        a.mstate.playing = true;
+        a.mstate.dur_ticks = 243 * 10_000_000;
+        a.mstate.pos_ticks = 102 * 10_000_000;
+        a.mstate.can_seek = true;
+        a.mstate.can_prev = true;
+        a.mstate.can_next = true;
+        a.stat_cpu = 23;
+        a.stat_mem = 61;
+        a.stat_hist = (0..40).map(|i| 0.15 + 0.12 * ((i as f32) * 0.5).sin().abs() + (i as f32 % 7.0) * 0.02).collect();
+        a.stats = None;
+
+        // ---- the bar, plain and with each icon hovered / its dropdown open
+        a.bar = Bar::new(HWND::default(), a.mon.right, scale);
+        {
+            let b = a.bar.as_mut().unwrap();
+            b.app_name = "Visual Studio Code".into();
+            b.battery = Some((82, false));
+        }
+        for (name, hot) in [("bar_idle", None), ("bar_wifi", Some(BarAct::Wifi)), ("bar_bt", Some(BarAct::Bluetooth)), ("bar_vol", Some(BarAct::Volume)), ("bar_clock", Some(BarAct::Clock))] {
+            a.bar.as_mut().unwrap().hot = hot;
+            a.render_bar();
+            let (bw, _bh, buf) = a.bar.as_ref().unwrap().snapshot();
+            save(name, a.mon.right, (crate::bar::BAR_H * scale).round() as i32, bw, &buf);
+        }
+        // icon centres (logical px) so the video can aim the cursor
+        let hits: Vec<String> = a
+            .bar
+            .as_ref()
+            .unwrap()
+            .hits
+            .iter()
+            .map(|(r, k)| {
+                let n = match k {
+                    BarAct::Wifi => "wifi",
+                    BarAct::Bluetooth => "bluetooth",
+                    BarAct::Volume => "volume",
+                    BarAct::Brightness => "brightness",
+                    BarAct::Battery => "battery",
+                    BarAct::Clock => "clock",
+                };
+                format!("\"{n}\": [{:.1}, {:.1}]", r.cx(), r.cy())
+            })
+            .collect();
+
+        // ---- dropdowns
+        {
+            let mut w = sys::WIFI.lock().unwrap();
+            w.connected = Some("Home-5G".into());
+            w.nets = vec![
+                sys::WifiNet { ssid: "Home-5G".into(), signal: 92, secure: true, saved: true, auth: "WPA2-Personal".into() },
+                sys::WifiNet { ssid: "Office-Net".into(), signal: 78, secure: true, saved: true, auth: "WPA2-Personal".into() },
+                sys::WifiNet { ssid: "Cafe Guest".into(), signal: 64, secure: false, saved: false, auth: "Open".into() },
+                sys::WifiNet { ssid: "Neighbour_2.4".into(), signal: 41, secure: true, saved: false, auth: "WPA2-Personal".into() },
+            ];
+        }
+        {
+            let mut d = a.radio.devices.lock().unwrap();
+            *d = vec![
+                crate::radio::BtDevice { name: "Sony WH-1000XM5".into(), connected: true, address: 1 },
+                crate::radio::BtDevice { name: "Keychron K3".into(), connected: false, address: 2 },
+                crate::radio::BtDevice { name: "Galaxy Buds".into(), connected: false, address: 3 },
+                crate::radio::BtDevice { name: "Pixel 8".into(), connected: false, address: 4 },
+            ];
+        }
+        a.pop = Pop::new(HWND::default(), scale);
+        for (name, kind) in [("pop_wifi", BarAct::Wifi), ("pop_bt", BarAct::Bluetooth), ("pop_vol", BarAct::Volume), ("pop_bri", BarAct::Brightness), ("pop_battery", BarAct::Battery), ("pop_clock", BarAct::Clock)] {
+            a.pop.as_mut().unwrap().kind = Some(kind);
+            a.render_pop();
+            let (w, h, stride, buf) = a.pop.as_ref().unwrap().demo_snapshot(scale);
+            save(name, w, h, stride, &buf);
+        }
+
+        // ---- the pill and every page (600 x 250 logical)
+        let (pw, ph) = ((EXP_W * scale) as i32, (EXP_H * scale) as i32);
+        let page_shot = |a: &App, name: &str| {
+            a.gfx.begin(pw, ph).unwrap();
+            let mut hits = Vec::new();
+            crate::ui::draw(a, EXP_W, EXP_H, &mut hits);
+            let _ = a.gfx.end();
+            let (bw, _bh, buf) = a.gfx.snapshot();
+            save(name, pw, ph, bw, &buf);
+            hits
+        };
+        a.expanded = true;
+        a.sw = Spring::new(EXP_W);
+        a.sh = Spring::new(EXP_H);
+        let mut tabs: Vec<String> = Vec::new();
+        for p in PAGES.iter() {
+            a.page = *p;
+            let hits = page_shot(&a, &format!("page_{}", format!("{p:?}").to_lowercase()));
+            if tabs.is_empty() {
+                for h in &hits {
+                    if let Act::Tab(t) = h.act {
+                        tabs.push(format!("\"{}\": [{:.1}, {:.1}]", format!("{t:?}").to_lowercase(), h.r.cx(), h.r.cy()));
+                    }
+                    if matches!(h.act, Act::Collapse) {
+                        tabs.push(format!("\"collapse\": [{:.1}, {:.1}]", h.r.cx(), h.r.cy()));
+                    }
+                }
+            }
+        }
+        // Today: typing a task, ticking it, a running focus timer
+        a.page = Page::Tasks;
+        let text = "Ship the demo";
+        for (i, k) in [0usize, 4, 8, 13].iter().enumerate() {
+            a.entering = Some(text.chars().take(*k).collect::<String>().encode_utf16().collect());
+            page_shot(&a, &format!("today_type{i}"));
+        }
+        a.entering = None;
+        a.todos.insert(0, Todo { done: false, text: text.into() });
+        page_shot(&a, "today_added");
+        a.todos[1].done = true;
+        page_shot(&a, "today_ticked");
+        a.timer_task = Some(text.into());
+        a.timer_left_ms = 24 * 60 * 1000 + 41_000;
+        a.timer_start = Some(Instant::now());
+        page_shot(&a, "today_timer");
+        // the collapsed pills (idle ones show the clock, so no music session yet)
+        a.mstate.has_session = false;
+        a.expanded = false;
+        a.sh = Spring::new(a.col_h());
+        let (cw, chh) = ((COL_TIMER_W * scale) as i32, (a.col_h() * scale) as i32);
+        a.gfx.begin(cw, chh).unwrap();
+        let mut h2 = Vec::new();
+        crate::ui::draw(&a, COL_TIMER_W, a.col_h(), &mut h2);
+        let _ = a.gfx.end();
+        let (bw, _bh, buf) = a.gfx.snapshot();
+        save("pill_timer", cw, chh, bw, &buf);
+        a.timer_start = None;
+        a.timer_left_ms = 25 * 60 * 1000;
+        let (iw, ih) = ((COL_IDLE_W * scale) as i32, (a.col_h() * scale) as i32);
+        a.gfx.begin(iw, ih).unwrap();
+        let mut h3 = Vec::new();
+        crate::ui::draw(&a, COL_IDLE_W, a.col_h(), &mut h3);
+        let _ = a.gfx.end();
+        let (bw, _bh, buf) = a.gfx.snapshot();
+        save("pill_idle", iw, ih, bw, &buf);
+        a.mstate.has_session = true;
+        let (mw, mh) = ((COL_MEDIA_W * scale) as i32, (a.col_h() * scale) as i32);
+        a.gfx.begin(mw, mh).unwrap();
+        let mut h4 = Vec::new();
+        crate::ui::draw(&a, COL_MEDIA_W, a.col_h(), &mut h4);
+        let _ = a.gfx.end();
+        let (bw, _bh, buf) = a.gfx.snapshot();
+        save("pill_media", mw, mh, bw, &buf);
+
+        // ---- buddies on a 380 x bar strip
+        let g = crate::gfx::Gfx::new((384.0 * scale) as i32, (34.0 * scale) as i32, scale).expect("gfx");
+        let (sw, sh) = ((380.0 * scale) as i32, (crate::bar::BAR_H * scale) as i32);
+        let buddy_shot = |name: &str, id: u8, mode: u8, tick: u32, dir: f32, bubble: Option<&str>| {
+            g.begin(sw, sh).unwrap();
+            crate::buddy::demo_frame(&g, id, mode, tick, dir, bubble);
+            let _ = g.end();
+            let (bw, _bh, buf) = g.snapshot();
+            save(name, sw, sh, bw, &buf);
+        };
+        for k in 0..8u32 {
+            buddy_shot(&format!("buddy_cat_walk{k}"), 2, 2, k * 3, 1.0, None);
+        }
+        buddy_shot("buddy_cat_sleep", 2, 0, 5, 1.0, None);
+        buddy_shot("buddy_cat_cheer", 2, 4, 6, 1.0, Some("\u{2665}"));
+        for k in 0..8u32 {
+            buddy_shot(&format!("buddy_ronin_walk{k}"), 6, 2, k * 3, 1.0, None);
+        }
+        buddy_shot("buddy_ronin_say", 6, 1, 4, 1.0, Some("Patience."));
+        buddy_shot("buddy_courier_say", 7, 1, 4, 1.0, Some("Delivery's late. Again."));
+        buddy_shot("buddy_necro_say", 8, 1, 4, 1.0, Some("Death is a pause."));
+        std::fs::write(format!("{dir}/coords.json"), format!("{{\n  \"bar\": {{ {} }},\n  \"tabs\": {{ {} }}\n}}", hits.join(", "), tabs.join(", "))).unwrap();
+    }
 }

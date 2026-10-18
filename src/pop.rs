@@ -81,6 +81,13 @@ pub struct Pop {
 }
 
 impl Pop {
+    /// (width, height, stride in px, pixels) of the last drawn dropdown, for the demo assets.
+    #[cfg(test)]
+    pub fn demo_snapshot(&self, scale: f32) -> (i32, i32, i32, Vec<u8>) {
+        let (bw, _bh, buf) = self.gfx.snapshot();
+        ((POP_W * scale).round() as i32, (self.h * scale).round() as i32, bw, buf)
+    }
+
     pub fn new(hwnd: HWND, scale: f32) -> Option<Pop> {
         let gfx = Gfx::new(
             ((POP_W + 2.0) * scale).ceil() as i32,

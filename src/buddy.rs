@@ -572,6 +572,37 @@ impl App {
     }
 }
 
+/// One buddy frame for the demo video: `mode` 0 sleep, 1 idle, 2 walk, 3 dance, 4 cheer, 5 hop.
+/// The character stands at SPR_X on a BW-wide strip.
+#[cfg(test)]
+pub fn demo_frame(g: &Gfx, id: u8, mode: u8, tick: u32, dir: f32, bubble: Option<&str>) {
+    let kind = BuddyKind::from_id(id).expect("buddy id");
+    let mode = [Mode::Sleep, Mode::Idle, Mode::Walk, Mode::Dance, Mode::Cheer, Mode::Hop][mode as usize % 6];
+    let th = theme(false);
+    if let Some(who) = kind.pixel_who() {
+        let act = match mode {
+            Mode::Sleep => cast::Act::Crouch,
+            Mode::Idle => cast::Act::Stand,
+            Mode::Walk => cast::Act::Walk,
+            Mode::Dance | Mode::Cheer => cast::Act::Cheer,
+            Mode::Hop => cast::Act::Jump,
+        };
+        cast::draw_actor(g, &cast::Draw { who, x: SPR_X, y: 28.0, dir, act, p: 0.0, t: tick as f32 * 0.066, charge: 0.0 });
+    } else {
+        draw_sprite(g, kind, &pose_for(mode, tick, dir, (0.0, 0.0)), mode, tick);
+    }
+    if let Some(text) = bubble {
+        let n = text.chars().count() as f32;
+        let w = (n * 6.0 + 16.0).clamp(26.0, 320.0);
+        let r = Rect::new(SPR_X - 16.0 - w, 5.0, w, 18.0);
+        let bg = Color(0.17, 0.17, 0.2, 0.97);
+        g.fill_poly(&[(r.x + r.w - 1.0, 11.0), (r.x + r.w + 5.0, 14.0), (r.x + r.w - 1.0, 17.0)], bg);
+        g.fill_rrect(r, 9.0, bg);
+        g.stroke_rrect(r, 9.0, th.line, 1.0);
+        g.text(text, r, &g.fonts.tiny, th.t1, Align::Center);
+    }
+}
+
 // ------------------------------------------------------------------ drawing --
 
 #[derive(Clone, Copy, PartialEq)]

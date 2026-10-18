@@ -68,6 +68,11 @@ pub struct Bar {
 }
 
 impl Bar {
+    #[cfg(test)]
+    pub fn snapshot(&self) -> (i32, i32, Vec<u8>) {
+        self.gfx.snapshot()
+    }
+
     pub fn new(hwnd: HWND, mon_w_px: i32, scale: f32) -> Option<Bar> {
         let gfx = Gfx::new(mon_w_px.max(200), (BAR_H * scale).ceil() as i32 + 2, scale).ok()?;
         Some(Bar {
