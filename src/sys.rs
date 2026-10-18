@@ -969,20 +969,34 @@ pub fn set_autostart(on: bool) {
 
 // ------------------------------------------------------------------- state
 
+/// True when a window is really full screen: it matches the monitor rectangle exactly
+/// AND has no title bar. A maximised normal window also matches the monitor exactly when
+/// the taskbar is set to auto-hide, so the title bar is what tells the two apart (browsers,
+/// video players and games drop it when they go full screen).
+pub(crate) fn is_fullscreen_window(r: &RECT, mon: &RECT, style: u32) -> bool {
+    const WS_CAPTION_BITS: u32 = 0x00C0_0000; // WS_BORDER | WS_DLGFRAME
+    let exact = r.left == mon.left && r.top == mon.top && r.right == mon.right && r.bottom == mon.bottom;
+    exact && style & WS_CAPTION_BITS != WS_CAPTION_BITS
+}
+
+static LAST_KIND: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+fn log_visibility(msg: &str) {
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(crate::store::data_dir().join("visibility.log")) {
+        let _ = writeln!(f, "{msg}");
+    }
+}
+
 /// 0 = none, 1 = a full-screen video/browser/app (the bar can be peeked at),
 /// 2 = a game or presentation (stay out of the way completely).
 /// `skip` are our own windows; `mon` is the primary monitor rectangle.
+///
+/// The shell's "user notification state" is only trusted when the foreground window
+/// itself is really full screen: on some PCs it reports "busy" all the time, which used
+/// to keep the notch hidden even with nothing full screen.
 pub fn fullscreen_kind(skip: &[HWND], mon: &RECT) -> u8 {
     unsafe {
-        match SHQueryUserNotificationState() {
-            Ok(s) if s == QUNS_RUNNING_D3D_FULL_SCREEN || s == QUNS_PRESENTATION_MODE => return 2,
-            Ok(s) if s == QUNS_BUSY => return 1,
-            _ => {}
-        }
-        // The shell does not report every full-screen window (browser/YouTube full
-        // screen often slips through), so also look at the foreground window itself.
-        // A maximised window overhangs the monitor by its invisible border; a
-        // full-screen one matches the monitor rectangle exactly.
         let fg = GetForegroundWindow();
         if fg.is_invalid() || skip.contains(&fg) {
             return 0;
@@ -997,12 +1011,48 @@ pub fn fullscreen_kind(skip: &[HWND], mon: &RECT) -> u8 {
         if GetWindowRect(fg, &mut r).is_err() {
             return 0;
         }
-        let exact = r.left == mon.left && r.top == mon.top && r.right == mon.right && r.bottom == mon.bottom;
-        if exact {
-            1
+        let style = GetWindowLongPtrW(fg, GWL_STYLE) as u32;
+        let kind = if is_fullscreen_window(&r, mon, style) {
+            match SHQueryUserNotificationState() {
+                Ok(s) if s == QUNS_RUNNING_D3D_FULL_SCREEN || s == QUNS_PRESENTATION_MODE => 2,
+                _ => 1,
+            }
         } else {
             0
+        };
+        // leave a trace when the verdict changes, so "it hides for no reason" can be diagnosed
+        if LAST_KIND.swap(kind, std::sync::atomic::Ordering::Relaxed) != kind && kind != 0 {
+            log_visibility(&format!(
+                "hiding (kind {kind}): class '{cls}', rect {},{},{},{}, style {style:#x}, monitor {},{},{},{}",
+                r.left, r.top, r.right, r.bottom, mon.left, mon.top, mon.right, mon.bottom
+            ));
         }
+        kind
+    }
+}
+
+#[cfg(test)]
+mod fullscreen_tests {
+    use super::*;
+
+    fn rc(l: i32, t: i32, r: i32, b: i32) -> RECT {
+        RECT { left: l, top: t, right: r, bottom: b }
+    }
+
+    #[test]
+    fn maximised_window_is_not_full_screen() {
+        let mon = rc(0, 0, 1920, 1080);
+        // maximised with an auto-hidden taskbar: exact size, but it has a title bar
+        assert!(!is_fullscreen_window(&rc(0, 0, 1920, 1080), &mon, 0x16CF_0000));
+        // maximised normally: overhangs the monitor
+        assert!(!is_fullscreen_window(&rc(-8, -8, 1928, 1040), &mon, 0x16CF_0000));
+    }
+
+    #[test]
+    fn borderless_full_screen_is_detected() {
+        let mon = rc(0, 0, 1920, 1080);
+        assert!(is_fullscreen_window(&rc(0, 0, 1920, 1080), &mon, 0x9400_0000));
+        assert!(!is_fullscreen_window(&rc(0, 0, 1900, 1080), &mon, 0x9400_0000));
     }
 }
 

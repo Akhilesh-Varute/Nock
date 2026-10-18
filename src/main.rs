@@ -98,7 +98,7 @@ fn main() -> Result<()> {
         let hwnd = CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
             class,
-            w!("Nock"),
+            w!(""), // no title: window pickers (OBS, screen recorders) skip untitled windows
             WS_POPUP,
             0,
             0,
@@ -117,7 +117,7 @@ fn main() -> Result<()> {
         let bar_hwnd = CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
             class,
-            w!("NockBar"),
+            w!(""),
             WS_POPUP,
             0,
             0,
@@ -131,7 +131,7 @@ fn main() -> Result<()> {
         let pop_hwnd = CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
             class,
-            w!("NockPopup"),
+            w!(""),
             WS_POPUP,
             0,
             0,
@@ -145,7 +145,7 @@ fn main() -> Result<()> {
         let buddy_hwnd = CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
             class,
-            w!("NockBuddy"),
+            w!(""),
             WS_POPUP,
             0,
             0,
@@ -159,7 +159,7 @@ fn main() -> Result<()> {
         let stage_hwnd = CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
             class,
-            w!("NockStage"),
+            w!(""),
             WS_POPUP,
             0,
             0,
@@ -428,6 +428,8 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
         let tb = if a.cfg.top_bar { MF_CHECKED } else { MF_UNCHECKED };
         let _ = AppendMenuW(menu, MF_STRING | tb, 7, w!("Top bar"));
         let st = if a.cfg.stats { MF_CHECKED } else { MF_UNCHECKED };
+        let fh = if a.cfg.fs_hide { MF_CHECKED } else { MF_UNCHECKED };
+        let _ = AppendMenuW(menu, MF_STRING | fh, 16, w!("Hide in full-screen apps"));
         let ab = if a.cfg.auto_break { MF_CHECKED } else { MF_UNCHECKED };
         let _ = AppendMenuW(menu, MF_STRING | ab, 13, w!("Auto break after focus (5 min)"));
         let _ = AppendMenuW(menu, MF_STRING | st, 10, w!("CPU and memory on the bar"));
@@ -528,6 +530,7 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             7 => a.toggle_top_bar(),
             10 => a.toggle_stats(),
             13 => a.toggle_auto_break(),
+            16 => a.toggle_fs_hide(),
             14 => {
                 a.cfg.start_menu = !a.cfg.start_menu;
                 store::save_config(&a.cfg);

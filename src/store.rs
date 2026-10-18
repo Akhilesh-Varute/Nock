@@ -60,6 +60,8 @@ pub struct Config {
     pub eye_min: u16,
     /// A Start Menu shortcut so Windows search finds Nock.
     pub start_menu: bool,
+    /// Hide the notch and bar while a full-screen app or game is in front.
+    pub fs_hide: bool,
 }
 
 const DEFAULT_CONFIG: &str = "\
@@ -87,6 +89,8 @@ auto_break=0
 eye_min=0
 # a Start Menu shortcut so typing Nock in Windows search finds it: 1 = on
 start_menu=1
+# hide the notch and bar while a full-screen app or game is in front: 1 = on
+fs_hide=1
 ";
 
 pub fn load_config() -> Config {
@@ -113,6 +117,7 @@ pub fn load_config() -> Config {
         auto_break: false,
         eye_min: 0,
         start_menu: true,
+        fs_hide: true,
     };
     for line in text.lines() {
         let line = line.trim();
@@ -131,6 +136,7 @@ pub fn load_config() -> Config {
                 "stats" => cfg.stats = on,
                 "auto_break" => cfg.auto_break = on,
                 "start_menu" => cfg.start_menu = on,
+                "fs_hide" => cfg.fs_hide = on,
                 "eye_min" => cfg.eye_min = v.trim().parse::<u16>().unwrap_or(0).min(600),
                 "clock_style" => cfg.clock_style = v.trim().parse::<u8>().unwrap_or(0).min(3),
                 "water_min" => cfg.water_min = v.trim().parse::<u16>().unwrap_or(0).min(600),
@@ -142,7 +148,7 @@ pub fn load_config() -> Config {
     }
     // A config file from an older version lacks the newer settings: write the
     // file back with every setting present (keeping the user's values).
-    let keys = ["hover_expand", "eq_animation", "clock_24h", "reserve_space", "top_bar", "buddy", "scenes", "scene_min", "stats", "clock_style", "water_min", "auto_break", "eye_min", "start_menu"];
+    let keys = ["hover_expand", "eq_animation", "clock_24h", "reserve_space", "top_bar", "buddy", "scenes", "scene_min", "stats", "clock_style", "water_min", "auto_break", "eye_min", "start_menu", "fs_hide"];
     let present = |k: &str| text.lines().any(|l| l.trim().split_once('=').map(|(a, _)| a.trim() == k).unwrap_or(false));
     if keys.iter().any(|k| !present(k)) {
         save_config(&cfg);
@@ -153,7 +159,7 @@ pub fn load_config() -> Config {
 pub fn save_config(c: &Config) {
     let b = |v: bool| if v { 1 } else { 0 };
     let text = format!(
-        "# Nock settings (1 = on, 0 = off)\nhover_expand={}\neq_animation={}\nclock_24h={}\nreserve_space={}\ntop_bar={}\n# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer\nbuddy={}\n# fight scenes now and then (needs a buddy): 1 = on\nscenes={}\n# average minutes between scenes (1 to 60)\nscene_min={}\n# CPU and memory read-out on the top bar: 1 = on\nstats={}\n# top bar clock: 0 = digital, 1 = analog, 2 = binary, 3 = countdown to Friday\nclock_style={}\n# minutes between water reminders (0 = off)\nwater_min={}\n# after a focus session start a 5 minute break, then focus again: 1 = on\nauto_break={}\n# minutes between look-away reminders for your eyes (0 = off)\neye_min={}\n# a Start Menu shortcut so typing Nock in Windows search finds it: 1 = on\nstart_menu={}\n",
+        "# Nock settings (1 = on, 0 = off)\nhover_expand={}\neq_animation={}\nclock_24h={}\nreserve_space={}\ntop_bar={}\n# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer\nbuddy={}\n# fight scenes now and then (needs a buddy): 1 = on\nscenes={}\n# average minutes between scenes (1 to 60)\nscene_min={}\n# CPU and memory read-out on the top bar: 1 = on\nstats={}\n# top bar clock: 0 = digital, 1 = analog, 2 = binary, 3 = countdown to Friday\nclock_style={}\n# minutes between water reminders (0 = off)\nwater_min={}\n# after a focus session start a 5 minute break, then focus again: 1 = on\nauto_break={}\n# minutes between look-away reminders for your eyes (0 = off)\neye_min={}\n# a Start Menu shortcut so typing Nock in Windows search finds it: 1 = on\nstart_menu={}\n# hide the notch and bar while a full-screen app or game is in front: 1 = on\nfs_hide={}\n",
         b(c.hover_expand),
         b(c.eq_animation),
         b(c.clock_24h),
@@ -167,7 +173,8 @@ pub fn save_config(c: &Config) {
         c.water_min,
         b(c.auto_break),
         c.eye_min,
-        b(c.start_menu)
+        b(c.start_menu),
+        b(c.fs_hide)
     );
     let _ = fs::write(data_dir().join("config.ini"), text);
 }

@@ -812,6 +812,13 @@ impl App {
         self.render();
     }
 
+    /// Tray: hide while a full-screen app is in front (on by default).
+    pub fn toggle_fs_hide(&mut self) {
+        self.cfg.fs_hide = !self.cfg.fs_hide;
+        crate::store::save_config(&self.cfg);
+        self.on_foreground();
+    }
+
     pub fn toggle_tucked(&mut self) {
         self.tucked = !self.tucked;
         if self.tucked {
@@ -1788,7 +1795,7 @@ impl App {
         // foreground window), and never hide while a task is being typed.
         let fgw = unsafe { GetForegroundWindow() };
         let ours = fgw == self.hwnd || self.pop.as_ref().map(|p| p.hwnd) == Some(fgw);
-        let kind = if self.tucked || ours || self.entering.is_some() {
+        let kind = if self.tucked || ours || self.entering.is_some() || !self.cfg.fs_hide {
             0
         } else {
             sys::fullscreen_kind(&[self.hwnd, self.bar.as_ref().map(|b| b.hwnd).unwrap_or_default(), self.pop.as_ref().map(|p| p.hwnd).unwrap_or_default()], &self.mon)

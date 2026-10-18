@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.2
+
+- Fixed the notch and bar staying hidden on some PCs even with nothing full screen. A maximised window on a taskbar set to auto-hide matches the monitor exactly and was mistaken for full screen; now a window must also have no title bar, and the Windows "busy" hint is only trusted for such a window.
+- Tray: new *Hide in full-screen apps* switch (`fs_hide` in config.ini) to turn the auto-hide off entirely, and `visibility.log` records why Nock hid.
+- Nock's windows no longer have titles, so window pickers in recorders such as OBS should stop listing them as separate windows.
+
 ## 0.9.1
 
 - Tray menu → Check for updates: finds the latest GitHub release and, for the installer version, downloads, installs and restarts Nock for you (the plain exe opens the download page). Only runs when you click it.
