@@ -153,11 +153,20 @@ The first scene plays a minute or two after Nock starts, then one every few minu
 <td align="center"><img src="docs/scenes/rise.gif" width="380" alt="Rise"><br><sub>Rise</sub></td>
 <td align="center"><img src="docs/scenes/alley-fight.gif" width="380" alt="Alley fight"><br><sub>Alley fight</sub></td>
 </tr>
+<tr>
+<td align="center"><img src="docs/scenes/friday-deploy.gif" width="380" alt="Friday deploy"><br><sub>Friday deploy</sub></td>
+<td align="center"><img src="docs/scenes/on-mute.gif" width="380" alt="You're on mute"><br><sub>You're on mute</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/scenes/low-battery.gif" width="380" alt="Low battery"><br><sub>Low battery</sub></td>
+<td align="center"><img src="docs/scenes/cricket-six.gif" width="380" alt="Cricket six"><br><sub>Cricket six</sub></td>
+</tr>
 </table>
 
 *(The clips are rendered from the scene code, a few at real speed, on a mock bar; the real thing plays on your actual top bar.)*
 
 - **Original characters**: *Showdown* (Cinder the ember knight vs Krag the obsidian brute), *Heist* (Veil the shadow thief vs Sparkplug the young inventor), *Team-up*, *Duel at dusk* (Ronin vs Courier), *Rise* (Necromancer vs Ronin) and *Alley fight*.
+- **Everyday jokes**: *Friday deploy* (Sparkplug ships anyway, the bug shows up), *You're on mute* (Cinder presents to nobody), *Low battery* ("1%... I can make it") and *Cricket six* (Courier bowls, Ronin hits it out of the bar).
 - **Press conference**: a bobblehead answers a crowd of reporters with mics and a camera (needs about 420 px of free bar).
 - **Wizard-school fan art**: *Harry vs Voldemort*, *Owl post*, *Harry and friends vs Voldemort*, *Quidditch* and *Dementor*.
 

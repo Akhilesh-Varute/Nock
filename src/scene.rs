@@ -35,7 +35,7 @@ const GROUND: f32 = 28.0;
 const MAX_W: f32 = 460.0;
 const MIN_W: f32 = 160.0;
 /// Number of scripted scenes (0..SCENES).
-const SCENES: usize = 12;
+const SCENES: usize = 16;
 /// The press conference needs room for its long speech bubbles.
 const PRESS_W: f32 = 420.0;
 
@@ -75,6 +75,14 @@ enum Fx {
     Broom,
     /// a silver stag running from a to b
     Patronus,
+    /// a cricket ball bowled from a to b
+    Ball,
+    /// the ball hit by a: it sails up and off the right edge
+    Sixer,
+    /// a small battery by a's head: draining (false) or charging (true)
+    Battery(bool),
+    /// a muted microphone by a's head
+    Mute,
 }
 
 struct Ev {
@@ -505,6 +513,130 @@ fn script(id: usize) -> Script {
             ],
             len: 9.8,
         },
+        // Friday deploy: Spark (0) deploys anyway, Veil (1) warns, Krag (2) is the bug
+        12 => Script {
+            tracks: vec![
+                tr(Who::Spark, &[
+                    (0.0, -0.1, Run, 1.0), (1.3, 0.5, Stand, 1.0), (3.1, 0.5, Cast, 1.0),
+                    (3.9, 0.5, Stand, 1.0), (5.5, 0.5, Stand, 1.0), (5.9, 0.5, Hurt, 1.0),
+                    (6.6, 0.5, Kneel, 1.0), (8.2, 0.5, Stand, 1.0), (8.3, 0.5, Walk, -1.0),
+                    (9.6, -0.1, Stand, -1.0),
+                ]),
+                tr(Who::Veil, &[
+                    (0.2, -0.1, Run, 1.0), (1.2, 0.24, Stand, 1.0), (8.0, 0.24, Stand, 1.0),
+                    (8.1, 0.24, Walk, -1.0), (9.4, -0.1, Stand, -1.0),
+                ]),
+                tr(Who::Krag, &[
+                    (3.2, 0.88, Kneel, -1.0), (4.0, 0.88, Stand, -1.0), (4.1, 0.88, Walk, -1.0),
+                    (5.2, 0.66, Stand, -1.0), (5.3, 0.66, Slam, -1.0), (6.1, 0.66, Stand, -1.0),
+                    (8.3, 0.66, Stand, -1.0), (8.4, 0.66, Walk, 1.0), (9.8, 1.1, Stand, 1.0),
+                ]),
+            ],
+            evs: vec![
+                ev(3.3, 0.3, Fx::Bolt, 0, 2),
+                ev(3.55, 0.5, Fx::Burst(2), 0, 2),
+                ev(5.8, 0.9, Fx::Ring, 2, 0),
+                ev(5.9, 0.4, Fx::Burst(1), 2, 0),
+            ],
+            says: vec![
+                say(1.5, 1.2, 1, "It's Friday."),
+                say(2.7, 1.2, 0, "One tiny deploy."),
+                say(4.2, 1.0, 2, "Surprise."),
+                say(6.4, 1.0, 1, "Told you."),
+                say(7.4, 1.8, 0, "Works on my machine."),
+            ],
+            len: 9.8,
+        },
+        // You're on mute: Cinder (0) presents, Krag (1) and Veil (2) cannot hear a word
+        13 => Script {
+            tracks: vec![
+                tr(Who::Cinder, &[
+                    (0.0, -0.1, Run, 1.0), (1.3, 0.3, Stand, 1.0), (2.0, 0.3, Cast, 1.0),
+                    (2.8, 0.3, Stand, 1.0), (3.0, 0.3, Cast, 1.0), (3.8, 0.3, Stand, 1.0),
+                    (5.2, 0.3, Cast, 1.0), (6.0, 0.3, Stand, 1.0), (7.2, 0.3, Kneel, 1.0),
+                    (8.8, 0.3, Stand, 1.0), (8.9, 0.3, Walk, -1.0), (10.2, -0.1, Stand, -1.0),
+                ]),
+                tr(Who::Krag, &[
+                    (0.5, 1.1, Walk, -1.0), (1.6, 0.64, Stand, -1.0), (8.6, 0.64, Stand, -1.0),
+                    (8.7, 0.64, Walk, 1.0), (10.0, 1.1, Stand, 1.0),
+                ]),
+                tr(Who::Veil, &[
+                    (0.9, 1.1, Walk, -1.0), (2.0, 0.8, Stand, -1.0), (8.6, 0.8, Stand, -1.0),
+                    (8.7, 0.8, Walk, 1.0), (10.2, 1.1, Stand, 1.0),
+                ]),
+            ],
+            evs: vec![
+                ev(1.8, 5.8, Fx::Mute, 0, 0),
+            ],
+            says: vec![
+                say(1.9, 1.8, 0, "As I was saying, synergy..."),
+                say(4.0, 1.2, 1, "You're on mute."),
+                say(5.3, 1.3, 0, "Can you hear me now?"),
+                say(6.7, 1.2, 1, "Still on mute."),
+                say(7.9, 1.5, 0, "...I'll email it."),
+            ],
+            len: 10.2,
+        },
+        // Low battery: Spark (0) at 1%, Courier (1) arrives with a charger
+        14 => Script {
+            tracks: vec![
+                tr(Who::Spark, &[
+                    (0.0, -0.1, Walk, 1.0), (1.7, 0.38, Stand, 1.0), (2.2, 0.38, Walk, 1.0),
+                    (3.3, 0.52, Stand, 1.0), (3.5, 0.52, Hurt, 1.0), (4.3, 0.52, Kneel, 1.0),
+                    (5.6, 0.52, Kneel, 1.0), (5.8, 0.52, Stand, 1.0), (6.0, 0.52, Jump, 1.0),
+                    (7.0, 0.52, Cheer, 1.0), (8.4, 0.52, Cheer, 1.0), (8.5, 0.52, Walk, -1.0),
+                    (9.8, -0.1, Stand, -1.0),
+                ]),
+                tr(Who::Courier, &[
+                    (3.9, 1.1, Run, -1.0), (5.0, 0.74, Stand, -1.0), (5.2, 0.74, Throw, -1.0),
+                    (6.0, 0.74, Stand, -1.0), (8.4, 0.74, Stand, -1.0), (8.5, 0.74, Walk, 1.0),
+                    (9.9, 1.1, Stand, 1.0),
+                ]),
+            ],
+            evs: vec![
+                ev(1.7, 3.2, Fx::Battery(false), 0, 0),
+                ev(5.3, 0.8, Fx::Spell(3), 1, 0),
+                ev(5.5, 2.0, Fx::Battery(true), 0, 0),
+            ],
+            says: vec![
+                say(1.8, 1.5, 0, "1%... I can make it."),
+                say(3.6, 1.1, 0, "Nope."),
+                say(5.0, 1.3, 1, "Charger. Fast lane."),
+                say(7.0, 1.5, 0, "100%! Let's go!"),
+            ],
+            len: 9.9,
+        },
+        // Cricket: Courier (0) bowls, Ronin (1) hits it for six, Cinder (2) goes wild
+        15 => Script {
+            tracks: vec![
+                tr(Who::Courier, &[
+                    (0.0, 1.1, Walk, -1.0), (1.3, 0.78, Stand, -1.0), (2.2, 0.78, Throw, -1.0),
+                    (3.0, 0.78, Stand, -1.0), (4.6, 0.78, Kneel, -1.0), (6.5, 0.78, Stand, -1.0),
+                    (6.6, 0.78, Walk, 1.0), (8.0, 1.1, Stand, 1.0),
+                ]),
+                tr(Who::Ronin, &[
+                    (0.0, -0.1, Walk, 1.0), (1.3, 0.34, Stand, 1.0), (3.0, 0.34, Slash, 1.0),
+                    (3.9, 0.34, Stand, 1.0), (4.3, 0.34, Cheer, 1.0), (7.0, 0.34, Cheer, 1.0),
+                    (7.1, 0.34, Walk, -1.0), (8.4, -0.1, Stand, -1.0),
+                ]),
+                tr(Who::Cinder, &[
+                    (0.5, -0.1, Walk, 1.0), (1.2, 0.1, Stand, 1.0), (3.5, 0.1, Stand, 1.0),
+                    (3.6, 0.1, Cheer, 1.0), (7.0, 0.1, Cheer, 1.0), (7.1, 0.1, Walk, -1.0),
+                    (8.3, -0.1, Stand, -1.0),
+                ]),
+            ],
+            evs: vec![
+                ev(2.8, 0.6, Fx::Ball, 0, 1),
+                ev(3.45, 1.6, Fx::Sixer, 1, 0),
+            ],
+            says: vec![
+                say(1.4, 1.1, 1, "Bring it."),
+                say(4.0, 1.2, 2, "SIIIX!"),
+                say(4.6, 1.6, 0, "That was a no-ball."),
+                say(6.2, 1.2, 1, "Six."),
+            ],
+            len: 8.4,
+        },
         // Spark (0) + Cinder (1) vs Krag (2)
         _ => Script {
             tracks: vec![
@@ -626,7 +758,7 @@ fn draw_frame(g: &Gfx, sc: &Script, w: f32, face: &Option<ID2D1Bitmap>, t: f32, 
     }
     for e in &sc.evs {
         if t >= e.t && t <= e.t + e.dur {
-            draw_fx(g, e, ((t - e.t) / e.dur).clamp(0.0, 1.0), &draws, tick);
+            draw_fx(g, e, ((t - e.t) / e.dur).clamp(0.0, 1.0), &draws, tick, w);
         }
     }
     for sy in &sc.says {
@@ -724,7 +856,7 @@ fn lerp2(a: (f32, f32), b: (f32, f32), u: f32) -> (f32, f32) {
     (a.0 + (b.0 - a.0) * u, a.1 + (b.1 - a.1) * u)
 }
 
-fn draw_fx(g: &Gfx, e: &Ev, u: f32, draws: &[Option<Draw>], tick: u32) {
+fn draw_fx(g: &Gfx, e: &Ev, u: f32, draws: &[Option<Draw>], tick: u32, stage_w: f32) {
     let (Some(da), Some(db)) = (draws.get(e.a).copied().flatten(), draws.get(e.b).copied().flatten()) else {
         // target already left the stage: still show impact effects on the ground
         return;
@@ -822,6 +954,65 @@ fn draw_fx(g: &Gfx, e: &Ev, u: f32, draws: &[Option<Draw>], tick: u32) {
                 g.fill_circle(q.0, q.1 + hop * 0.5, 3.4 - k as f32 * 0.5, Color(0.8, 0.95, 1.0, 0.4 / k as f32));
             }
             draw_stag(g, (p.0, p.1 + hop), (chest_b.0 - hand.0).signum(), tick);
+        }
+        Fx::Ball => {
+            let p = lerp2(hand, chest_b, u);
+            let lift = -(u * std::f32::consts::PI).sin() * 5.0;
+            for k in 1..4 {
+                let q = lerp2(hand, chest_b, (u - k as f32 * 0.07).max(0.0));
+                g.fill_circle(q.0, q.1 + -((u - k as f32 * 0.07).max(0.0) * std::f32::consts::PI).sin() * 5.0, 2.2 - k as f32 * 0.4, Color(0.9, 0.2, 0.2, 0.35 / k as f32));
+            }
+            g.fill_circle(p.0, p.1 + lift, 2.6, Color(0.82, 0.12, 0.14, 1.0));
+            g.line((p.0 - 1.6, p.1 + lift - 0.6), (p.0 + 1.6, p.1 + lift + 0.6), 0.7, Color(1.0, 0.95, 0.9, 0.9));
+        }
+        Fx::Sixer => {
+            // the ball leaves the bat and sails up and off the right edge
+            let x = hand.0 + u * 330.0;
+            let y = hand.1 - u * 60.0;
+            for k in 1..5 {
+                let uu = (u - k as f32 * 0.02).max(0.0);
+                g.fill_circle(hand.0 + uu * 330.0, hand.1 - uu * 60.0, 2.4 - k as f32 * 0.4, Color(1.0, 0.7, 0.2, 0.4 / k as f32));
+            }
+            g.fill_circle(x, y, 2.8, Color(0.85, 0.12, 0.14, 1.0));
+            g.line((x - 1.8, y - 0.6), (x + 1.8, y + 0.6), 0.7, Color(1.0, 0.95, 0.9, 0.9));
+            if u < 0.2 {
+                let r = 3.0 + u * 40.0;
+                g.fill_circle(hand.0, hand.1, r * 0.7, Color(1.0, 0.85, 0.3, 0.4 * (1.0 - u * 5.0)));
+                for i in 0..6 {
+                    let a = i as f32 * std::f32::consts::TAU / 6.0;
+                    g.line((hand.0 + a.cos() * r * 0.4, hand.1 + a.sin() * r * 0.4), (hand.0 + a.cos() * r, hand.1 + a.sin() * r), 1.2, Color(1.0, 0.9, 0.4, 1.0 - u * 5.0));
+                }
+            }
+        }
+        Fx::Battery(charging) => {
+            // a little battery beside the head: drains to red, or fills up green
+            let f = if charging { u } else { 0.32 * (1.0 - u) + 0.02 };
+            let col = if charging {
+                Color(0.45, 0.9, 0.5, 1.0)
+            } else if f < 0.15 {
+                Color(1.0, 0.35, 0.3, 1.0)
+            } else {
+                Color(1.0, 0.8, 0.3, 1.0)
+            };
+            let flash = if !charging && f < 0.15 && (tick / 4) % 2 == 0 { 0.4 } else { 1.0 };
+            // on the side away from the speech bubble (bubbles open toward the middle of the stage)
+            let side = if da.x < stage_w * 0.5 { -1.0 } else { 1.0 };
+            let (bx, by) = (da.x + side * 14.0 - 7.0, da.y - 27.0);
+            g.fill_rrect(Rect::new(bx, by, 14.0, 7.0), 1.6, Color(0.0, 0.0, 0.0, 0.55));
+            g.stroke_rrect(Rect::new(bx, by, 14.0, 7.0), 1.6, Color(1.0, 1.0, 1.0, 0.9), 0.9);
+            g.fill_rrect(Rect::new(bx + 14.0, by + 2.0, 1.6, 3.0), 0.5, Color(1.0, 1.0, 1.0, 0.9));
+            g.fill_rrect(Rect::new(bx + 1.2, by + 1.2, (11.6 * f).max(0.8), 4.6), 0.8, Color(col.0, col.1, col.2, flash));
+        }
+        Fx::Mute => {
+            // a microphone with a red slash, bobbing beside the speaker
+            let side = if da.x < stage_w * 0.5 { -1.0 } else { 1.0 };
+            let (mx, my) = (da.x + side * 13.0, da.y - 22.0 + (tick as f32 * 0.3).sin() * 0.8);
+            let c = Color(1.0, 1.0, 1.0, 0.95);
+            g.fill_rrect(Rect::new(mx - 2.0, my - 6.0, 4.0, 7.0), 2.0, c);
+            polyline(g, &[(mx - 3.4, my - 1.0), (mx - 3.4, my + 1.5), (mx, my + 3.4), (mx + 3.4, my + 1.5), (mx + 3.4, my - 1.0)], 0.9, c);
+            g.line((mx, my + 3.4), (mx, my + 6.0), 0.9, c);
+            g.line((mx - 5.0, my - 7.0), (mx + 5.0, my + 6.0), 2.0, Color(0.0, 0.0, 0.0, 0.6));
+            g.line((mx - 5.0, my - 7.0), (mx + 5.0, my + 6.0), 1.2, Color(1.0, 0.3, 0.3, 1.0));
         }
         Fx::Ring => {
             let rx = 6.0 + u * 90.0;

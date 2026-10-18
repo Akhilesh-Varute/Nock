@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Four new everyday-joke scenes with the original cast: Friday deploy, You're on mute, Low battery and Cricket six (tray menu → Scenes, and they join the random pick).
+
 ## 0.9.2
 
 - Fixed the notch and bar staying hidden on some PCs even with nothing full screen. A maximised window on a taskbar set to auto-hide matches the monitor exactly and was mistaken for full screen; now a window must also have no title bar, and the Windows "busy" hint is only trusted for such a window.
