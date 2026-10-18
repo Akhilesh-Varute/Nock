@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The joke scenes now have characters that fit them (developer, manager, coworkers, a bug, cricketers, a fan) instead of reusing the fantasy cast.
+- The default buddy for new installs is now the Robot (existing settings are kept).
+
 ## 0.9.3
 
 - Four new everyday-joke scenes with the original cast: Friday deploy, You're on mute, Low battery and Cricket six (tray menu → Scenes, and they join the random pick).

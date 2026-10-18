@@ -72,7 +72,7 @@ clock_24h=0
 reserve_space=0
 top_bar=1
 # buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer
-buddy=2
+buddy=5
 # fight scenes now and then (needs a buddy): 1 = on
 scenes=1
 # average minutes between scenes (1 to 60)
@@ -108,7 +108,7 @@ pub fn load_config() -> Config {
         clock_24h: false,
         reserve_space: false,
         top_bar: true,
-        buddy: 2,
+        buddy: 5,
         scenes: true,
         scene_min: 5,
         stats: false,
@@ -141,7 +141,7 @@ pub fn load_config() -> Config {
                 "clock_style" => cfg.clock_style = v.trim().parse::<u8>().unwrap_or(0).min(3),
                 "water_min" => cfg.water_min = v.trim().parse::<u16>().unwrap_or(0).min(600),
                 "scene_min" => cfg.scene_min = v.trim().parse::<u8>().unwrap_or(5).clamp(1, 60),
-                "buddy" => cfg.buddy = v.trim().parse::<u8>().ok().filter(|b| *b <= 8).unwrap_or(2),
+                "buddy" => cfg.buddy = v.trim().parse::<u8>().ok().filter(|b| *b <= 8).unwrap_or(5),
                 _ => {}
             }
         }

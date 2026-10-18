@@ -130,7 +130,7 @@ A tiny original character lives on the top bar, in the free stretch between the 
 - **Follows your pointer** when you move it over that part of the bar, and its eyes follow the cursor. Click it to pet it.
 - **Cheers** when the focus timer ends, and says "Connected!" or "Oops" after a Wi-Fi / Bluetooth attempt, "Low battery" when the battery runs low, "Bedtime?" late at night, and your reminders.
 
-Pick the character from the tray menu → **Buddy**: Kitty (default), Blob, Bunny, Hero or Robot, or Off. It is also the `buddy` setting in `config.ini` (0 = off, 1 blob, 2 cat, 3 bunny, 4 hero, 5 robot, 6 ronin, 7 courier, 8 necromancer). The characters are drawn from simple shapes in code, so there are no image files. It hides together with the bar in full screen.
+Pick the character from the tray menu → **Buddy**: Robot (default), Kitty, Blob, Bunny or Hero, or Off. It is also the `buddy` setting in `config.ini` (0 = off, 1 blob, 2 cat, 3 bunny, 4 hero, 5 robot, 6 ronin, 7 courier, 8 necromancer). The characters are drawn from simple shapes in code, so there are no image files. It hides together with the bar in full screen.
 
 ### Pixel characters
 
@@ -166,7 +166,7 @@ The first scene plays a minute or two after Nock starts, then one every few minu
 *(The clips are rendered from the scene code, a few at real speed, on a mock bar; the real thing plays on your actual top bar.)*
 
 - **Original characters**: *Showdown* (Cinder the ember knight vs Krag the obsidian brute), *Heist* (Veil the shadow thief vs Sparkplug the young inventor), *Team-up*, *Duel at dusk* (Ronin vs Courier), *Rise* (Necromancer vs Ronin) and *Alley fight*.
-- **Everyday jokes**: *Friday deploy* (Sparkplug ships anyway, the bug shows up), *You're on mute* (Cinder presents to nobody), *Low battery* ("1%... I can make it") and *Cricket six* (Courier bowls, Ronin hits it out of the bar).
+- **Everyday jokes**, with their own everyday cast (a hoodie-wearing developer, a manager, support and intern colleagues, a very angry bug, cricketers and a fan): *Friday deploy* (the dev ships anyway, the bug shows up), *You're on mute* (the manager presents to nobody), *Low battery* ("1%... I can make it") and *Cricket six* (the bowler bowls, the batter hits it out of the bar).
 - **Press conference**: a bobblehead answers a crowd of reporters with mics and a camera (needs about 420 px of free bar).
 - **Wizard-school fan art**: *Harry vs Voldemort*, *Owl post*, *Harry and friends vs Voldemort*, *Quidditch* and *Dementor*.
 

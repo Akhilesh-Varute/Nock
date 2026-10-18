@@ -2179,7 +2179,7 @@ mod preview {
         let dir = std::env::var("PREVIEW_DIR").expect("PREVIEW_DIR");
         let scale = 3.0f32;
         let g = crate::gfx::Gfx::new((400.0 * scale) as i32, (34.0 * scale) as i32, scale).expect("gfx");
-        for id in [0usize, 1, 2, 3, 4, 5, 12, 13, 14, 15] {
+        for id in [12usize, 13, 14, 15] {
             let steps = (crate::scene::demo_len(id) * 10.0) as usize + 4;
             for k in 0..steps {
                 let t = k as f32 * 0.1;

@@ -39,6 +39,15 @@ pub enum Who {
     // the games' heroes (see skins.rs)
     Thor,
     Superman,
+    // everyday people and a bug, for the joke scenes
+    Dev,
+    Manager,
+    Coworker,
+    Intern,
+    Batter,
+    Bowler,
+    Fan,
+    Bug,
 }
 
 impl Who {
@@ -392,6 +401,13 @@ fn spec(who: Who) -> Spec {
         Who::Superman => Spec { h: 34.0, hr: 5.8, t: 0.30, hw: 3.2, sw: 5.0, th: 3.5, ath: 3.3 },
         Who::Thor => Spec { h: 34.0, hr: 6.2, t: 0.30, hw: 3.5, sw: 5.0, th: 3.8, ath: 3.5 },
         Who::Voldemort => Spec { h: 36.0, hr: 5.3, t: 0.31, hw: 2.6, sw: 3.4, th: 2.5, ath: 2.3 },
+        Who::Dev => Spec { h: 32.0, hr: 5.5, t: 0.30, hw: 3.0, sw: 3.8, th: 3.0, ath: 2.8 },
+        Who::Manager => Spec { h: 34.0, hr: 5.5, t: 0.31, hw: 3.2, sw: 4.0, th: 3.0, ath: 2.8 },
+        Who::Coworker => Spec { h: 32.0, hr: 5.4, t: 0.30, hw: 3.0, sw: 3.8, th: 2.9, ath: 2.7 },
+        Who::Intern => Spec { h: 30.0, hr: 5.5, t: 0.30, hw: 2.8, sw: 3.6, th: 2.8, ath: 2.6 },
+        Who::Batter => Spec { h: 33.0, hr: 5.4, t: 0.30, hw: 3.2, sw: 4.0, th: 3.0, ath: 2.9 },
+        Who::Bowler => Spec { h: 34.0, hr: 5.4, t: 0.30, hw: 3.0, sw: 3.9, th: 2.9, ath: 2.8 },
+        Who::Fan => Spec { h: 31.0, hr: 5.4, t: 0.30, hw: 2.9, sw: 3.7, th: 2.8, ath: 2.7 },
         _ => Spec { h: 30.0, hr: 5.0, t: 0.3, hw: 3.0, sw: 4.0, th: 3.0, ath: 3.0 },
     }
 }
@@ -501,6 +517,13 @@ fn body(cx: &Ctx, d: &Draw, sk: &Sk, sp: &Spec, j: &J) {
     match d.who {
         Who::Spark => spark(cx, d, sk, sp, j),
         Who::Thor => thor(cx, d, sk, sp, j),
+        Who::Dev => person(cx, d, sk, sp, j, &Per { shirt: c(0.46, 0.48, 0.58), shirt_d: c(0.31, 0.32, 0.42), pants: c(0.2, 0.28, 0.5), shoes: c(0.95, 0.95, 0.95), skin: c(0.98, 0.8, 0.65), hair: c(0.2, 0.14, 0.1), hair_style: 0, cap: c(0.0, 0.0, 0.0), glasses: true, tie: None, lanyard: None, hood: true, long: true, headset: false, pads: false, item: 2 }),
+        Who::Manager => person(cx, d, sk, sp, j, &Per { shirt: c(0.96, 0.96, 0.98), shirt_d: c(0.8, 0.8, 0.86), pants: c(0.2, 0.2, 0.26), shoes: c(0.1, 0.1, 0.12), skin: c(0.9, 0.7, 0.56), hair: c(0.3, 0.3, 0.34), hair_style: 1, cap: c(0.0, 0.0, 0.0), glasses: false, tie: Some(c(0.8, 0.12, 0.18)), lanyard: None, hood: false, long: true, headset: false, pads: false, item: 0 }),
+        Who::Coworker => person(cx, d, sk, sp, j, &Per { shirt: c(0.12, 0.6, 0.62), shirt_d: c(0.08, 0.42, 0.45), pants: c(0.7, 0.6, 0.42), shoes: c(0.4, 0.28, 0.18), skin: c(0.78, 0.56, 0.42), hair: c(0.1, 0.08, 0.1), hair_style: 1, cap: c(0.0, 0.0, 0.0), glasses: false, tie: None, lanyard: Some(c(1.0, 0.6, 0.2)), hood: false, long: false, headset: true, pads: false, item: 0 }),
+        Who::Intern => person(cx, d, sk, sp, j, &Per { shirt: c(0.95, 0.55, 0.2), shirt_d: c(0.7, 0.38, 0.12), pants: c(0.18, 0.18, 0.24), shoes: c(0.95, 0.95, 0.95), skin: c(1.0, 0.82, 0.7), hair: c(0.85, 0.35, 0.12), hair_style: 0, cap: c(0.0, 0.0, 0.0), glasses: true, tie: None, lanyard: Some(c(0.3, 0.55, 1.0)), hood: false, long: true, headset: false, pads: false, item: 0 }),
+        Who::Batter => person(cx, d, sk, sp, j, &Per { shirt: c(0.97, 0.97, 0.98), shirt_d: c(0.8, 0.8, 0.86), pants: c(0.97, 0.97, 0.98), shoes: c(0.95, 0.95, 0.95), skin: c(0.82, 0.6, 0.46), hair: c(0.1, 0.08, 0.1), hair_style: 2, cap: c(0.15, 0.3, 0.7), glasses: false, tie: None, lanyard: None, hood: false, long: false, headset: false, pads: true, item: 1 }),
+        Who::Bowler => person(cx, d, sk, sp, j, &Per { shirt: c(0.15, 0.35, 0.8), shirt_d: c(0.1, 0.25, 0.6), pants: c(0.96, 0.96, 0.98), shoes: c(0.95, 0.95, 0.95), skin: c(0.72, 0.5, 0.36), hair: c(0.1, 0.08, 0.1), hair_style: 3, cap: c(0.15, 0.35, 0.8), glasses: false, tie: None, lanyard: None, hood: false, long: false, headset: false, pads: false, item: 0 }),
+        Who::Fan => person(cx, d, sk, sp, j, &Per { shirt: c(0.3, 0.65, 1.0), shirt_d: c(0.2, 0.45, 0.8), pants: c(0.24, 0.3, 0.46), shoes: c(0.95, 0.95, 0.95), skin: c(0.9, 0.68, 0.52), hair: c(0.1, 0.08, 0.1), hair_style: 3, cap: c(1.0, 0.6, 0.2), glasses: false, tie: None, lanyard: None, hood: false, long: false, headset: false, pads: false, item: 0 }),
         Who::Superman => superman(cx, d, sk, sp, j),
         Who::Cinder => cinder(cx, d, sk, sp, j),
         Who::Krag => krag(cx, d, sk, sp, j),
@@ -831,6 +854,158 @@ fn superman(cx: &Ctx, d: &Draw, sk: &Sk, sp: &Spec, j: &J) {
             let l = 8.0 + kf * 3.0 + (t * 15.0 + kf * 2.0).sin() * 2.0;
             cx.line((hip.0 - 14.0 - kf * 3.0, y), (hip.0 - 14.0 - kf * 3.0 - l, y), 0.9, ca(1.0, 1.0, 1.0, 0.35));
         }
+    }
+}
+
+/// Everyday people for the joke scenes: one body, drawn from a palette.
+struct Per {
+    shirt: Color,
+    shirt_d: Color,
+    pants: Color,
+    shoes: Color,
+    skin: Color,
+    hair: Color,
+    /// 0 messy, 1 neat, 2 helmet, 3 cap
+    hair_style: u8,
+    cap: Color,
+    glasses: bool,
+    tie: Option<Color>,
+    lanyard: Option<Color>,
+    hood: bool,
+    long: bool,
+    headset: bool,
+    pads: bool,
+    /// 0 nothing, 1 cricket bat, 2 laptop
+    item: u8,
+}
+
+fn person(cx: &Ctx, _d: &Draw, sk: &Sk, sp: &Spec, j: &J, p: &Per) {
+    let ink = c(0.12, 0.10, 0.14);
+    let (hc, hr) = (j.head, j.hr);
+    let (sh, hip) = (j.sh, j.hip);
+    let arm_low = if p.long { p.shirt } else { p.skin };
+    // along the torso (0 = shoulder, 1 = hip) and across it
+    let (dx, dy) = (hip.0 - sh.0, hip.1 - sh.1);
+    let len = (dx * dx + dy * dy).sqrt().max(0.01);
+    let (px, py) = (-dy / len, dx / len);
+    let along = |t: f32, off: f32| -> V { (sh.0 + dx * t + px * off, sh.1 + dy * t + py * off) };
+
+    if p.hood {
+        cx.circ((sh.0 - 2.4, sh.1 - 0.4), 3.4, p.shirt_d);
+    }
+    // back arm and leg
+    cx.limb(sh, j.e_b, sp.ath, dim(p.shirt, 0.78));
+    cx.limb(j.e_b, j.h_b, sp.ath - 0.3, dim(arm_low, 0.78));
+    cx.limb(hip, j.k_b, sp.th, dim(p.pants, 0.8));
+    cx.limb(j.k_b, j.f_b, sp.th - 0.1, dim(p.pants, 0.8));
+    if p.pads {
+        cx.limb(j.k_b, j.f_b, sp.th + 1.2, dim(c(0.96, 0.96, 0.96), 0.8));
+    }
+    cx.circ((j.f_b.0 + 2.0, j.f_b.1 + 0.4), 2.1, dim(p.shoes, 0.8));
+    // torso, with tie / lanyard / hoodie pocket
+    cx.poly(&torso_quad(j, sp.hw, sp.sw), p.shirt);
+    if let Some(t) = p.tie {
+        cx.poly(&[along(0.06, -0.9), along(0.06, 0.9), along(0.22, 1.1), along(0.62, 0.0), along(0.22, -1.1)], t);
+    }
+    if let Some(l) = p.lanyard {
+        cx.line(along(0.04, -2.4), along(0.5, 0.0), 0.7, l);
+        cx.line(along(0.04, 2.4), along(0.5, 0.0), 0.7, l);
+        let cd = along(0.58, 0.0);
+        cx.poly(&[(cd.0 - 1.2, cd.1 - 1.6), (cd.0 + 1.2, cd.1 - 1.6), (cd.0 + 1.2, cd.1 + 1.6), (cd.0 - 1.2, cd.1 + 1.6)], c(0.96, 0.96, 0.98));
+    }
+    if p.hood {
+        cx.line(along(0.62, -sp.hw * 0.8), along(0.62, sp.hw * 0.8), 0.7, p.shirt_d);
+    }
+    cx.line((hip.0 - sp.hw, hip.1 - 0.2), (hip.0 + sp.hw, hip.1 + 0.2), 1.2, dim(p.pants, 0.7));
+    // front leg
+    cx.limb(hip, j.k_f, sp.th, p.pants);
+    cx.limb(j.k_f, j.f_f, sp.th - 0.1, p.pants);
+    if p.pads {
+        cx.limb(j.k_f, j.f_f, sp.th + 1.2, c(0.97, 0.97, 0.97));
+        cx.line((j.k_f.0 - 1.4, j.k_f.1), (j.k_f.0 + 1.4, j.k_f.1), 0.6, c(0.7, 0.7, 0.74));
+    }
+    cx.circ((j.f_f.0 + 2.2, j.f_f.1 + 0.4), 2.3, p.shoes);
+    cx.circ(j.f_f, 2.4, p.shoes);
+    // head
+    cx.circ(hc, hr, p.skin);
+    match p.hair_style {
+        0 => {
+            let pts: [(f32, f32); 9] = [(-0.9, -0.55), (-0.95, -1.7), (-0.4, -1.0), (-0.2, -2.0), (0.25, -1.05), (0.7, -1.85), (0.8, -0.9), (1.2, -1.3), (1.1, -0.2)];
+            let mut v: Vec<V> = vec![(hc.0 - hr * 0.95, hc.1 - hr * 0.05)];
+            v.extend(pts.iter().map(|(x, y)| (hc.0 + x * hr, hc.1 + y * hr)));
+            v.push((hc.0 + hr * 1.0, hc.1 - hr * 0.1));
+            cx.poly(&v, p.hair);
+        }
+        1 => {
+            cx.circ((hc.0 - hr * 0.08, hc.1 - hr * 0.34), hr * 1.0, p.hair);
+            cx.circ((hc.0 + hr * 0.14, hc.1 + hr * 0.22), hr * 0.78, p.skin);
+        }
+        2 => {
+            cx.circ((hc.0 - hr * 0.02, hc.1 - hr * 0.3), hr * 1.1, p.cap);
+            cx.poly(&[(hc.0 - hr * 0.9, hc.1 - hr * 0.1), (hc.0 + hr * 1.1, hc.1 - hr * 0.15), (hc.0 + hr * 1.1, hc.1 + hr * 0.1), (hc.0 - hr * 0.9, hc.1 + hr * 0.1)], dim(p.cap, 0.75));
+            for k in 0..3 {
+                let x = hc.0 + hr * (0.3 + 0.27 * k as f32);
+                cx.line((x, hc.1 + hr * 0.05), (x + hr * 0.1, hc.1 + hr * 0.7), 0.6, c(0.8, 0.82, 0.88));
+            }
+            cx.line((hc.0 + hr * 0.25, hc.1 + hr * 0.3), (hc.0 + hr * 1.05, hc.1 + hr * 0.4), 0.6, c(0.8, 0.82, 0.88));
+        }
+        _ => {
+            cx.circ((hc.0, hc.1 - hr * 0.4), hr * 0.98, p.cap);
+            cx.poly(&[(hc.0 + hr * 0.3, hc.1 - hr * 0.36), (hc.0 + hr * 1.55, hc.1 - hr * 0.2), (hc.0 + hr * 1.4, hc.1 - hr * 0.02), (hc.0 + hr * 0.3, hc.1 - hr * 0.1)], dim(p.cap, 0.8));
+        }
+    }
+    let (ex, ey) = (hc.0 + hr * 0.5, hc.1 + hr * 0.12);
+    match sk.face {
+        Face::Hurt => {
+            cx.line((ex - 1.1, ey - 0.6), (ex + 1.0, ey + 0.6), 0.8, ink);
+            cx.line((ex - 1.1, ey + 0.6), (ex + 1.0, ey - 0.6), 0.8, ink);
+        }
+        Face::Grin => {
+            cx.line((ex - 1.3, ey + 0.5), (ex, ey - 0.6), 0.9, ink);
+            cx.line((ex, ey - 0.6), (ex + 1.3, ey + 0.5), 0.9, ink);
+        }
+        _ => {
+            cx.circ((ex, ey), 1.3, c(1.0, 1.0, 1.0));
+            cx.circ((ex + 0.4, ey), 0.75, ink);
+        }
+    }
+    if p.glasses {
+        cx.circ((ex + 0.1, ey), 2.3, ink);
+        cx.circ((ex + 0.1, ey), 1.7, ca(0.8, 0.93, 1.0, 0.85));
+        cx.circ((ex + 0.5, ey), 0.7, ink);
+        cx.line((ex - 2.2, ey - 0.2), (ex - hr * 0.9, ey - 0.4), 0.6, ink);
+    }
+    if matches!(sk.face, Face::Shout | Face::Grin) {
+        cx.circ((ex + 0.6, ey + 2.7), 1.1, ink);
+    } else {
+        cx.line((ex - 0.2, ey + 2.5), (ex + 1.4, ey + 2.3), 0.7, ink);
+    }
+    if p.headset {
+        cx.line((hc.0 - hr * 0.85, hc.1 - hr * 0.05), (hc.0 - hr * 0.5, hc.1 - hr * 0.95), 0.9, ink);
+        cx.line((hc.0 - hr * 0.5, hc.1 - hr * 0.95), (hc.0 + hr * 0.3, hc.1 - hr * 1.0), 0.9, ink);
+        cx.circ((hc.0 - hr * 0.8, hc.1 + hr * 0.1), 1.8, ink);
+        cx.line((hc.0 - hr * 0.8, hc.1 + hr * 0.1), (hc.0 + hr * 0.55, hc.1 + hr * 0.85), 0.7, ink);
+        cx.circ((hc.0 + hr * 0.55, hc.1 + hr * 0.85), 1.0, c(0.9, 0.3, 0.3));
+    }
+    // front arm and what it holds
+    cx.limb(sh, j.e_f, sp.ath, p.shirt);
+    cx.limb(j.e_f, j.h_f, sp.ath - 0.3, arm_low);
+    cx.circ(j.h_f, 1.9, p.skin);
+    let hf = j.h_f;
+    match p.item {
+        1 => {
+            let w = sk.weap;
+            let tip = (hf.0 + w.sin() * 14.0, hf.1 + w.cos() * 14.0);
+            let mid = (hf.0 + w.sin() * 5.0, hf.1 + w.cos() * 5.0);
+            cx.line(hf, mid, 1.3, c(0.55, 0.38, 0.2));
+            cx.line(mid, tip, 3.0, c(0.9, 0.74, 0.46));
+            cx.line(mid, tip, 0.7, c(0.7, 0.54, 0.3));
+        }
+        2 => {
+            cx.poly(&[(hf.0 - 3.4, hf.1 - 1.6), (hf.0 + 3.4, hf.1 - 1.6), (hf.0 + 3.4, hf.1 + 1.6), (hf.0 - 3.4, hf.1 + 1.6)], c(0.78, 0.8, 0.86));
+            cx.poly(&[(hf.0 - 2.6, hf.1 - 1.0), (hf.0 + 2.6, hf.1 - 1.0), (hf.0 + 2.6, hf.1 + 0.6), (hf.0 - 2.6, hf.1 + 0.6)], c(0.35, 0.75, 1.0));
+        }
+        _ => {}
     }
 }
 

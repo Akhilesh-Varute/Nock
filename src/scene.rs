@@ -516,17 +516,17 @@ fn script(id: usize) -> Script {
         // Friday deploy: Spark (0) deploys anyway, Veil (1) warns, Krag (2) is the bug
         12 => Script {
             tracks: vec![
-                tr(Who::Spark, &[
+                tr(Who::Dev, &[
                     (0.0, -0.1, Run, 1.0), (1.3, 0.5, Stand, 1.0), (3.1, 0.5, Cast, 1.0),
                     (3.9, 0.5, Stand, 1.0), (5.5, 0.5, Stand, 1.0), (5.9, 0.5, Hurt, 1.0),
                     (6.6, 0.5, Kneel, 1.0), (8.2, 0.5, Stand, 1.0), (8.3, 0.5, Walk, -1.0),
                     (9.6, -0.1, Stand, -1.0),
                 ]),
-                tr(Who::Veil, &[
+                tr(Who::Coworker, &[
                     (0.2, -0.1, Run, 1.0), (1.2, 0.24, Stand, 1.0), (8.0, 0.24, Stand, 1.0),
                     (8.1, 0.24, Walk, -1.0), (9.4, -0.1, Stand, -1.0),
                 ]),
-                tr(Who::Krag, &[
+                tr(Who::Bug, &[
                     (3.2, 0.88, Kneel, -1.0), (4.0, 0.88, Stand, -1.0), (4.1, 0.88, Walk, -1.0),
                     (5.2, 0.66, Stand, -1.0), (5.3, 0.66, Slam, -1.0), (6.1, 0.66, Stand, -1.0),
                     (8.3, 0.66, Stand, -1.0), (8.4, 0.66, Walk, 1.0), (9.8, 1.1, Stand, 1.0),
@@ -550,17 +550,17 @@ fn script(id: usize) -> Script {
         // You're on mute: Cinder (0) presents, Krag (1) and Veil (2) cannot hear a word
         13 => Script {
             tracks: vec![
-                tr(Who::Cinder, &[
+                tr(Who::Manager, &[
                     (0.0, -0.1, Run, 1.0), (1.3, 0.3, Stand, 1.0), (2.0, 0.3, Cast, 1.0),
                     (2.8, 0.3, Stand, 1.0), (3.0, 0.3, Cast, 1.0), (3.8, 0.3, Stand, 1.0),
                     (5.2, 0.3, Cast, 1.0), (6.0, 0.3, Stand, 1.0), (7.2, 0.3, Kneel, 1.0),
                     (8.8, 0.3, Stand, 1.0), (8.9, 0.3, Walk, -1.0), (10.2, -0.1, Stand, -1.0),
                 ]),
-                tr(Who::Krag, &[
+                tr(Who::Coworker, &[
                     (0.5, 1.1, Walk, -1.0), (1.6, 0.64, Stand, -1.0), (8.6, 0.64, Stand, -1.0),
                     (8.7, 0.64, Walk, 1.0), (10.0, 1.1, Stand, 1.0),
                 ]),
-                tr(Who::Veil, &[
+                tr(Who::Intern, &[
                     (0.9, 1.1, Walk, -1.0), (2.0, 0.8, Stand, -1.0), (8.6, 0.8, Stand, -1.0),
                     (8.7, 0.8, Walk, 1.0), (10.2, 1.1, Stand, 1.0),
                 ]),
@@ -580,14 +580,14 @@ fn script(id: usize) -> Script {
         // Low battery: Spark (0) at 1%, Courier (1) arrives with a charger
         14 => Script {
             tracks: vec![
-                tr(Who::Spark, &[
+                tr(Who::Dev, &[
                     (0.0, -0.1, Walk, 1.0), (1.7, 0.38, Stand, 1.0), (2.2, 0.38, Walk, 1.0),
                     (3.3, 0.52, Stand, 1.0), (3.5, 0.52, Hurt, 1.0), (4.3, 0.52, Kneel, 1.0),
                     (5.6, 0.52, Kneel, 1.0), (5.8, 0.52, Stand, 1.0), (6.0, 0.52, Jump, 1.0),
                     (7.0, 0.52, Cheer, 1.0), (8.4, 0.52, Cheer, 1.0), (8.5, 0.52, Walk, -1.0),
                     (9.8, -0.1, Stand, -1.0),
                 ]),
-                tr(Who::Courier, &[
+                tr(Who::Coworker, &[
                     (3.9, 1.1, Run, -1.0), (5.0, 0.74, Stand, -1.0), (5.2, 0.74, Throw, -1.0),
                     (6.0, 0.74, Stand, -1.0), (8.4, 0.74, Stand, -1.0), (8.5, 0.74, Walk, 1.0),
                     (9.9, 1.1, Stand, 1.0),
@@ -609,17 +609,17 @@ fn script(id: usize) -> Script {
         // Cricket: Courier (0) bowls, Ronin (1) hits it for six, Cinder (2) goes wild
         15 => Script {
             tracks: vec![
-                tr(Who::Courier, &[
+                tr(Who::Bowler, &[
                     (0.0, 1.1, Walk, -1.0), (1.3, 0.78, Stand, -1.0), (2.2, 0.78, Throw, -1.0),
                     (3.0, 0.78, Stand, -1.0), (4.6, 0.78, Kneel, -1.0), (6.5, 0.78, Stand, -1.0),
                     (6.6, 0.78, Walk, 1.0), (8.0, 1.1, Stand, 1.0),
                 ]),
-                tr(Who::Ronin, &[
+                tr(Who::Batter, &[
                     (0.0, -0.1, Walk, 1.0), (1.3, 0.34, Stand, 1.0), (3.0, 0.34, Slash, 1.0),
                     (3.9, 0.34, Stand, 1.0), (4.3, 0.34, Cheer, 1.0), (7.0, 0.34, Cheer, 1.0),
                     (7.1, 0.34, Walk, -1.0), (8.4, -0.1, Stand, -1.0),
                 ]),
-                tr(Who::Cinder, &[
+                tr(Who::Fan, &[
                     (0.5, -0.1, Walk, 1.0), (1.2, 0.1, Stand, 1.0), (3.5, 0.1, Stand, 1.0),
                     (3.6, 0.1, Cheer, 1.0), (7.0, 0.1, Cheer, 1.0), (7.1, 0.1, Walk, -1.0),
                     (8.3, -0.1, Stand, -1.0),
@@ -753,6 +753,7 @@ fn draw_frame(g: &Gfx, sc: &Script, w: f32, face: &Option<ID2D1Bitmap>, t: f32, 
             Who::Owl => draw_owl(g, d),
             Who::Snitch => draw_snitch(g, d),
             Who::Dementor => draw_dementor(g, d),
+            Who::Bug => draw_bug(g, d),
             _ => cast::draw_actor(g, d),
         }
     }
@@ -1059,6 +1060,70 @@ fn draw_fx(g: &Gfx, e: &Ev, u: f32, draws: &[Option<Draw>], tick: u32, stage_w: 
             polyline(g, &pts, 3.4, Color(col.0, col.1, col.2, 0.35 * fade));
             polyline(g, &pts, 1.4, Color(col.0, col.1, col.2, fade));
         }
+    }
+}
+
+/// The bug: a big angry red beetle (a "bug" in the software sense).
+fn draw_bug(g: &Gfx, d: &Draw) {
+    use std::f32::consts::{PI, TAU};
+    let dr = d.dir;
+    let moving = matches!(d.act, Act::Walk | Act::Run);
+    let (squash, lift) = match d.act {
+        Act::Kneel => (0.55, 0.0),
+        Act::Slam => (1.0, (d.p * PI).sin() * 9.0),
+        Act::Hurt => (0.8, 0.0),
+        _ => (1.0, (d.t * 3.0).sin().abs() * 0.8),
+    };
+    let (x, gy) = (d.x, d.y);
+    let y = gy - lift;
+    let dark = Color(0.13, 0.10, 0.14, 1.0);
+    g.fill_rrect(Rect::new(x - 11.0, gy - 1.0, 22.0, 2.2), 1.1, Color(0.0, 0.0, 0.0, 0.28));
+    // legs, three a side, scuttling when it walks
+    let sw = if moving { (d.t * 22.0).sin() } else { 0.0 };
+    for k in 0..3 {
+        let bx = x + dr * (-6.0 + k as f32 * 5.5);
+        let ph = if k % 2 == 0 { sw } else { -sw };
+        g.line((bx, y - 5.0 * squash), (bx - dr * 2.5 + ph * 2.2, gy - 0.4), 1.3, dark);
+        g.line((bx, y - 5.0 * squash), (bx + dr * 3.5 + ph * 2.2, gy - 0.4), 1.3, dark);
+    }
+    // shell
+    let (cx0, cy0, rx, ry) = (x, y - 8.5 * squash, 11.5, 8.5 * squash);
+    let shell: Vec<(f32, f32)> = (0..20).map(|i| {
+        let a = i as f32 / 20.0 * TAU;
+        (cx0 + a.cos() * rx, cy0 + a.sin() * ry)
+    }).collect();
+    g.fill_poly(&shell, Color(0.88, 0.14, 0.16, 1.0));
+    let shine: Vec<(f32, f32)> = (0..12).map(|i| {
+        let a = PI * 1.1 + i as f32 / 11.0 * PI * 0.7;
+        (cx0 + a.cos() * rx * 0.8, cy0 + a.sin() * ry * 0.8)
+    }).collect();
+    for w in shine.windows(2) {
+        g.line(w[0], w[1], 1.2, Color(1.0, 0.6, 0.55, 0.7));
+    }
+    g.line((cx0 - dr * 1.0, cy0 - ry), (cx0 - dr * 1.0, cy0 + ry), 0.9, dark);
+    for (dx, dy) in [(-6.0f32, -2.0f32), (-5.0, 3.0), (3.0, -3.0), (4.0, 2.5)] {
+        g.fill_circle(cx0 + dr * dx, cy0 + dy * squash, 1.8, dark);
+    }
+    // head with angry eyes and wiggling antennae
+    let (hx, hy) = (x + dr * 11.5, y - 6.5 * squash);
+    g.fill_circle(hx, hy, 5.0, dark);
+    let wig = (d.t * 8.0).sin() * 1.6;
+    g.line((hx + dr * 1.0, hy - 4.0), (hx + dr * 4.0, hy - 10.0 + wig), 1.0, dark);
+    g.line((hx - dr * 1.5, hy - 4.0), (hx + dr * 0.5, hy - 10.5 - wig), 1.0, dark);
+    g.fill_circle(hx + dr * 4.0, hy - 10.0 + wig, 1.0, dark);
+    g.fill_circle(hx + dr * 0.5, hy - 10.5 - wig, 1.0, dark);
+    if d.act == Act::Hurt {
+        for ox in [1.0f32, 4.0] {
+            g.line((hx + dr * ox - 1.1, hy - 2.0), (hx + dr * ox + 1.1, hy), 0.8, Color(1.0, 1.0, 1.0, 1.0));
+            g.line((hx + dr * ox - 1.1, hy), (hx + dr * ox + 1.1, hy - 2.0), 0.8, Color(1.0, 1.0, 1.0, 1.0));
+        }
+    } else {
+        for ox in [0.8f32, 4.0] {
+            g.fill_circle(hx + dr * ox, hy - 1.0, 1.7, Color(1.0, 1.0, 1.0, 1.0));
+            g.fill_circle(hx + dr * (ox + 0.5), hy - 0.8, 0.8, dark);
+        }
+        g.line((hx - dr * 0.8, hy - 3.2), (hx + dr * 2.2, hy - 2.2), 0.9, dark);
+        g.line((hx + dr * 2.6, hy - 2.4), (hx + dr * 5.2, hy - 3.4), 0.9, dark);
     }
 }
 
