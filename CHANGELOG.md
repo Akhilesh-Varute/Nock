@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The top-bar calendar can now move between months: previous/next arrows, the mouse wheel, and a *Today* button to jump back.
+- Clipboard tab: a scroll bar shows how long the list is and where you are in it.
+
 ## 0.10.0
 
 - Important smart hints are harder to miss: meetings (blue), low battery (amber) and the break nudge (teal) glow in a strong colour and stay up for a minute or more. A meeting hint stays until the meeting starts or you click it, with a live countdown, and shows again for its last minute. New optional chime (tray → *Chime for meeting, battery and break hints*, `smart_sound=1`, off by default).

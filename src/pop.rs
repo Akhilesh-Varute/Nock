@@ -61,6 +61,8 @@ enum PopAct {
     Wifi(usize),
     Bt(usize),
     Link(&'static str),
+    CalMonth(i32),
+    CalToday,
     PwShow,
     PwJoin,
     PwCancel,
@@ -162,6 +164,8 @@ impl App {
         let _ = self.radio.tx.send(crate::radio::Req::Refresh);
         let Some(p) = self.pop.as_mut() else { return };
         p.kind = Some(kind);
+        self.cal_off = 0;
+        let Some(p) = self.pop.as_mut() else { return };
         p.tip = false;
         p.anchor_px = anchor_px;
         p.hot = None;
@@ -455,6 +459,7 @@ impl App {
         let binfo = sys::battery_info();
         let (year, month, day, wday, hh, mm, ..) = sys::local_time();
         let clock24 = self.cfg.clock_24h;
+        let cal_off = self.cal_off;
         let mon = self.mon;
         let Some(p) = self.pop.as_mut() else { return };
         let g = &p.gfx;
@@ -886,19 +891,35 @@ impl App {
                     g.text(&tm, Rect::new(w - 116.0, 14.0, 100.0, 24.0), &g.fonts.small, th.t2, Align::Right);
                 }));
                 y += 40.0;
-                let first = crate::ui::first_weekday(day, wday);
-                let dim = crate::ui::days_in_month(year, month);
+                // the month on show: today's, or moved by the arrows / mouse wheel
+                let total = year * 12 + (month.max(1) as i32 - 1) + cal_off;
+                let (dy, dm) = (total.div_euclid(12), total.rem_euclid(12) as u32 + 1);
+                let first = crate::ui::first_of_month(dy, dm);
+                let dim = crate::ui::days_in_month(dy, dm);
                 let rows = (first + dim + 6) / 7;
                 let cw = (w - 32.0) / 7.0;
                 let top = y;
-                ops.push(Box::new(move |g, _h, _| {
+                ops.push(Box::new(move |g, h, hot| {
                     g.text(
-                        &format!("{} {}", MONTHS[(month.max(1) as usize - 1) % 12], year),
+                        &format!("{} {}", MONTHS[(dm.max(1) as usize - 1) % 12], dy),
                         Rect::new(16.0, top, w - 32.0, 20.0),
-                        &g.fonts.tiny,
-                        th.t2,
+                        &g.fonts.small,
+                        th.t1,
                         Align::Left,
                     );
+                    // previous / next month, and a way back to today
+                    let btn = |r: Rect, label: &str, act: PopAct, g: &Gfx, h: &mut Vec<(Rect, PopAct)>| {
+                        if hot == Some(h.len()) {
+                            g.fill_rrect(r, 6.0, th.hover);
+                        }
+                        g.text(label, r, &g.fonts.small, th.t1, Align::Center);
+                        h.push((r, act));
+                    };
+                    btn(Rect::new(w - 16.0 - 26.0, top - 2.0, 26.0, 22.0), "\u{203A}", PopAct::CalMonth(1), g, h);
+                    btn(Rect::new(w - 16.0 - 54.0, top - 2.0, 26.0, 22.0), "\u{2039}", PopAct::CalMonth(-1), g, h);
+                    if cal_off != 0 {
+                        btn(Rect::new(w - 16.0 - 110.0, top - 2.0, 52.0, 22.0), "Today", PopAct::CalToday, g, h);
+                    }
                     for (i, d) in ["S", "M", "T", "W", "T", "F", "S"].iter().enumerate() {
                         g.text(d, Rect::new(16.0 + i as f32 * cw, top + 22.0, cw, 18.0), &g.fonts.tiny, th.t2, Align::Center);
                     }
@@ -906,7 +927,7 @@ impl App {
                         let slot = first + d - 1;
                         let (c, r) = (slot % 7, slot / 7);
                         let cell = Rect::new(16.0 + c as f32 * cw, top + 42.0 + r as f32 * 28.0, cw, 28.0);
-                        if d == day {
+                        if cal_off == 0 && d == day {
                             g.fill_circle(cell.cx(), cell.cy(), 12.0, accent);
                             g.text(&d.to_string(), cell, &g.fonts.small, Color(0.0, 0.0, 0.0, 1.0), Align::Center);
                         } else {
@@ -1116,7 +1137,23 @@ impl App {
                         sys::open(url, "");
                         self.close_pop();
                     }
+                    Some(PopAct::CalMonth(d)) => {
+                        self.cal_off = (self.cal_off + d).clamp(-1200, 1200);
+                        self.render_pop();
+                    }
+                    Some(PopAct::CalToday) => {
+                        self.cal_off = 0;
+                        self.render_pop();
+                    }
                     _ => {}
+                }
+                LRESULT(0)
+            }
+            WM_MOUSEWHEEL => {
+                if self.pop_kind() == Some(BarAct::Clock) {
+                    let up = (wp.0 >> 16) as i16 > 0;
+                    self.cal_off = (self.cal_off + if up { -1 } else { 1 }).clamp(-1200, 1200);
+                    self.render_pop();
                 }
                 LRESULT(0)
             }

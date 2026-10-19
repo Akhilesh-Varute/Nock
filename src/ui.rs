@@ -1199,6 +1199,13 @@ pub(crate) fn first_weekday(day: u32, wday: u32) -> u32 {
     (wday + 7 - (day - 1) % 7) % 7
 }
 
+/// Weekday (0 = Sunday) of the 1st of any month.
+pub(crate) fn first_of_month(y: i32, m: u32) -> u32 {
+    const T: [i32; 12] = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+    let y = if m < 3 { y - 1 } else { y };
+    ((y + y / 4 - y / 100 + y / 400 + T[(m as usize - 1) % 12] + 1).rem_euclid(7)) as u32
+}
+
 pub(crate) fn days_in_month(y: i32, m: u32) -> u32 {
     match m {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
@@ -1280,6 +1287,11 @@ mod tests {
         assert_eq!(first_weekday(1, 0), 0);
         // Fri 30 Oct 2026 (5): 1st is 29 days earlier -> Thursday (4)
         assert_eq!(first_weekday(30, 5), 4);
+        // any month: Oct 2026 Thu, Nov 2026 Sun, Feb 2024 Thu, Jan 2000 Sat
+        assert_eq!(first_of_month(2026, 10), 4);
+        assert_eq!(first_of_month(2026, 11), 0);
+        assert_eq!(first_of_month(2024, 2), 4);
+        assert_eq!(first_of_month(2000, 1), 6);
     }
 
     #[test]

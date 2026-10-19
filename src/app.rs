@@ -230,6 +230,8 @@ pub struct App {
     pub clip_filter: String,
     pub entry_search: bool,
     pub clip_scroll: usize,
+    /// months the top-bar calendar is shown away from the current month
+    pub cal_off: i32,
     ignore_clip: Option<String>,
 
     // launcher
@@ -384,6 +386,7 @@ impl App {
             clip_filter: String::new(),
             entry_search: false,
             clip_scroll: 0,
+            cal_off: 0,
             ignore_clip: None,
             apps: store::load_apps(),
             app_icons: Vec::new(),
