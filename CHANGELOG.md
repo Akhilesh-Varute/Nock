@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.0
 
 - Smart notch hints (tray → *Smart hints*, `smart` in config.ini, on by default): the pill shows an amber "Battery low" with the time left when unplugged at 15%, suggests a break after 90 minutes of steady keyboard/mouse use, shows "On a call" with the call length while an app is using the microphone, and says "Link copied", "Path copied", "Colour copied" (with a swatch) or "Code copied" for what you copy. Click the pill during a link or path hint to open it. During a call, click the mic icon on the pill to mute or unmute the default microphone (it turns red). All local, using the existing once-a-minute tick and foreground-change event.
 

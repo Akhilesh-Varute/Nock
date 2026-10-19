@@ -1,6 +1,6 @@
 [package]
 name = "nock"
-version = "0.9.6"
+version = "0.10.0"
 edition = "2021"
 description = "A tiny native notch and top bar for Windows, written in Rust"
 

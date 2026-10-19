@@ -23,6 +23,7 @@ Written in Rust. No webview, no framework, no runtime. One small <code>.exe</cod
 - **Notch** at the top centre. Click it and a panel opens with tabs: **Media**, **Controls**, **Today** (focus timer, to-dos, calendar), **Stats**, **Clipboard**, **Apps**, **Games** and **Power**.
 - **Top bar** along the top of the screen: active app name, Wi-Fi, Bluetooth, sound, brightness, battery and clock, each with a dropdown (join Wi-Fi networks, connect Bluetooth devices, sliders, calendar). Optional clock styles and a CPU / memory read-out.
 - **A little life**: a buddy character on the bar, scripted scenes, an arcade with four mouse-only games, and small reactions on the pill (squish on click, glow with the music, confetti when the timer ends).
+- **Smart pill**: the notch tells you things without a click. Amber "Battery low" with time left, "On a call" with the length and a click-to-mute mic icon, "Link / Path / Colour / Code copied" (click a link or path to open it), a break nudge after 90 minutes of steady use, and meeting countdowns from your calendar. Tray → *Smart hints* turns it off. See [Smart pill](#smart-pill).
 - **Gentle reminders** (all off by default): drink water, and look away from the screen (20-20-20).
 - **Zero idle cost**: event driven, no polling loop; about 0% CPU and about 32 MB of memory while idle (see [Why it is light](#why-it-is-light)). Hides itself in full-screen video and games, with a top-edge reveal.
 - Follows the Windows light/dark theme.
@@ -119,6 +120,18 @@ Both are off by default and set from the tray menu. When one fires, your buddy s
 - **Water reminder**: every 30, 45, 60 or 90 minutes.
 - **Look-away reminder**: every 20, 30 or 45 minutes ("look at something far away for 20 seconds").
 
+## Smart pill
+
+The collapsed notch changes with what is going on, all from local rules (no AI, no cloud):
+
+- **Battery**: unplugged at 15% or less, the pill turns amber with the time left.
+- **Calls**: while an app is using the microphone the pill shows *On a call* and its length. Click the mic icon to mute or unmute the default microphone (it turns red). This is Windows' own mute, so it works for any call app.
+- **Copied**: a link, file path, `#hex` colour or short numeric code you copy shows a hint for a few seconds. Click the pill during a link or path hint to open it (a path opens Explorer with the file selected).
+- **Breaks**: after 90 minutes of keyboard and mouse use without a 5 minute gap, it suggests a break.
+- **Meetings**: put a read-only calendar link in `calendar_url=` in `config.ini` (Google Calendar: Settings → your calendar → *Secret address in iCal format*; Outlook: a published calendar). Five minutes before a meeting the pill shows its name and a countdown; click it to open the Zoom, Meet, Teams or Webex link in the event. Daily and weekly repeats work; monthly rules and `COUNT` do not. **This is the one thing that uses the network in the background**: with a link set, Nock fetches it at start and about once an hour. Leave it empty and Nock never does.
+
+Tray → *Smart hints* (`smart=0` in `config.ini`) turns all of these off.
+
 ## Windows says "Smart App Control blocked an app"
 
 Nock is not code-signed yet, so Windows 11 machines with **Smart App Control** switched on refuse to run it (the app is safe; Windows only blocks programs from publishers it doesn't know). Machines where it is off, which is most of them, only show the usual SmartScreen note ("Windows protected your PC"): click **More info → Run anyway**. If Smart App Control is on, you can turn it off in Windows Security → App & browser control → Smart App Control settings, or build and run in a different environment. You can read all of the source here before running anything.
@@ -184,7 +197,7 @@ The exe carries its own icon and file details (`assets/notch.ico`, embedded by `
 
 Everything is in `%APPDATA%\Nock\` (tray → *Open settings folder*). Most settings are in the tray menu; `config.ini` holds them too:
 
-- `config.ini`: `hover_expand` (open on hover instead of click), `eq_animation` (animate the equaliser bars), `clock_24h`, `reserve_space` (keep a thin strip at the top so maximised windows sit below the notch), `top_bar`, `buddy`, `scenes`, `scene_min`, `stats` (CPU/RAM on the bar), `clock_style` (0 digital, 1 analog, 2 binary, 3 until Friday), `water_min` and `eye_min` (minutes between reminders, 0 = off), `auto_break`, `start_menu` (the Start menu shortcut), `fs_hide` (hide while a full-screen app or game is in front; also in the tray as *Hide in full-screen apps*), and `auto_close` (close the open panel when the pointer leaves it or another window comes to the front; tray: *Close the panel when the pointer leaves*).
+- `config.ini`: `hover_expand` (open on hover instead of click), `eq_animation` (animate the equaliser bars), `clock_24h`, `reserve_space` (keep a thin strip at the top so maximised windows sit below the notch), `top_bar`, `buddy`, `scenes`, `scene_min`, `stats` (CPU/RAM on the bar), `clock_style` (0 digital, 1 analog, 2 binary, 3 until Friday), `water_min` and `eye_min` (minutes between reminders, 0 = off), `auto_break`, `start_menu` (the Start menu shortcut), `fs_hide` (hide while a full-screen app or game is in front; also in the tray as *Hide in full-screen apps*), `smart` (the hints above), `calendar_url` (your calendar link, empty = off), and `auto_close` (close the open panel when the pointer leaves it or another window comes to the front; tray: *Close the panel when the pointer leaves*).
 - `apps.txt`: pinned launcher entries, one per line: `Name|target|optional arguments`. The Apps tab edits it for you (+ and ×), but you can edit it by hand too: the target can be an exe, folder, URL or `ms-settings:` link. After editing, use tray → *Reload pinned apps*.
 - `todos.txt`: the to-do list.
 - `pinned_clips.txt`: the clipboard items you starred.
