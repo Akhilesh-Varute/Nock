@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.1
 
 - The top-bar calendar can now move between months: previous/next arrows and a *Today* button to jump back.
 - Clipboard tab: a scroll bar shows how long the list is and where you are in it.
