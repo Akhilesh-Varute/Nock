@@ -1746,6 +1746,29 @@ pub fn install_update(tag: &str) {
     });
 }
 
+/// Update a copy that was not installed by the installer (the portable exe): download
+/// `Nock-portable-<ver>.exe`, and only once that worked stop this Nock, put the new file
+/// over this exe and start it. If the file cannot be replaced (a read-only folder) the
+/// downloads page opens instead. A failed download leaves Nock running untouched.
+pub fn update_portable(tag: &str) {
+    let tag = tag.to_string();
+    let pid = std::process::id();
+    let exe = std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_default().replace('\'', "''");
+    std::thread::spawn(move || {
+        let ver = tag.trim_start_matches('v');
+        let cmd = format!(
+            "$ErrorActionPreference='Stop'; try {{ [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
+             $f = Join-Path $env:TEMP 'Nock-portable-update.exe'; \
+             Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/{REPO}/releases/download/{tag}/Nock-portable-{ver}.exe' -OutFile $f; \
+             if ((Get-Item $f).Length -lt 100000) {{ throw 'bad download' }} }} catch {{ exit 1 }}; \
+             Stop-Process -Id {pid} -Force; Start-Sleep -Seconds 2; \
+             try {{ Copy-Item -Force $f '{exe}' }} catch {{ Start-Process 'https://github.com/{REPO}/releases/latest' }}; \
+             Start-Process -FilePath '{exe}'"
+        );
+        let _ = powershell(&cmd);
+    });
+}
+
 /// Open the releases page (for copies that were not installed by the installer).
 pub fn open_releases() {
     open(&format!("https://github.com/{REPO}/releases/latest"), "");

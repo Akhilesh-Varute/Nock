@@ -260,9 +260,11 @@ fn on_update(hwnd: HWND, code: usize) {
             }
         }
         _ => {
-            let q = format!("Nock {} is available (you have {cur}).\n\nOpen the download page?", latest.trim_start_matches('v'));
-            if show(&q, MB_YESNO | MB_ICONQUESTION) == IDYES {
-                sys::open_releases();
+            let q = format!("Nock {} is available (you have {cur}).\n\nYes: update now (Nock downloads it and restarts).\nNo: open the download page instead.", latest.trim_start_matches('v'));
+            match show(&q, MB_YESNOCANCEL | MB_ICONQUESTION) {
+                IDYES => sys::update_portable(&latest),
+                IDNO => sys::open_releases(),
+                _ => {}
             }
         }
     }
