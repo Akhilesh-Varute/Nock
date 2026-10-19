@@ -444,6 +444,7 @@ impl App {
             active_min: 0,
         };
         a.update_monitor();
+        sys::watch_mic(hwnd.0 as isize);
         a.load_app_icons();
         let (w, h) = a.target_size();
         a.sw = Spring::new(w);
@@ -941,7 +942,7 @@ impl App {
     }
 
     /// Show or hide the call pill when the microphone starts or stops being used.
-    fn update_call(&mut self) {
+    pub fn update_call(&mut self) {
         let on = self.cfg.smart && sys::mic_in_use();
         if on != self.call_since.is_some() {
             self.call_since = on.then(Instant::now);

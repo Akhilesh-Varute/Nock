@@ -462,6 +462,31 @@ pub fn mic_in_use() -> bool {
     paths.iter().any(|p| qword(p, w!("LastUsedTimeStart")).unwrap_or(0) != 0 && qword(p, w!("LastUsedTimeStop")) == Some(0))
 }
 
+pub const WM_MIC: u32 = 0x8000 + 11; // WM_APP + 11
+
+const MIC_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone";
+
+/// Post WM_MIC whenever Windows changes the microphone consent store (an app starting or
+/// stopping recording). The thread sleeps inside the registry wait, so it costs nothing idle.
+pub fn watch_mic(hwnd: isize) {
+    std::thread::spawn(move || loop {
+        unsafe {
+            let mut k = HKEY::default();
+            let key = HSTRING::from(MIC_KEY);
+            if RegOpenKeyExW(HKEY_CURRENT_USER, &key, None, KEY_NOTIFY, &mut k) != ERROR_SUCCESS {
+                std::thread::sleep(std::time::Duration::from_secs(30)); // no app has used the mic yet
+                continue;
+            }
+            let r = RegNotifyChangeKeyValue(k, true, REG_NOTIFY_CHANGE_LAST_SET | REG_NOTIFY_CHANGE_NAME, None, false);
+            let _ = RegCloseKey(k);
+            if r == ERROR_SUCCESS {
+                let _ = PostMessageW(Some(HWND(hwnd as *mut _)), WM_MIC, WPARAM(0), LPARAM(0));
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(300)); // one burst of writes = one update
+    });
+}
+
 pub struct BatteryInfo {
     pub percent: u8,
     pub charging: bool,

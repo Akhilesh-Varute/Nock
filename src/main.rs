@@ -356,6 +356,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
         m if m == sys::WM_FSCHK => a.on_fullscreen_check(),
         m if m == sys::WM_APPLIST => a.on_app_list(),
         m if m == sys::WM_UPDATE => on_update(hwnd, wp.0),
+        m if m == sys::WM_MIC => a.update_call(),
         m if m == sys::WM_BRIGHT => a.on_brightness(wp.0 != 0, lp.0 as u32),
         _ => return DefWindowProcW(hwnd, msg, wp, lp),
     }
@@ -583,6 +584,7 @@ mod tests {
             ("bluetooth done", radio::WM_BTDONE),
             ("app list", sys::WM_APPLIST),
             ("update", sys::WM_UPDATE),
+            ("mic", sys::WM_MIC),
         ];
         for (i, (na, a)) in all.iter().enumerate() {
             for (nb, b) in &all[i + 1..] {
