@@ -578,7 +578,9 @@ impl App {
         if self.expanded {
             (EXP_W, EXP_H)
         } else if self.alerting() {
-            (190.0, self.col_h())
+            // a meeting hint grows to fit its text
+            let w = if self.alert_msg == "Meeting" { (84.0 + self.alert_label.chars().count() as f32 * 7.5).clamp(190.0, 340.0) } else { 190.0 };
+            (w, self.col_h())
         } else if self.call_since.is_some() && !self.timer_running() {
             (COL_TIMER_W + 20.0, self.col_h())
         } else if self.has_media() {
@@ -970,7 +972,7 @@ impl App {
         self.cal_seen = Some(e.start);
         let mins = (e.start - now + 59).div_euclid(60);
         let when = if mins > 0 { format!("{mins}m") } else { "now".to_string() };
-        let short: String = e.title.chars().take(11).collect();
+        let short: String = if e.title.chars().count() > 24 { e.title.chars().take(23).chain(std::iter::once('…')).collect() } else { e.title.clone() };
         self.buddy_say(&format!("{} starts {}", e.title, if mins > 0 { format!("in {mins} min") } else { when.clone() }), 7000);
         self.pill_alert("Meeting", 25);
         if self.alert_msg == "Meeting" {

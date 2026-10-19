@@ -142,7 +142,7 @@ fn draw_collapsed(a: &App, w: f32, ca: f32) {
             g.icon('\u{E916}', Rect::new(w / 2.0 - 58.0, 0.0, 20.0, ch), &f.icon14, white);
         }
         let tx = if a.alert_msg == "Battery low" { w / 2.0 - 42.0 } else { w / 2.0 - 34.0 };
-        g.text(&label, Rect::new(tx, 0.0, 118.0, ch), &f.body, col, Align::Left);
+        g.text(&label, Rect::new(tx, 0.0, (w - tx - 14.0).max(118.0), ch), &f.body, col, Align::Left);
         return;
     }
 
