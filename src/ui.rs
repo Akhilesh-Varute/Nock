@@ -126,7 +126,7 @@ fn draw_collapsed(a: &App, w: f32, ca: f32) {
             }
             g.icon('\u{E850}', Rect::new(w / 2.0 - 66.0, 0.0, 20.0, ch), &f.icon14, amber);
         } else if a.alert_msg == "Meeting" {
-            g.icon('\u{E787}', Rect::new(w / 2.0 - 58.0, 0.0, 20.0, ch), &f.icon14, white);
+            g.icon('\u{E787}', Rect::new(16.0, 0.0, 20.0, ch), &f.icon14, white);
         } else if a.alert_msg == "Look away" {
             // a drawn eye
             let (ex, ey) = (w / 2.0 - 50.0, ch / 2.0);
@@ -141,7 +141,7 @@ fn draw_collapsed(a: &App, w: f32, ca: f32) {
         } else {
             g.icon('\u{E916}', Rect::new(w / 2.0 - 58.0, 0.0, 20.0, ch), &f.icon14, white);
         }
-        let tx = if a.alert_msg == "Battery low" { w / 2.0 - 42.0 } else { w / 2.0 - 34.0 };
+        let tx = if a.alert_msg == "Meeting" { 44.0 } else if a.alert_msg == "Battery low" { w / 2.0 - 42.0 } else { w / 2.0 - 34.0 };
         g.text(&label, Rect::new(tx, 0.0, (w - tx - 14.0).max(118.0), ch), &f.body, col, Align::Left);
         return;
     }
