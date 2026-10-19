@@ -1151,14 +1151,6 @@ impl App {
                 }
                 LRESULT(0)
             }
-            WM_MOUSEWHEEL => {
-                if self.pop_kind() == Some(BarAct::Clock) {
-                    let up = (wp.0 >> 16) as i16 > 0;
-                    self.cal_off = (self.cal_off + if up { -1 } else { 1 }).clamp(-1200, 1200);
-                    self.render_pop();
-                }
-                LRESULT(0)
-            }
             WM_MOUSEACTIVATE => {
                 let r = if self.pw.is_some() { MA_ACTIVATE } else { MA_NOACTIVATE };
                 LRESULT(r as isize)
