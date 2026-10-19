@@ -105,7 +105,7 @@ pub fn set_mute(m: bool) {
 // Internal laptop panels are only reachable through WMI. Spawning PowerShell
 // is slow (~0.3 s) but only happens on open / on slider release, never idle.
 
-fn powershell(cmd: &str) -> Option<String> {
+pub(crate) fn powershell(cmd: &str) -> Option<String> {
     use std::process::{Command, Stdio};
     let mut c = Command::new("powershell.exe");
     // -EncodedCommand (base64 of UTF-16) sidesteps every quoting problem.

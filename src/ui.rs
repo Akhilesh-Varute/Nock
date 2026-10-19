@@ -113,7 +113,7 @@ fn draw_collapsed(a: &App, w: f32, ca: f32) {
     if a.alerting() {
         let white = Color(1.0, 1.0, 1.0, ca);
         let amber = Color(1.0, 0.72, 0.2, ca);
-        let mut label = a.alert_msg.to_string();
+        let mut label = if a.alert_label.is_empty() || a.alert_msg != "Meeting" { a.alert_msg.to_string() } else { a.alert_label.clone() };
         let mut col = white;
         if let Some(sw) = a.alert_swatch {
             let (cx, cy) = (w / 2.0 - 52.0, ch / 2.0);
@@ -125,6 +125,8 @@ fn draw_collapsed(a: &App, w: f32, ca: f32) {
                 label = format!("Battery low {}", if s >= 3600 { format!("{}h{:02}m", s / 3600, s % 3600 / 60) } else { format!("{}m", s / 60) });
             }
             g.icon('\u{E850}', Rect::new(w / 2.0 - 66.0, 0.0, 20.0, ch), &f.icon14, amber);
+        } else if a.alert_msg == "Meeting" {
+            g.icon('\u{E787}', Rect::new(w / 2.0 - 58.0, 0.0, 20.0, ch), &f.icon14, white);
         } else if a.alert_msg == "Look away" {
             // a drawn eye
             let (ex, ey) = (w / 2.0 - 50.0, ch / 2.0);

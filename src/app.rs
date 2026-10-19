@@ -315,6 +315,11 @@ pub struct App {
     pub alert_swatch: Option<Color>,
     /// when the microphone started being used (a call), for the pill
     pub call_since: Option<Instant>,
+    /// text for a meeting hint ("Standup 5m"), shown instead of alert_msg when set
+    pub alert_label: String,
+    /// minutes since the calendar link was fetched, and the meeting already announced
+    cal_age: u16,
+    cal_seen: Option<i64>,
 }
 
 enum AlertAct {
@@ -431,6 +436,9 @@ impl App {
             alert_act: None,
             alert_swatch: None,
             call_since: None,
+            alert_label: String::new(),
+            cal_age: 60,
+            cal_seen: None,
             active_min: 0,
         };
         a.update_monitor();
@@ -923,6 +931,7 @@ impl App {
             self.alert_msg = msg;
             self.alert_act = None;
             self.alert_swatch = None;
+            self.alert_label.clear();
             self.alert_until = Some(Instant::now() + std::time::Duration::from_secs(secs));
             self.retarget();
             self.render();
@@ -938,6 +947,30 @@ impl App {
                 self.retarget();
                 self.render();
             }
+        }
+    }
+
+    /// Re-read the calendar link about hourly and announce a meeting that starts within 5 minutes.
+    fn meeting_hint(&mut self) {
+        self.cal_age = self.cal_age.saturating_add(1);
+        if self.cal_age >= 60 {
+            self.cal_age = 0;
+            crate::cal::refresh(&self.cfg.calendar_url);
+        }
+        let (now, _) = crate::cal::now();
+        let Some(e) = crate::cal::soon(&crate::cal::EVENTS.lock().unwrap(), now).cloned() else { return };
+        if self.cal_seen == Some(e.start) {
+            return;
+        }
+        self.cal_seen = Some(e.start);
+        let mins = (e.start - now + 59).div_euclid(60);
+        let when = if mins > 0 { format!("{mins}m") } else { "now".to_string() };
+        let short: String = e.title.chars().take(11).collect();
+        self.buddy_say(&format!("{} starts {}", e.title, if mins > 0 { format!("in {mins} min") } else { when.clone() }), 7000);
+        self.pill_alert("Meeting", 25);
+        if self.alert_msg == "Meeting" {
+            self.alert_label = format!("{short} {when}");
+            self.alert_act = e.link.map(AlertAct::Open);
         }
     }
 
@@ -960,6 +993,9 @@ impl App {
                 self.buddy_say("Battery is low, find a charger", 6000);
                 self.pill_alert("Battery low", 12);
             }
+        }
+        if !self.cfg.calendar_url.is_empty() {
+            self.meeting_hint();
         }
         // a 5 minute gap in typing or mouse use counts as a break
         self.active_min = if sys::idle_secs() < 300 { self.active_min + 1 } else { 0 };
@@ -1125,7 +1161,7 @@ impl App {
         let (x, y) = (px as f32 / self.scale, py as f32 / self.scale);
         if !self.expanded && self.alerting() {
             match (self.alert_msg, self.alert_act.take()) {
-                ("Link copied", Some(AlertAct::Open(u))) => {
+                ("Link copied" | "Meeting", Some(AlertAct::Open(u))) => {
                     sys::open(&u, "");
                     self.alert_until = None;
                     self.retarget();

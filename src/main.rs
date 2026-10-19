@@ -3,6 +3,7 @@
 mod app;
 mod bar;
 mod buddy;
+mod cal;
 mod cast;
 mod game;
 mod games;
