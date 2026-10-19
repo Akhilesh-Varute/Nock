@@ -697,6 +697,16 @@ fn page_clipboard(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         };
         g.icon(glyph, pin, &f.icon14, col.fade(ca * if *pinned || hot(a, act) || hot(a, pact) { 1.0 } else { 0.6 }));
     }
+
+    // scroll bar: the thumb's size shows how much of the list is on screen, its place where you are
+    if view.len() > CLIP_ROWS {
+        let (top, h) = (40.0, CLIP_ROWS as f32 * 31.0 - 3.0);
+        let track = Rect::new(EXP_W - 17.0, top, 4.0, h);
+        g.fill_rrect(track, 2.0, Color::white(0.07 * ca));
+        let thumb_h = (h * CLIP_ROWS as f32 / view.len() as f32).max(18.0);
+        let frac = a.clip_scroll as f32 / (view.len() - CLIP_ROWS) as f32;
+        g.fill_rrect(Rect::new(track.x, top + (h - thumb_h) * frac.clamp(0.0, 1.0), 4.0, thumb_h), 2.0, C_MEM.fade(0.8 * ca));
+    }
 }
 
 const C_GOLD: Color = Color(1.0, 0.82, 0.28, 1.0);
