@@ -986,19 +986,22 @@ impl App {
             self.alert_start = Some(e.start);
             self.alert_act = e.link.map(AlertAct::Open);
         }
-        self.chime(&[(880, 120), (1175, 200)]);
+        self.chime();
     }
 
-    fn chime(&self, tones: &[(u32, u32)]) {
+    /// The Windows notification sound (follows the user's sound scheme and volume).
+    fn chime(&self) {
         if self.cfg.smart_sound {
-            play_sfx(tones.to_vec());
+            unsafe {
+                let _ = MessageBeep(MB_ICONASTERISK);
+            }
         }
     }
 
     pub fn toggle_smart_sound(&mut self) {
         self.cfg.smart_sound = !self.cfg.smart_sound;
         store::save_config(&self.cfg);
-        self.chime(&[(880, 120), (1175, 200)]);
+        self.chime();
     }
 
     pub fn toggle_smart(&mut self) {
@@ -1019,7 +1022,7 @@ impl App {
                 self.batt_warned = true;
                 self.buddy_say("Battery is low, find a charger", 6000);
                 self.pill_alert("Battery low", 60);
-                self.chime(&[(660, 150), (520, 260)]);
+                self.chime();
             }
         }
         if !self.cfg.calendar_url.is_empty() {
@@ -1031,7 +1034,7 @@ impl App {
             self.active_min = 0;
             self.buddy_say("You have been at it for 90 minutes. Stretch!", 7000);
             self.pill_alert("Take a break", 60);
-            self.chime(&[(784, 150), (988, 220)]);
+            self.chime();
         }
     }
 
