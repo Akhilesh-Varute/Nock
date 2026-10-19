@@ -306,6 +306,9 @@ pub struct App {
     pub scene_seen: bool,
     /// Set when the focus timer finishes: the pill pulses and shows "Time's up".
     alert_until: Option<Instant>,
+    /// smart hints: low-battery warning already shown, minutes of continuous use so far
+    batt_warned: bool,
+    active_min: u16,
 }
 
 pub const DEFAULT_ACCENT: Color = Color(0.40, 0.62, 1.0, 1.0);
@@ -413,6 +416,8 @@ impl App {
             stage: None,
             scene_seen: false,
             alert_until: None,
+            batt_warned: false,
+            active_min: 0,
         };
         a.update_monitor();
         a.load_app_icons();
@@ -734,6 +739,7 @@ impl App {
             }
             T_MIN => {
                 self.arm_minute_timer();
+                self.smart_tick();
                 if self.bar_visible() {
                     self.refresh_bar_data();
                     self.render_bar();
@@ -893,6 +899,44 @@ impl App {
         self.cfg.eye_min = mins;
         store::save_config(&self.cfg);
         self.sync_eyes();
+    }
+
+    /// Pulse a short message on the collapsed pill (skipped while the panel is open or a timer runs).
+    fn pill_alert(&mut self, msg: &'static str, secs: u64) {
+        if !self.expanded && !self.timer_running() {
+            self.alert_msg = msg;
+            self.alert_until = Some(Instant::now() + std::time::Duration::from_secs(secs));
+            self.retarget();
+            self.render();
+        }
+    }
+
+    pub fn toggle_smart(&mut self) {
+        self.cfg.smart = !self.cfg.smart;
+        store::save_config(&self.cfg);
+    }
+
+    /// Once a minute: warn on low battery, and nudge a break after 90 minutes of steady use.
+    fn smart_tick(&mut self) {
+        if !self.cfg.smart {
+            return;
+        }
+        if let Some(b) = sys::battery_info() {
+            if b.plugged || b.charging || b.percent > 20 {
+                self.batt_warned = false;
+            } else if b.percent <= 15 && !self.batt_warned {
+                self.batt_warned = true;
+                self.buddy_say("Battery is low, find a charger", 6000);
+                self.pill_alert("Battery low", 12);
+            }
+        }
+        // a 5 minute gap in typing or mouse use counts as a break
+        self.active_min = if sys::idle_secs() < 300 { self.active_min + 1 } else { 0 };
+        if self.active_min >= 90 {
+            self.active_min = 0;
+            self.buddy_say("You have been at it for 90 minutes. Stretch!", 7000);
+            self.pill_alert("Take a break", 15);
+        }
     }
 
     fn eye_reminder(&mut self) {
@@ -1729,6 +1773,9 @@ impl App {
             self.beat_start = Some(Instant::now());
             self.retarget();
         }
+        if let Some(msg) = self.cfg.smart.then(|| clip_hint(&text)).flatten() {
+            self.pill_alert(msg, 3);
+        }
         if self.pins.contains(&text) {
             return; // already pinned
         }
@@ -1899,6 +1946,18 @@ impl App {
 }
 
 /// Make the album colour usable as an accent on black (never too dark/dull).
+/// What the pill says about something just copied: a link, or a short numeric (one-time) code.
+fn clip_hint(t: &str) -> Option<&'static str> {
+    let t = t.trim();
+    if t.starts_with("http://") || t.starts_with("https://") {
+        Some("Link copied")
+    } else if (4..=8).contains(&t.len()) && t.bytes().all(|b| b.is_ascii_digit()) {
+        Some("Code copied")
+    } else {
+        None
+    }
+}
+
 fn boost(c: Color) -> Color {
     let m = c.0.max(c.1).max(c.2);
     if m < 0.02 {
@@ -1947,6 +2006,20 @@ fn alarm_sound() {
 
 /// Renders the open panel's pages to raw files for eyeballing (run with --ignored and
 /// PREVIEW_DIR set). Test-only: it builds the real app state without a window.
+#[cfg(test)]
+mod smart_tests {
+    use super::clip_hint;
+
+    #[test]
+    fn clip_hints() {
+        assert_eq!(clip_hint("https://example.com"), Some("Link copied"));
+        assert_eq!(clip_hint(" 482913 "), Some("Code copied"));
+        assert_eq!(clip_hint("123"), None);
+        assert_eq!(clip_hint("123456789"), None);
+        assert_eq!(clip_hint("hello"), None);
+    }
+}
+
 #[cfg(test)]
 mod preview {
     use super::*;

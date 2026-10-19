@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Smart notch hints (tray → *Smart hints*, `smart` in config.ini, on by default): the pill warns when the battery is low and unplugged, suggests a break after 90 minutes of steady keyboard/mouse use, and says "Link copied" or "Code copied" when you copy a link or a short numeric code. All local, no polling beyond the existing once-a-minute tick.
+
 ## 0.9.6
 
 - Releases now publish the installer and a clearly named `Nock-portable-<version>.exe` instead of a bare `nock.exe`, with a note on the release page saying which to pick. Descriptions and file details now say "notch and top bar for Windows".

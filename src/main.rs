@@ -432,6 +432,8 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
         let _ = AppendMenuW(menu, MF_STRING | fh, 16, w!("Hide in full-screen apps"));
         let ac = if a.cfg.auto_close { MF_CHECKED } else { MF_UNCHECKED };
         let _ = AppendMenuW(menu, MF_STRING | ac, 17, w!("Close the panel when the pointer leaves"));
+        let sm = if a.cfg.smart { MF_CHECKED } else { MF_UNCHECKED };
+        let _ = AppendMenuW(menu, MF_STRING | sm, 18, w!("Smart hints (battery, break, copied link)"));
         let ab = if a.cfg.auto_break { MF_CHECKED } else { MF_UNCHECKED };
         let _ = AppendMenuW(menu, MF_STRING | ab, 13, w!("Auto break after focus (5 min)"));
         let _ = AppendMenuW(menu, MF_STRING | st, 10, w!("CPU and memory on the bar"));
@@ -538,6 +540,7 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             13 => a.toggle_auto_break(),
             16 => a.toggle_fs_hide(),
             17 => a.toggle_auto_close(),
+            18 => a.toggle_smart(),
             14 => {
                 a.cfg.start_menu = !a.cfg.start_menu;
                 store::save_config(&a.cfg);

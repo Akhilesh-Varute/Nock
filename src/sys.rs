@@ -424,6 +424,19 @@ pub fn battery_info() -> Option<BatteryInfo> {
     }
 }
 
+/// Seconds since the last keyboard or mouse input.
+pub fn idle_secs() -> u32 {
+    use windows::Win32::System::SystemInformation::GetTickCount;
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
+    unsafe {
+        let mut li = LASTINPUTINFO { cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32, dwTime: 0 };
+        if !GetLastInputInfo(&mut li).as_bool() {
+            return 0;
+        }
+        GetTickCount().wrapping_sub(li.dwTime) / 1000
+    }
+}
+
 /// (percent, charging) or None on machines without a battery.
 pub fn battery() -> Option<(u8, bool)> {
     battery_info().map(|b| (b.percent, b.charging || b.plugged))
