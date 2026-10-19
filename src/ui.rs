@@ -112,7 +112,20 @@ fn draw_collapsed(a: &App, w: f32, ca: f32) {
 
     if a.alerting() {
         let white = Color(1.0, 1.0, 1.0, ca);
-        if a.alert_msg == "Look away" {
+        let amber = Color(1.0, 0.72, 0.2, ca);
+        let mut label = a.alert_msg.to_string();
+        let mut col = white;
+        if let Some(sw) = a.alert_swatch {
+            let (cx, cy) = (w / 2.0 - 52.0, ch / 2.0);
+            g.fill_circle(cx, cy, 7.0, Color::white(0.35 * ca));
+            g.fill_circle(cx, cy, 6.0, Color(sw.0, sw.1, sw.2, ca));
+        } else if a.alert_msg == "Battery low" {
+            col = amber;
+            if let Some(s) = sys::battery_info().filter(|b| !b.plugged).and_then(|b| b.secs_left) {
+                label = format!("Battery low {}", if s >= 3600 { format!("{}h{:02}m", s / 3600, s % 3600 / 60) } else { format!("{}m", s / 60) });
+            }
+            g.icon('\u{E850}', Rect::new(w / 2.0 - 66.0, 0.0, 20.0, ch), &f.icon14, amber);
+        } else if a.alert_msg == "Look away" {
             // a drawn eye
             let (ex, ey) = (w / 2.0 - 50.0, ch / 2.0);
             g.fill_rrect(Rect::new(ex - 8.0, ey - 5.0, 16.0, 10.0), 5.0, Color(1.0, 1.0, 1.0, ca));
@@ -126,13 +139,18 @@ fn draw_collapsed(a: &App, w: f32, ca: f32) {
         } else {
             g.icon('\u{E916}', Rect::new(w / 2.0 - 58.0, 0.0, 20.0, ch), &f.icon14, white);
         }
-        g.text(
-            a.alert_msg,
-            Rect::new(w / 2.0 - 34.0, 0.0, 100.0, ch),
-            &f.body,
-            white,
-            Align::Left,
-        );
+        let tx = if a.alert_msg == "Battery low" { w / 2.0 - 42.0 } else { w / 2.0 - 34.0 };
+        g.text(&label, Rect::new(tx, 0.0, 118.0, ch), &f.body, col, Align::Left);
+        return;
+    }
+
+    if let (Some(t0), false) = (a.call_since, timer) {
+        let mins = t0.elapsed().as_secs() / 60;
+        let (cx, cy) = (w / 2.0 - 40.0, ch / 2.0);
+        g.fill_circle(cx - 12.0, cy, 3.0, Color(1.0, 0.3, 0.3, ca));
+        g.icon('\u{E720}', Rect::new(cx - 6.0, 0.0, 18.0, ch), &f.icon14, T1.fade(ca));
+        let txt = if mins == 0 { "On a call".to_string() } else { format!("Call {}m", mins) };
+        g.text(&txt, Rect::new(cx + 16.0, 0.0, 80.0, ch), &f.small, T1.fade(ca), Align::Left);
         return;
     }
 

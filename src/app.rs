@@ -309,6 +309,17 @@ pub struct App {
     /// smart hints: low-battery warning already shown, minutes of continuous use so far
     batt_warned: bool,
     active_min: u16,
+    /// what clicking the pill does while a copied-link/path hint is showing
+    alert_act: Option<AlertAct>,
+    /// colour dot shown beside a "Colour copied" hint
+    pub alert_swatch: Option<Color>,
+    /// when the microphone started being used (a call), for the pill
+    pub call_since: Option<Instant>,
+}
+
+enum AlertAct {
+    Open(String),
+    Reveal(String),
 }
 
 pub const DEFAULT_ACCENT: Color = Color(0.40, 0.62, 1.0, 1.0);
@@ -417,6 +428,9 @@ impl App {
             scene_seen: false,
             alert_until: None,
             batt_warned: false,
+            alert_act: None,
+            alert_swatch: None,
+            call_since: None,
             active_min: 0,
         };
         a.update_monitor();
@@ -553,6 +567,8 @@ impl App {
             (EXP_W, EXP_H)
         } else if self.alerting() {
             (190.0, self.col_h())
+        } else if self.call_since.is_some() && !self.timer_running() {
+            (COL_TIMER_W + 20.0, self.col_h())
         } else if self.has_media() {
             let extra = if self.timer_running() { 58.0 } else { 0.0 };
             (COL_MEDIA_W + extra, self.col_h())
@@ -744,7 +760,7 @@ impl App {
                     self.refresh_bar_data();
                     self.render_bar();
                 }
-                if !self.expanded && !self.has_media() && !self.timer_running() {
+                if !self.expanded && (self.call_since.is_some() || (!self.has_media() && !self.timer_running())) {
                     self.render();
                 }
             }
@@ -905,9 +921,23 @@ impl App {
     fn pill_alert(&mut self, msg: &'static str, secs: u64) {
         if !self.expanded && !self.timer_running() {
             self.alert_msg = msg;
+            self.alert_act = None;
+            self.alert_swatch = None;
             self.alert_until = Some(Instant::now() + std::time::Duration::from_secs(secs));
             self.retarget();
             self.render();
+        }
+    }
+
+    /// Show or hide the call pill when the microphone starts or stops being used.
+    fn update_call(&mut self) {
+        let on = self.cfg.smart && sys::mic_in_use();
+        if on != self.call_since.is_some() {
+            self.call_since = on.then(Instant::now);
+            if !self.expanded && !self.timer_running() {
+                self.retarget();
+                self.render();
+            }
         }
     }
 
@@ -918,6 +948,7 @@ impl App {
 
     /// Once a minute: warn on low battery, and nudge a break after 90 minutes of steady use.
     fn smart_tick(&mut self) {
+        self.update_call();
         if !self.cfg.smart {
             return;
         }
@@ -1092,6 +1123,23 @@ impl App {
     pub fn on_lbutton_down(&mut self, px: i32, py: i32) {
         self.mouse_down = true;
         let (x, y) = (px as f32 / self.scale, py as f32 / self.scale);
+        if !self.expanded && self.alerting() {
+            match (self.alert_msg, self.alert_act.take()) {
+                ("Link copied", Some(AlertAct::Open(u))) => {
+                    sys::open(&u, "");
+                    self.alert_until = None;
+                    self.retarget();
+                    return;
+                }
+                ("Path copied", Some(AlertAct::Reveal(p))) => {
+                    sys::open("explorer.exe", &format!("/select,\"{}\"", p));
+                    self.alert_until = None;
+                    self.retarget();
+                    return;
+                }
+                _ => {}
+            }
+        }
         if !self.expanded {
             self.squish = 1.0;
             self.retarget();
@@ -1773,8 +1821,12 @@ impl App {
             self.beat_start = Some(Instant::now());
             self.retarget();
         }
-        if let Some(msg) = self.cfg.smart.then(|| clip_hint(&text)).flatten() {
-            self.pill_alert(msg, 3);
+        if let Some(h) = self.cfg.smart.then(|| clip_hint(&text)).flatten() {
+            self.pill_alert(h.msg, 4);
+            if self.alert_msg == h.msg {
+                self.alert_act = h.act;
+                self.alert_swatch = h.swatch;
+            }
         }
         if self.pins.contains(&text) {
             return; // already pinned
@@ -1850,6 +1902,7 @@ impl App {
     }
 
     pub fn on_foreground(&mut self) {
+        self.update_call();
         // Never hide because of our own window (typing a task makes us the
         // foreground window), and never hide while a task is being typed.
         let fgw = unsafe { GetForegroundWindow() };
@@ -1946,16 +1999,46 @@ impl App {
 }
 
 /// Make the album colour usable as an accent on black (never too dark/dull).
-/// What the pill says about something just copied: a link, or a short numeric (one-time) code.
-fn clip_hint(t: &str) -> Option<&'static str> {
+struct Hint {
+    msg: &'static str,
+    act: Option<AlertAct>,
+    swatch: Option<Color>,
+}
+
+/// What the pill says about something just copied: a link, a colour, a file path or
+/// a short numeric (one-time) code. Links and paths can be opened by clicking the pill.
+fn clip_hint(t: &str) -> Option<Hint> {
     let t = t.trim();
+    let hint = |msg, act, swatch| Some(Hint { msg, act, swatch });
     if t.starts_with("http://") || t.starts_with("https://") {
-        Some("Link copied")
-    } else if (4..=8).contains(&t.len()) && t.bytes().all(|b| b.is_ascii_digit()) {
-        Some("Code copied")
-    } else {
-        None
+        return hint("Link copied", Some(AlertAct::Open(t.to_string())), None);
     }
+    if (4..=8).contains(&t.len()) && t.bytes().all(|b| b.is_ascii_digit()) {
+        return hint("Code copied", None, None);
+    }
+    if let Some(c) = hex_colour(t) {
+        return hint("Colour copied", None, Some(c));
+    }
+    let b = t.as_bytes();
+    if t.len() > 3 && b[0].is_ascii_alphabetic() && &t[1..3] == ":\\" && !t.contains('\n') && !t.contains('"') {
+        return hint("Path copied", Some(AlertAct::Reveal(t.to_string())), None);
+    }
+    None
+}
+
+/// `#rgb` or `#rrggbb`.
+fn hex_colour(t: &str) -> Option<Color> {
+    let h = t.strip_prefix('#')?;
+    if !h.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let v = u32::from_str_radix(h, 16).ok()?;
+    let (r, g, b) = match h.len() {
+        3 => (((v >> 8) & 15) * 17, ((v >> 4) & 15) * 17, (v & 15) * 17),
+        6 => ((v >> 16) & 255, (v >> 8) & 255, v & 255),
+        _ => return None,
+    };
+    Some(Color(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0))
 }
 
 fn boost(c: Color) -> Color {
@@ -2008,15 +2091,23 @@ fn alarm_sound() {
 /// PREVIEW_DIR set). Test-only: it builds the real app state without a window.
 #[cfg(test)]
 mod smart_tests {
-    use super::clip_hint;
+    use super::*;
+
+    fn msg(t: &str) -> Option<&'static str> {
+        clip_hint(t).map(|h| h.msg)
+    }
 
     #[test]
     fn clip_hints() {
-        assert_eq!(clip_hint("https://example.com"), Some("Link copied"));
-        assert_eq!(clip_hint(" 482913 "), Some("Code copied"));
-        assert_eq!(clip_hint("123"), None);
-        assert_eq!(clip_hint("123456789"), None);
-        assert_eq!(clip_hint("hello"), None);
+        assert_eq!(msg("https://example.com"), Some("Link copied"));
+        assert_eq!(msg(" 482913 "), Some("Code copied"));
+        assert_eq!(msg("#1e90ff"), Some("Colour copied"));
+        assert_eq!(msg("#fff"), Some("Colour copied"));
+        assert_eq!(msg("C:\\Users\\me\\a.txt"), Some("Path copied"));
+        assert_eq!(msg("#12"), None);
+        assert_eq!(msg("123"), None);
+        assert_eq!(msg("123456789"), None);
+        assert_eq!(msg("hello"), None);
     }
 }
 

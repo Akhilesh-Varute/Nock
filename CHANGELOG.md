@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Smart notch hints (tray → *Smart hints*, `smart` in config.ini, on by default): the pill warns when the battery is low and unplugged, suggests a break after 90 minutes of steady keyboard/mouse use, and says "Link copied" or "Code copied" when you copy a link or a short numeric code. All local, no polling beyond the existing once-a-minute tick.
+- Smart notch hints (tray → *Smart hints*, `smart` in config.ini, on by default): the pill shows an amber "Battery low" with the time left when unplugged at 15%, suggests a break after 90 minutes of steady keyboard/mouse use, shows "On a call" with the call length while an app is using the microphone, and says "Link copied", "Path copied", "Colour copied" (with a swatch) or "Code copied" for what you copy. Click the pill during a link or path hint to open it. All local, using the existing once-a-minute tick and foreground-change event.
 
 ## 0.9.6
 

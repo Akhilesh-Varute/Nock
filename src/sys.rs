@@ -397,6 +397,48 @@ pub fn light_theme() -> bool {
     }
 }
 
+/// True while some app is using the microphone (Windows records it in the privacy
+/// consent store: an app that is recording has a start time and no stop time yet).
+pub fn mic_in_use() -> bool {
+    const BASE: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\microphone";
+    let qword = |path: &str, name: PCWSTR| -> Option<u64> {
+        let mut v = 0u64;
+        let mut n = 8u32;
+        let p = HSTRING::from(path);
+        let r = unsafe { RegGetValueW(HKEY_CURRENT_USER, &p, name, RRF_RT_REG_QWORD, None, Some(&mut v as *mut u64 as *mut _), Some(&mut n)) };
+        (r == ERROR_SUCCESS).then_some(v)
+    };
+    let subkeys = |path: &str| -> Vec<String> {
+        let mut out = Vec::new();
+        let p = HSTRING::from(path);
+        unsafe {
+            let mut k = HKEY::default();
+            if RegOpenKeyExW(HKEY_CURRENT_USER, &p, None, KEY_READ, &mut k) != ERROR_SUCCESS {
+                return out;
+            }
+            for i in 0.. {
+                let mut buf = [0u16; 512];
+                let mut n = buf.len() as u32;
+                if RegEnumKeyExW(k, i, Some(PWSTR(buf.as_mut_ptr())), &mut n, None, None, None, None) != ERROR_SUCCESS {
+                    break;
+                }
+                out.push(String::from_utf16_lossy(&buf[..n as usize]));
+            }
+            let _ = RegCloseKey(k);
+        }
+        out
+    };
+    let mut paths: Vec<String> = Vec::new();
+    for name in subkeys(BASE) {
+        if name == "NonPackaged" {
+            paths.extend(subkeys(&format!("{BASE}\\NonPackaged")).into_iter().map(|n| format!("{BASE}\\NonPackaged\\{n}")));
+        } else {
+            paths.push(format!("{BASE}\\{name}"));
+        }
+    }
+    paths.iter().any(|p| qword(p, w!("LastUsedTimeStart")).unwrap_or(0) != 0 && qword(p, w!("LastUsedTimeStop")) == Some(0))
+}
+
 pub struct BatteryInfo {
     pub percent: u8,
     pub charging: bool,
