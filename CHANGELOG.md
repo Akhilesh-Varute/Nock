@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.2
+
+- Check for updates: an installed copy is now recognised by the uninstaller next to it (and a case-insensitive path match), so it offers to update itself instead of just opening the download page. The portable exe can update itself too: *Yes* downloads the new `Nock-portable-<version>.exe`, replaces itself and restarts; *No* opens the download page.
+
 ## 0.10.1
 
 - The top-bar calendar can now move between months: previous/next arrows and a *Today* button to jump back.
