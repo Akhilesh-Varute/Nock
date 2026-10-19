@@ -23,7 +23,7 @@ Written in Rust. No webview, no framework, no runtime. One small <code>.exe</cod
 - **Notch** at the top centre. Click it and a panel opens with tabs: **Media**, **Controls**, **Today** (focus timer, to-dos, calendar), **Stats**, **Clipboard**, **Apps**, **Games** and **Power**.
 - **Top bar** along the top of the screen: active app name, Wi-Fi, Bluetooth, sound, brightness, battery and clock, each with a dropdown (join Wi-Fi networks, connect Bluetooth devices, sliders, calendar). Optional clock styles and a CPU / memory read-out.
 - **A little life**: a buddy character on the bar, scripted scenes, an arcade with four mouse-only games, and small reactions on the pill (squish on click, glow with the music, confetti when the timer ends).
-- **Smart pill**: the notch tells you things without a click. Amber "Battery low" with time left, "On a call" with the length and a click-to-mute mic icon, "Link / Path / Colour / Code copied" (click a link or path to open it), a break nudge after 90 minutes of steady use, and meeting countdowns from your calendar. Tray → *Smart hints* turns it off. See [Smart pill](#smart-pill).
+- **Smart pill**: the notch tells you things without a click. Amber "Battery low" with time left, "Mic on" with the time and a click-to-mute mic icon, "Link / Path / Colour / Code copied" (click a link or path to open it), a break nudge after 90 minutes of steady use, and meeting countdowns from your calendar. Tray → *Smart hints* turns it off. See [Smart pill](#smart-pill).
 - **Gentle reminders** (all off by default): drink water, and look away from the screen (20-20-20).
 - **Zero idle cost**: event driven, no polling loop; about 0% CPU and about 32 MB of memory while idle (see [Why it is light](#why-it-is-light)). Hides itself in full-screen video and games, with a top-edge reveal.
 - Follows the Windows light/dark theme.
@@ -125,7 +125,7 @@ Both are off by default and set from the tray menu. When one fires, your buddy s
 The collapsed notch changes with what is going on, all from local rules (no AI, no cloud):
 
 - **Battery**: unplugged at 15% or less, the pill turns amber with the time left.
-- **Calls**: while an app is using the microphone the pill shows *On a call* and its length. Click the mic icon to mute or unmute the default microphone (it turns red). This is Windows' own mute, so it works for any call app.
+- **Microphone**: while an app is using the microphone the pill shows *Mic on* and for how long. Click the mic icon to mute or unmute the default microphone (it turns red). This is Windows' own mute, so it works for any call app.
 - **Copied**: a link, file path, `#hex` colour or short numeric code you copy shows a hint for a few seconds. Click the pill during a link or path hint to open it (a path opens Explorer with the file selected).
 - **Breaks**: after 90 minutes of keyboard and mouse use without a 5 minute gap, it suggests a break.
 - **Meetings**: put a read-only calendar link in `calendar_url=` in `config.ini` (Google Calendar: Settings → your calendar → *Secret address in iCal format*; Outlook: a published calendar). Five minutes before a meeting the pill shows its name and a countdown; click it to open the Zoom, Meet, Teams or Webex link in the event. Daily and weekly repeats work; monthly rules and `COUNT` do not. **This is the one thing that uses the network in the background**: with a link set, Nock fetches it at start and about once an hour. Leave it empty and Nock never does.

@@ -119,7 +119,7 @@ pub fn toggle_mic_mute() -> bool {
 fn mic_endpoint() -> Option<IAudioEndpointVolume> {
     unsafe {
         let en: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
-        let dev = en.GetDefaultAudioEndpoint(eCapture, eCommunications).ok()?;
+        let dev = en.GetDefaultAudioEndpoint(eCapture, eConsole).ok()?;
         dev.Activate::<IAudioEndpointVolume>(CLSCTX_ALL, None).ok()
     }
 }

@@ -156,7 +156,7 @@ fn draw_collapsed(a: &App, w: f32, ca: f32) {
         if muted {
             g.fill_poly(&[(cx - 4.0, cy + 7.0), (cx - 2.0, cy + 8.5), (cx + 10.0, cy - 7.0), (cx + 8.0, cy - 8.5)], red);
         }
-        let txt = if a.mic_muted { "Muted".to_string() } else if mins == 0 { "On a call".to_string() } else { format!("Call {}m", mins) };
+        let txt = if a.mic_muted { "Muted".to_string() } else if mins == 0 { "Mic on".to_string() } else { format!("Mic {}m", mins) };
         g.text(&txt, Rect::new(cx + 16.0, 0.0, 80.0, ch), &f.small, T1.fade(ca), Align::Left);
         return;
     }
