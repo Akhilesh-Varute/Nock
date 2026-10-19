@@ -101,6 +101,29 @@ pub fn set_mute(m: bool) {
     }
 }
 
+/// Default microphone: current mute state, or flip it. Returns the new state.
+pub fn mic_muted() -> bool {
+    mic_endpoint().and_then(|ep| unsafe { ep.GetMute().ok() }).is_some_and(|m| m.as_bool())
+}
+
+pub fn toggle_mic_mute() -> bool {
+    let now = !mic_muted();
+    if let Some(ep) = mic_endpoint() {
+        unsafe {
+            let _ = ep.SetMute(now, std::ptr::null());
+        }
+    }
+    now
+}
+
+fn mic_endpoint() -> Option<IAudioEndpointVolume> {
+    unsafe {
+        let en: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
+        let dev = en.GetDefaultAudioEndpoint(eCapture, eCommunications).ok()?;
+        dev.Activate::<IAudioEndpointVolume>(CLSCTX_ALL, None).ok()
+    }
+}
+
 // -------------------------------------------------------------- brightness
 // Internal laptop panels are only reachable through WMI. Spawning PowerShell
 // is slow (~0.3 s) but only happens on open / on slider release, never idle.

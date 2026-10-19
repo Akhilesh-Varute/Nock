@@ -150,8 +150,13 @@ fn draw_collapsed(a: &App, w: f32, ca: f32) {
         let mins = t0.elapsed().as_secs() / 60;
         let (cx, cy) = (w / 2.0 - 40.0, ch / 2.0);
         g.fill_circle(cx - 12.0, cy, 3.0, Color(1.0, 0.3, 0.3, ca));
-        g.icon('\u{E720}', Rect::new(cx - 6.0, 0.0, 18.0, ch), &f.icon14, T1.fade(ca));
-        let txt = if mins == 0 { "On a call".to_string() } else { format!("Call {}m", mins) };
+        let muted = a.mic_muted;
+        let red = Color(1.0, 0.3, 0.3, ca);
+        g.icon('\u{E720}', Rect::new(cx - 6.0, 0.0, 18.0, ch), &f.icon14, if muted { red } else { T1.fade(ca) });
+        if muted {
+            g.fill_poly(&[(cx - 4.0, cy + 7.0), (cx - 2.0, cy + 8.5), (cx + 10.0, cy - 7.0), (cx + 8.0, cy - 8.5)], red);
+        }
+        let txt = if a.mic_muted { "Muted".to_string() } else if mins == 0 { "On a call".to_string() } else { format!("Call {}m", mins) };
         g.text(&txt, Rect::new(cx + 16.0, 0.0, 80.0, ch), &f.small, T1.fade(ca), Align::Left);
         return;
     }

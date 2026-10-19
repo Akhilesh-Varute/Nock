@@ -315,6 +315,7 @@ pub struct App {
     pub alert_swatch: Option<Color>,
     /// when the microphone started being used (a call), for the pill
     pub call_since: Option<Instant>,
+    pub mic_muted: bool,
     /// text for a meeting hint ("Standup 5m"), shown instead of alert_msg when set
     pub alert_label: String,
     /// minutes since the calendar link was fetched, and the meeting already announced
@@ -436,6 +437,7 @@ impl App {
             alert_act: None,
             alert_swatch: None,
             call_since: None,
+            mic_muted: false,
             alert_label: String::new(),
             cal_age: 60,
             cal_seen: None,
@@ -943,6 +945,7 @@ impl App {
         let on = self.cfg.smart && sys::mic_in_use();
         if on != self.call_since.is_some() {
             self.call_since = on.then(Instant::now);
+            self.mic_muted = on && sys::mic_muted();
             if !self.expanded && !self.timer_running() {
                 self.retarget();
                 self.render();
@@ -1159,6 +1162,11 @@ impl App {
     pub fn on_lbutton_down(&mut self, px: i32, py: i32) {
         self.mouse_down = true;
         let (x, y) = (px as f32 / self.scale, py as f32 / self.scale);
+        if !self.expanded && !self.alerting() && !self.timer_running() && self.call_since.is_some() && x > self.sw.x / 2.0 - 58.0 && x < self.sw.x / 2.0 - 18.0 {
+            self.mic_muted = sys::toggle_mic_mute();
+            self.render();
+            return;
+        }
         if !self.expanded && self.alerting() {
             match (self.alert_msg, self.alert_act.take()) {
                 ("Link copied" | "Meeting", Some(AlertAct::Open(u))) => {
