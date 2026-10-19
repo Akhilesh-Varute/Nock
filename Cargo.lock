@@ -29,6 +29,7 @@ name = "nock"
 version = "0.10.0"
 dependencies = [
  "windows",
+ "windows-core",
  "windows-numerics",
  "winresource",
 ]

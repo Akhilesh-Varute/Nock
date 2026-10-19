@@ -17,6 +17,7 @@ media = [
 
 [dependencies]
 windows-numerics = "0.3"
+windows-core = "0.62"
 windows = { version = "0.62.2", features = [
   "Win32_Foundation",
   "Win32_Graphics_Direct2D",

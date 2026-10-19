@@ -445,6 +445,7 @@ impl App {
         };
         a.update_monitor();
         sys::watch_mic(hwnd.0 as isize);
+        sys::watch_mic_sessions(hwnd.0 as isize);
         a.load_app_icons();
         let (w, h) = a.target_size();
         a.sw = Spring::new(w);

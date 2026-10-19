@@ -423,6 +423,37 @@ pub fn light_theme() -> bool {
 /// True while some app is using the microphone (Windows records it in the privacy
 /// consent store: an app that is recording has a start time and no stop time yet).
 pub fn mic_in_use() -> bool {
+    mic_session_active() || mic_in_use_registry()
+}
+
+/// True when some other process has an active capture stream on a default microphone.
+/// Unlike the registry log this is live, so it also sees apps like Sound Recorder.
+fn mic_session_active() -> bool {
+    use windows::Win32::Media::Audio::{AudioSessionStateActive, IAudioSessionControl2, IAudioSessionManager2};
+    let pid = std::process::id();
+    unsafe {
+        let Ok(en) = CoCreateInstance::<_, IMMDeviceEnumerator>(&MMDeviceEnumerator, None, CLSCTX_ALL) else { return false };
+        for role in [eConsole, eCommunications] {
+            let Ok(dev) = en.GetDefaultAudioEndpoint(eCapture, role) else { continue };
+            let Ok(mgr) = dev.Activate::<IAudioSessionManager2>(CLSCTX_ALL, None) else { continue };
+            let Ok(list) = mgr.GetSessionEnumerator() else { continue };
+            for i in 0..list.GetCount().unwrap_or(0) {
+                let Ok(c) = list.GetSession(i) else { continue };
+                if c.GetState().ok() != Some(AudioSessionStateActive) {
+                    continue;
+                }
+                if let Ok(c2) = c.cast::<IAudioSessionControl2>() {
+                    if c2.GetProcessId().unwrap_or(0) != pid && c2.IsSystemSoundsSession() != S_OK {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+fn mic_in_use_registry() -> bool {
     const BASE: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\microphone";
     let qword = |path: &str, name: PCWSTR| -> Option<u64> {
         let mut v = 0u64;
@@ -484,6 +515,94 @@ pub fn watch_mic(hwnd: isize) {
             }
         }
         std::thread::sleep(std::time::Duration::from_millis(300)); // one burst of writes = one update
+    });
+}
+
+/// Tells the window when a microphone session appears or starts/stops capturing.
+#[windows::core::implement(windows::Win32::Media::Audio::IAudioSessionEvents)]
+struct MicEvents(isize);
+
+impl windows::Win32::Media::Audio::IAudioSessionEvents_Impl for MicEvents_Impl {
+    fn OnDisplayNameChanged(&self, _: &PCWSTR, _: *const GUID) -> Result<()> {
+        Ok(())
+    }
+    fn OnIconPathChanged(&self, _: &PCWSTR, _: *const GUID) -> Result<()> {
+        Ok(())
+    }
+    fn OnSimpleVolumeChanged(&self, _: f32, _: BOOL, _: *const GUID) -> Result<()> {
+        Ok(())
+    }
+    fn OnChannelVolumeChanged(&self, _: u32, _: *const f32, _: u32, _: *const GUID) -> Result<()> {
+        Ok(())
+    }
+    fn OnGroupingParamChanged(&self, _: *const GUID, _: *const GUID) -> Result<()> {
+        Ok(())
+    }
+    fn OnStateChanged(&self, _: windows::Win32::Media::Audio::AudioSessionState) -> Result<()> {
+        post_mic(self.0);
+        Ok(())
+    }
+    fn OnSessionDisconnected(&self, _: windows::Win32::Media::Audio::AudioSessionDisconnectReason) -> Result<()> {
+        post_mic(self.0);
+        Ok(())
+    }
+}
+
+#[windows::core::implement(windows::Win32::Media::Audio::IAudioSessionNotification)]
+struct MicNotify(isize);
+
+impl windows::Win32::Media::Audio::IAudioSessionNotification_Impl for MicNotify_Impl {
+    fn OnSessionCreated(&self, new: Ref<windows::Win32::Media::Audio::IAudioSessionControl>) -> Result<()> {
+        if let Some(c) = new.as_ref() {
+            watch_session(c, self.0);
+        }
+        post_mic(self.0);
+        Ok(())
+    }
+}
+
+fn post_mic(hwnd: isize) {
+    unsafe {
+        let _ = PostMessageW(Some(HWND(hwnd as *mut _)), WM_MIC, WPARAM(0), LPARAM(0));
+    }
+}
+
+fn watch_session(c: &windows::Win32::Media::Audio::IAudioSessionControl, hwnd: isize) {
+    use windows::Win32::Media::Audio::IAudioSessionEvents;
+    let ev: IAudioSessionEvents = MicEvents(hwnd).into();
+    unsafe {
+        let _ = c.RegisterAudioSessionNotification(&ev);
+    }
+    // the endpoint keeps the registration alive only while we hold both; leak them (a few per run)
+    std::mem::forget(ev);
+    std::mem::forget(c.clone());
+}
+
+/// Event-driven live mic watcher: new capture sessions and their start/stop post WM_MIC.
+/// Runs on its own COM thread and sleeps; costs nothing while idle.
+pub fn watch_mic_sessions(hwnd: isize) {
+    std::thread::spawn(move || unsafe {
+        use windows::Win32::Media::Audio::{IAudioSessionManager2, IAudioSessionNotification};
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        let Ok(en) = CoCreateInstance::<_, IMMDeviceEnumerator>(&MMDeviceEnumerator, None, CLSCTX_ALL) else { return };
+        let mut keep = Vec::new();
+        for role in [eConsole, eCommunications] {
+            let Ok(dev) = en.GetDefaultAudioEndpoint(eCapture, role) else { continue };
+            let Ok(mgr) = dev.Activate::<IAudioSessionManager2>(CLSCTX_ALL, None) else { continue };
+            let n: IAudioSessionNotification = MicNotify(hwnd).into();
+            let _ = mgr.RegisterSessionNotification(&n);
+            if let Ok(list) = mgr.GetSessionEnumerator() {
+                for i in 0..list.GetCount().unwrap_or(0) {
+                    if let Ok(c) = list.GetSession(i) {
+                        watch_session(&c, hwnd);
+                    }
+                }
+            }
+            keep.push((mgr, n));
+        }
+        loop {
+            std::thread::park();
+        }
     });
 }
 
