@@ -50,11 +50,14 @@ pub fn draw(a: &App, w: f32, h: f32, hits: &mut Vec<Hit>) {
 
     if a.alerting() && t < 0.05 {
         let pulse = 0.5 + 0.5 * (a.eq_phase * 0.9).sin();
-        g.fill_rrect(
-            Rect::new(0.0, -rad, w, h + rad),
-            rad,
-            a.accent.fade(0.25 + 0.45 * pulse),
-        );
+        // important hints get their own strong colour so they read from the corner of the eye
+        let (tint, base) = match a.alert_msg {
+            "Meeting" => (Color(0.20, 0.45, 1.0, 1.0), 0.55),
+            "Battery low" => (Color(1.0, 0.50, 0.10, 1.0), 0.55),
+            "Take a break" => (Color(0.12, 0.72, 0.62, 1.0), 0.50),
+            _ => (a.accent, 0.25),
+        };
+        g.fill_rrect(Rect::new(0.0, -rad, w, h + rad), rad, tint.fade(base + (0.95 - base) * 0.5 * pulse));
     }
     let c_alpha = (1.0 - t * 3.2).clamp(0.0, 1.0);
     let e_alpha = ((t - 0.45) / 0.55).clamp(0.0, 1.0);
@@ -113,7 +116,13 @@ fn draw_collapsed(a: &App, w: f32, ca: f32) {
     if a.alerting() {
         let white = Color(1.0, 1.0, 1.0, ca);
         let amber = Color(1.0, 0.72, 0.2, ca);
-        let mut label = if a.alert_label.is_empty() || a.alert_msg != "Meeting" { a.alert_msg.to_string() } else { a.alert_label.clone() };
+        let mut label = match (a.alert_msg, a.alert_start) {
+            ("Meeting", Some(start)) if !a.alert_label.is_empty() => {
+                let mins = (start - crate::cal::now().0 + 59).div_euclid(60);
+                format!("{} {}", a.alert_label, if mins > 0 { format!("{mins}m") } else { "now".to_string() })
+            }
+            _ => a.alert_msg.to_string(),
+        };
         let mut col = white;
         if let Some(sw) = a.alert_swatch {
             let (cx, cy) = (w / 2.0 - 52.0, ch / 2.0);

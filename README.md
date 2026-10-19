@@ -130,7 +130,7 @@ The collapsed notch changes with what is going on, all from local rules (no AI, 
 - **Breaks**: after 90 minutes of keyboard and mouse use without a 5 minute gap, it suggests a break.
 - **Meetings**: put a read-only calendar link in `calendar_url=` in `config.ini` (Google Calendar: Settings → your calendar → *Secret address in iCal format*; Outlook: a published calendar). Five minutes before a meeting the pill shows its name and a countdown; click it to open the Zoom, Meet, Teams or Webex link in the event. Daily and weekly repeats work; monthly rules and `COUNT` do not. **This is the one thing that uses the network in the background**: with a link set, Nock fetches it at start and about once an hour. Leave it empty and Nock never does.
 
-Tray → *Smart hints* (`smart=0` in `config.ini`) turns all of these off.
+The important ones (meetings, low battery, break) glow in a strong colour and stay up for a minute or more (a meeting stays until it starts or you click it, and shows again in its last minute), because a small pill is easy to miss when you are focused. Tray → *Chime for meeting, battery and break hints* (`smart_sound=1`, off by default) adds a short sound. Tray → *Smart hints* (`smart=0` in `config.ini`) turns all of these off.
 
 ## Windows says "Smart App Control blocked an app"
 
