@@ -1724,8 +1724,17 @@ pub fn check_update(hwnd: isize) {
 
 /// Whether this exe is the one the installer put in place (so the installer can replace it).
 pub fn installed_by_setup() -> bool {
-    let (Ok(exe), Ok(local)) = (std::env::current_exe(), std::env::var("LOCALAPPDATA")) else { return false };
-    exe.starts_with(Path::new(&local).join("Programs").join("Nock"))
+    let Ok(exe) = std::env::current_exe() else { return false };
+    // the installer's uninstaller sits beside an installed copy, whatever spelling the path has
+    exe.parent().is_some_and(|d| d.join("unins000.exe").exists())
+        || std::env::var("LOCALAPPDATA").is_ok_and(|l| is_install_path(&exe.to_string_lossy(), &l))
+}
+
+/// Is `exe` inside `<local app data>\Programs\Nock`? Ignores letter case, slash style and a `\\?\` prefix.
+fn is_install_path(exe: &str, local: &str) -> bool {
+    let norm = |s: &str| s.trim_start_matches(r"\\?\").replace('/', "\\").to_lowercase();
+    let dir = format!("{}\\programs\\nock\\", norm(local).trim_end_matches('\\'));
+    norm(exe).starts_with(&dir)
 }
 
 /// Download the installer for `tag`, run it silently (it stops this Nock and replaces the
@@ -1776,7 +1785,17 @@ pub fn open_releases() {
 
 #[cfg(test)]
 mod update_tests {
-    use super::is_newer;
+    use super::{is_install_path, is_newer};
+
+    #[test]
+    fn install_path_detection() {
+        let local = r"C:\Users\akhil\AppData\Local";
+        assert!(is_install_path(r"C:\Users\akhil\AppData\Local\Programs\Nock\nock.exe", local));
+        assert!(is_install_path(r"c:\users\AKHIL\appdata\local\programs\nock\NOCK.EXE", local));
+        assert!(is_install_path(r"\\?\C:\Users\akhil\AppData\Local\Programs\Nock\nock.exe", local));
+        assert!(!is_install_path(r"C:\Users\akhil\AppData\Local\Programs\NockOther\nock.exe", local));
+        assert!(!is_install_path(r"V:\Personal Projects\nock\target\release\nock.exe", local));
+    }
 
     #[test]
     fn version_compare() {
