@@ -14,7 +14,9 @@ Written in Rust. No webview, no framework, no runtime. One small <code>.exe</cod
 
 <p align="center"><img src="docs/demo.gif" width="760" alt="Nock demo: the notch opens, every tab is shown, then the Wi-Fi and Bluetooth dropdowns, the buddy, a scene and the tray menu"></p>
 
-> **Status: early.** It builds in CI and works on the author's machine, but has had limited testing elsewhere. Expect rough edges and please [open an issue](../../issues).
+<p align="center"><a href="https://github.com/Akhilesh-Varute/Nock/releases/latest"><b>⬇ Download for Windows 10/11</b></a> &nbsp;·&nbsp; free, MIT, about 1 MB</p>
+
+> **Actively developed.** Nock is young and still being tested on more PCs, so you may hit rough edges. Bug reports and ideas are very welcome: [open an issue](../../issues). A Linux port is in progress.
 
 ## Features
 
