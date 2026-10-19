@@ -908,17 +908,19 @@ impl App {
                         Align::Left,
                     );
                     // previous / next month, and a way back to today
-                    let btn = |r: Rect, label: &str, act: PopAct, g: &Gfx, h: &mut Vec<(Rect, PopAct)>| {
-                        if hot == Some(h.len()) {
-                            g.fill_rrect(r, 6.0, th.hover);
+                    let btn = |r: Rect, glyph: Option<char>, label: &str, act: PopAct, g: &Gfx, h: &mut Vec<(Rect, PopAct)>| {
+                        // always a visible chip; brighter under the pointer
+                        g.fill_rrect(r, 8.0, if hot == Some(h.len()) { th.hover } else { th.hover.fade(0.55) });
+                        match glyph {
+                            Some(c) => g.icon(c, r, &g.fonts.icon14, th.t1),
+                            None => g.text(label, r, &g.fonts.small, th.t1, Align::Center),
                         }
-                        g.text(label, r, &g.fonts.small, th.t1, Align::Center);
                         h.push((r, act));
                     };
-                    btn(Rect::new(w - 16.0 - 26.0, top - 2.0, 26.0, 22.0), "\u{203A}", PopAct::CalMonth(1), g, h);
-                    btn(Rect::new(w - 16.0 - 54.0, top - 2.0, 26.0, 22.0), "\u{2039}", PopAct::CalMonth(-1), g, h);
+                    btn(Rect::new(w - 16.0 - 32.0, top - 2.0, 32.0, 24.0), Some('\u{E76C}'), "", PopAct::CalMonth(1), g, h);
+                    btn(Rect::new(w - 16.0 - 68.0, top - 2.0, 32.0, 24.0), Some('\u{E76B}'), "", PopAct::CalMonth(-1), g, h);
                     if cal_off != 0 {
-                        btn(Rect::new(w - 16.0 - 110.0, top - 2.0, 52.0, 22.0), "Today", PopAct::CalToday, g, h);
+                        btn(Rect::new(w - 16.0 - 132.0, top - 2.0, 58.0, 24.0), None, "Today", PopAct::CalToday, g, h);
                     }
                     for (i, d) in ["S", "M", "T", "W", "T", "F", "S"].iter().enumerate() {
                         g.text(d, Rect::new(16.0 + i as f32 * cw, top + 22.0, cw, 18.0), &g.fonts.tiny, th.t2, Align::Center);
