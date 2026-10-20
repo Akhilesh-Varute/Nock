@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use windows::core::*;
 use windows::Win32::Foundation::*;
+use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::Media::Audio::Endpoints::{IAudioEndpointVolume, IAudioMeterInformation};
 use windows::Win32::Media::Audio::*;
 use windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES;
@@ -999,6 +1000,44 @@ fn friendly(stem: &str) -> String {
 
 /// Reserve (or release) a strip of `height_px` at the top of the monitor so
 /// maximised windows stop below the notch. Pass `height_px = 0` to release.
+/// All displays, primary first, then left to right.
+pub fn monitors() -> Vec<HMONITOR> {
+    unsafe extern "system" fn cb(m: HMONITOR, _: HDC, _: *mut RECT, lp: LPARAM) -> BOOL {
+        unsafe { (*(lp.0 as *mut Vec<HMONITOR>)).push(m) };
+        TRUE
+    }
+    let mut v: Vec<HMONITOR> = Vec::new();
+    unsafe {
+        let _ = EnumDisplayMonitors(None, None, Some(cb), LPARAM(&mut v as *mut _ as isize));
+    }
+    let info = |m: HMONITOR| unsafe {
+        let mut mi = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+        let _ = GetMonitorInfoW(m, &mut mi);
+        (mi.dwFlags & 1 == 0, mi.rcMonitor.left, mi.rcMonitor.top) // MONITORINFOF_PRIMARY = 1
+    };
+    v.sort_by_key(|m| info(*m));
+    v
+}
+
+/// The display chosen in settings (0 = primary); falls back to primary if it is unplugged.
+pub fn pick_monitor(idx: u8) -> HMONITOR {
+    let list = monitors();
+    match list.get((idx as usize).saturating_sub(1)) {
+        Some(m) if idx > 0 => *m,
+        _ => unsafe { MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY) },
+    }
+}
+
+pub fn scale_of(mon: HMONITOR) -> f32 {
+    let (mut dx, mut dy) = (0u32, 0u32);
+    unsafe {
+        if windows::Win32::UI::HiDpi::GetDpiForMonitor(mon, windows::Win32::UI::HiDpi::MDT_EFFECTIVE_DPI, &mut dx, &mut dy).is_ok() && dx > 0 {
+            return dx as f32 / 96.0;
+        }
+    }
+    1.0
+}
+
 pub fn reserve_top(hwnd: HWND, mon: &RECT, height_px: i32) {
     const ABM_NEW: u32 = 0;
     const ABM_REMOVE: u32 = 1;

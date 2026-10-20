@@ -474,7 +474,7 @@ impl App {
 
     pub fn update_monitor(&mut self) {
         unsafe {
-            let mon = MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY);
+            let mon = sys::pick_monitor(self.cfg.monitor);
             let mut mi = MONITORINFO {
                 cbSize: std::mem::size_of::<MONITORINFO>() as u32,
                 ..Default::default()
@@ -484,7 +484,7 @@ impl App {
                 // for "I can't see it" reports: which monitor Nock drew on, and how many there are
                 let count = GetSystemMetrics(SM_CMONITORS);
                 sys::log_visibility(&format!(
-                    "primary monitor {},{},{},{} (of {count} monitor(s)), scale {:.2}",
+                    "monitor {},{},{},{} (of {count} monitor(s)), scale {:.2}",
                     mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right, mi.rcMonitor.bottom, self.scale
                 ));
             }
@@ -871,6 +871,13 @@ impl App {
     pub fn toggle_auto_close(&mut self) {
         self.cfg.auto_close = !self.cfg.auto_close;
         crate::store::save_config(&self.cfg);
+    }
+
+    /// Tray: move the notch and bar to another display (0 = primary).
+    pub fn set_monitor(&mut self, idx: u8) {
+        self.cfg.monitor = idx;
+        store::save_config(&self.cfg);
+        self.on_display_change(sys::scale_of(sys::pick_monitor(idx)));
     }
 
     pub fn toggle_tucked(&mut self) {

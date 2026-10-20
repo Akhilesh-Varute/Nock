@@ -54,18 +54,6 @@ fn hi(lp: LPARAM) -> i32 {
     ((lp.0 >> 16) & 0xffff) as i16 as i32
 }
 
-fn primary_scale() -> f32 {
-    unsafe {
-        let mon = MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY);
-        let (mut dx, mut dy) = (0u32, 0u32);
-        if GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &mut dx, &mut dy).is_ok() && dx > 0 {
-            dx as f32 / 96.0
-        } else {
-            1.0
-        }
-    }
-}
-
 fn main() -> Result<()> {
     // Release builds abort on panic, which would make the notch silently vanish.
     // Leave a note in %APPDATA%\\Notch\\crash.log so the cause can be found.
@@ -111,7 +99,7 @@ fn main() -> Result<()> {
             None,
         )?;
 
-        let boxed = Box::new(App::new(hwnd, primary_scale())?);
+        let boxed = Box::new(App::new(hwnd, sys::scale_of(sys::pick_monitor(store::load_config().monitor)))?);
         APP.store(Box::into_raw(boxed), Ordering::SeqCst);
 
         // top bar window (same class; messages are routed by handle in wndproc)
@@ -344,7 +332,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             }
         }
         WM_DPICHANGED => a.on_display_change((wp.0 & 0xffff) as f32 / 96.0),
-        WM_DISPLAYCHANGE => a.on_display_change(primary_scale()),
+        WM_DISPLAYCHANGE => a.on_display_change(sys::scale_of(sys::pick_monitor(a.cfg.monitor))),
         WM_TRAY => on_tray(hwnd, a, lp),
         WM_DESTROY => {
             sys::reserve_top(hwnd, &RECT::default(), 0);
@@ -506,6 +494,18 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             }
             let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Look-away reminder (eyes)"));
         }
+        let mons = sys::monitors().len();
+        if mons > 1 {
+            if let Ok(sub) = CreatePopupMenu() {
+                let cur = a.cfg.monitor as usize;
+                let _ = AppendMenuW(sub, MF_STRING | if cur == 0 { MF_CHECKED } else { MF_UNCHECKED }, 100, w!("Primary display"));
+                for i in 1..=mons.min(16) {
+                    let m = if cur == i { MF_CHECKED } else { MF_UNCHECKED };
+                    let _ = AppendMenuW(sub, MF_STRING | m, 100 + i, &HSTRING::from(format!("Display {i}")));
+                }
+                let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Show on display"));
+            }
+        }
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
         let _ = AppendMenuW(menu, MF_STRING | auto, 1, w!("Start with Windows"));
         let sm = if a.cfg.start_menu { MF_CHECKED } else { MF_UNCHECKED };
@@ -560,6 +560,7 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             60..=63 => a.set_clock_style((cmd.0 - 60) as u8),
             80..=83 => a.set_eye_min([0u16, 20, 30, 45][(cmd.0 - 80) as usize]),
             70..=74 => a.set_water_min([0u16, 30, 45, 60, 90][(cmd.0 - 70) as usize]),
+            100..=116 => a.set_monitor((cmd.0 - 100) as u8),
             31..=46 => a.play_scene((cmd.0 - 31) as usize),
             9 => {
                 // Clean up, then end the process outright so no helper thread,
