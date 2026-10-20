@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.0
+
+- Multi-display: the tray menu has a new *Show on display* submenu (when more than one display is connected) to put the notch, top bar, buddy and scenes on any display. Saved as `monitor=` in `config.ini`; falls back to the primary display if the chosen one is unplugged.
+
 ## 0.10.2
 
 - Check for updates: an installed copy is now recognised by the uninstaller next to it (and a case-insensitive path match), so it offers to update itself instead of just opening the download page. The portable exe can update itself too: *Yes* downloads the new `Nock-portable-<version>.exe`, replaces itself and restarts; *No* opens the download page.
