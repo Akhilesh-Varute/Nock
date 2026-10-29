@@ -39,6 +39,7 @@ pub enum BuddyKind {
     Necro,
     Clippy,
     Merlin,
+    Genie,
 }
 
 impl BuddyKind {
@@ -73,6 +74,14 @@ impl BuddyKind {
                 "Focus turns spells into reality.",
                 "Hocus Pocus!",
             ],
+            BuddyKind::Genie => &[
+                "Your wish is my command!",
+                "Phenomenal cosmic power... itty-bitty bar!",
+                "Need three wishes or just more coffee?",
+                "Rub the lamp anytime, chief!",
+                "Poof! What can I do for ya?",
+                "Ain't never had a buddy like me!",
+            ],
             _ => return None,
         };
         Some(list[(r as usize) % list.len()])
@@ -91,6 +100,7 @@ impl BuddyKind {
             8 => Some(BuddyKind::Necro),
             9 => Some(BuddyKind::Clippy),
             10 => Some(BuddyKind::Merlin),
+            11 => Some(BuddyKind::Genie),
             _ => None,
         }
     }
@@ -717,6 +727,118 @@ fn palette(kind: BuddyKind) -> (Color, Color) {
         BuddyKind::Ronin | BuddyKind::Courier | BuddyKind::Necro => (Color(0.5, 0.5, 0.5, 1.0), Color(0.3, 0.3, 0.3, 1.0)),
         BuddyKind::Clippy => (Color(0.82, 0.85, 0.90, 1.0), Color(0.48, 0.52, 0.58, 1.0)),
         BuddyKind::Merlin => (Color(0.24, 0.35, 0.72, 1.0), Color(0.96, 0.80, 0.25, 1.0)),
+        BuddyKind::Genie => (Color(0.28, 0.72, 0.95, 1.0), Color(0.95, 0.78, 0.20, 1.0)),
+    }
+}
+
+fn draw_genie(g: &Gfx, cx: f32, bob: f32, p: &Pose, mode: Mode, tick: u32, body: Color, dark: Color, ink: Color) {
+    let _t = tick as f32;
+    let smoke_wag = p.wag * 2.2;
+
+    // Ground shadow
+    g.fill_rrect(
+        Rect::new(cx - 8.0, 27.0, 16.0, 2.4),
+        1.2,
+        Color(0.0, 0.0, 0.0, (0.24 - bob.max(0.0) * 0.03).max(0.08)),
+    );
+
+    // Magic Brass Lamp on the bar floor
+    let lamp_y = 25.0;
+    // Lamp body
+    g.fill_rrect(Rect::new(cx - 5.0, lamp_y, 9.5, 3.2), 1.6, dark);
+    // Lamp handle
+    g.line((cx + 4.2, lamp_y + 0.5), (cx + 6.2, lamp_y + 2.0), 1.2, dark);
+    // Lamp spout pointing left
+    g.line((cx - 5.0, lamp_y + 1.2), (cx - 7.5, lamp_y - 0.4), 1.4, dark);
+
+    // Swirling mystical smoke tail from spout to torso
+    let smoke_col = Color(body.0, body.1, body.2, 0.65);
+    g.fill_circle(cx - 6.5 + smoke_wag * 0.2, 23.0 - bob * 0.5, 2.0, smoke_col);
+    g.fill_circle(cx - 4.0 + smoke_wag * 0.5, 20.5 - bob * 0.7, 2.8, smoke_col);
+    g.fill_circle(cx - 1.2 + smoke_wag * 0.8, 18.0 - bob * 0.9, 3.6, smoke_col);
+
+    // Cyan Torso
+    g.fill_rrect(Rect::new(cx - 5.5, 13.5 - bob, 11.0, 6.2), 3.0, body);
+
+    // Folded muscular arms
+    g.fill_rrect(Rect::new(cx - 6.6, 16.2 - bob, 13.2, 3.8), 1.9, body);
+    // Golden wrist cuffs
+    g.fill_rrect(Rect::new(cx - 6.8, 16.2 - bob, 2.2, 3.8), 0.8, dark);
+    g.fill_rrect(Rect::new(cx + 4.6, 16.2 - bob, 2.2, 3.8), 0.8, dark);
+
+    // Pointed elf/genie ears
+    g.fill_poly(
+        &[
+            (cx - 4.2, 10.5 - bob),
+            (cx - 7.2, 8.5 - bob),
+            (cx - 4.0, 8.5 - bob),
+        ],
+        body,
+    );
+    g.fill_poly(
+        &[
+            (cx + 4.2, 10.5 - bob),
+            (cx + 7.2, 8.5 - bob),
+            (cx + 4.0, 8.5 - bob),
+        ],
+        body,
+    );
+
+    // Head
+    g.fill_circle(cx, 10.5 - bob, 4.6, body);
+
+    // Goatee beard
+    g.line((cx, 14.8 - bob), (cx + p.dir * 1.2, 17.0 - bob), 1.2, ink);
+
+    // Eyes
+    let lx = p.look.0 * 1.2;
+    let ly = p.look.1 * 1.0;
+    for sx in [-2.2f32, 2.2f32] {
+        let ex = cx + sx;
+        let ey = 10.0 - bob;
+        match p.eyes {
+            Eyes::Closed => {
+                g.line((ex - 1.3, ey), (ex + 1.3, ey), 1.0, ink);
+            }
+            Eyes::Happy => {
+                g.line((ex - 1.3, ey + 0.6), (ex, ey - 0.7), 1.1, ink);
+                g.line((ex, ey - 0.7), (ex + 1.3, ey + 0.6), 1.1, ink);
+            }
+            Eyes::Open => {
+                g.fill_circle(ex, ey, 1.8, Color::white(1.0));
+                g.fill_circle(ex + lx * 0.5, ey + ly * 0.5, 1.1, ink);
+            }
+        }
+    }
+
+    // Purple Turban
+    let turban_col = Color(0.55, 0.20, 0.65, 1.0);
+    g.fill_rrect(Rect::new(cx - 5.6, 5.8 - bob, 11.2, 4.2), 2.1, turban_col);
+    // Brooch with ruby
+    g.fill_circle(cx, 7.8 - bob, 1.5, dark);
+    g.fill_circle(cx, 7.8 - bob, 0.8, Color(0.92, 0.15, 0.22, 1.0));
+    // Feather plume
+    g.line((cx, 6.8 - bob), (cx - 1.6 + p.wag * 0.4, 1.8 - bob), 1.5, Color::white(0.95));
+
+    // Mode-specific extras
+    match mode {
+        Mode::Sleep => {
+            let c = Color(0.6, 0.65, 0.8, 0.9);
+            g.text("z", Rect::new(cx + 7.0, 6.0, 9.0, 9.0), &g.fonts.tiny, c, Align::Left);
+            g.text("Z", Rect::new(cx + 11.0, 0.5, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+        }
+        Mode::Dance => {
+            let c = Color(0.95, 0.55, 0.95, 0.95);
+            let side = if (tick / 5) % 2 == 0 { 12.0 } else { -20.0 };
+            g.text("\u{266A}", Rect::new(cx + side, 3.0, 12.0, 12.0), &g.fonts.small, c, Align::Left);
+        }
+        Mode::Cheer => {
+            let c = Color(1.0, 0.82, 0.2, 0.95);
+            let a = if (tick / 4) % 2 == 0 { 0.0 } else { 3.0 };
+            g.text("\u{2726}", Rect::new(cx - 20.0, 2.0 + a, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+            g.text("\u{2726}", Rect::new(cx + 12.0, 5.0 - a, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+        }
+        _ => {}
     }
 }
 
@@ -950,6 +1072,10 @@ fn draw_sprite(g: &Gfx, kind: BuddyKind, p: &Pose, mode: Mode, tick: u32) {
     }
     if kind == BuddyKind::Merlin {
         draw_merlin(g, cx, bob, p, mode, tick, body, dark, ink);
+        return;
+    }
+    if kind == BuddyKind::Genie {
+        draw_genie(g, cx, bob, p, mode, tick, body, dark, ink);
         return;
     }
     let d = p.dir;
@@ -1219,5 +1345,13 @@ mod clippy_tests {
         let q = BuddyKind::Merlin.quote(0).expect("merlin quote");
         assert!(q.contains("stars"));
         assert!(BuddyKind::Merlin.quote(1).is_some());
+    }
+
+    #[test]
+    fn genie_id_and_quotes() {
+        assert_eq!(BuddyKind::from_id(11), Some(BuddyKind::Genie));
+        let q = BuddyKind::Genie.quote(0).expect("genie quote");
+        assert!(q.contains("wish"));
+        assert!(BuddyKind::Genie.quote(1).is_some());
     }
 }
