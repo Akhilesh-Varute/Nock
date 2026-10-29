@@ -99,7 +99,7 @@
     var el = $('[data-q="' + id + '"]'); if (el) el.classList.add('done');
     var n = Object.keys(st.quests).length;
     $('#qCount').textContent = n + ' / 5';
-    if (n === 5 && !st.done) { st.done = true; $('#unlock').classList.add('on'); burst(); }
+    if (n === 5 && !st.done) { st.done = true; document.body.classList.add('finished'); $('#unlock').classList.add('on'); burst(); }
   }
 
   /* ---------- open / close / tabs ---------- */
@@ -109,7 +109,8 @@
     notch.classList.toggle('open', v);
     pill.setAttribute('aria-expanded', v);
     panel.inert = !v;
-    if (v) { document.body.classList.add('touched'); quest('open'); }
+    document.body.classList.toggle('touched', v); // the "poke it" hint hides while open and returns on close
+    if (v) quest('open');
     else { stopGame(); cancelAdd(); }
     size(); renderPill();
   }
