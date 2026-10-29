@@ -387,6 +387,32 @@
       .then(function (j) { if (j) hrefs(j); }).catch(function () {});
   } catch (e) {}
 
+  /* ---------- live counts: downloads across all releases, GitHub stars ---------- */
+  function showProof(stars, dls) {
+    $$('[data-proof]').forEach(function (el) {
+      el.textContent = dls.toLocaleString('en') + ' downloads · ' + stars.toLocaleString('en') + ' GitHub stars';
+      el.hidden = false;
+    });
+  }
+  (function () {
+    var KEY = 'nockProof';
+    try {
+      var c = JSON.parse(sessionStorage.getItem(KEY));
+      if (c && Date.now() - c.t < 600000) { showProof(c.s, c.d); return; }
+    } catch (e) {}
+    var api = 'https://api.github.com/repos/Akhilesh-Varute/Nock';
+    Promise.all([
+      fetch(api).then(function (r) { return r.ok ? r.json() : null; }),
+      fetch(api + '/releases?per_page=100').then(function (r) { return r.ok ? r.json() : null; })
+    ]).then(function (a) {
+      if (!a[0] || !a[1]) return; // no numbers rather than made-up ones
+      var d = 0;
+      a[1].forEach(function (rel) { (rel.assets || []).forEach(function (x) { d += x.download_count || 0; }); });
+      showProof(a[0].stargazers_count, d);
+      try { sessionStorage.setItem(KEY, JSON.stringify({ t: Date.now(), s: a[0].stargazers_count, d: d })); } catch (e) {}
+    }).catch(function () {});
+  })();
+
   if (!/Windows/i.test(navigator.userAgent)) $('#osNote').style.display = 'block';
 
   /* ---------- init ---------- */

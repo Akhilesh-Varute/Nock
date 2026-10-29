@@ -227,6 +227,9 @@ h1 .hl::after { content: ""; position: absolute; left: 0; right: 0; bottom: -.04
 .btn:hover { transform: translate(-2px, -2px); box-shadow: 7px 7px 0 var(--ink); } .btn:active { transform: translate(3px, 3px); box-shadow: 2px 2px 0 var(--ink); }
 .btn.alt { background: var(--bone); } .btn .icon { width: 20px; height: 20px; stroke-width: 2.4; }
 .ver { font: 500 12px var(--mono); color: #4a473f; margin-top: 12px; min-height: 1.4em; }
+.proof { display: inline-block; margin-top: 8px; font: 700 12px var(--mono); text-transform: uppercase; letter-spacing: .04em; border: 2px solid var(--ink); border-radius: 999px; padding: 5px 12px; background: var(--bone); }
+.proof[hidden] { display: none; }
+.final .proof { background: var(--ink); color: var(--bone); }
 .note-os { display: none; margin-top: 10px; font-size: 14px; background: var(--ink); color: var(--bone); padding: 8px 12px; border-radius: 10px; max-width: 620px; }
 .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; align-items: center; }
 .chips > span { font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .08em; margin-right: 2px; }
