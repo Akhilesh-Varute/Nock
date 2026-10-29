@@ -347,17 +347,8 @@ fn native_brightness_set(percent: u32) -> bool {
 pub fn brightness_load(hwnd: isize) {
     std::thread::spawn(move || {
         let v = native_brightness_get().or_else(|| {
-            powershell(
-                "$b = (Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightness -ErrorAction SilentlyContinue | Select-Object -First 1).CurrentBrightness; if ($null -eq $b) { $b = (Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightness -ErrorAction SilentlyContinue | Select-Object -First 1).CurrentBrightness }; Write-Output $b",
-            )
-            .and_then(|s| {
-                let t = s.trim().to_string();
-                let p = t.parse::<u32>().ok();
-                if p.is_none() {
-                    log_brightness(&format!("brightness query returned: {:?}", t));
-                }
-                p
-            })
+            let ddc = crate::mon::get_ddc_brightness_all();
+            ddc.first().map(|m| m.current)
         });
         unsafe {
             let _ = PostMessageW(
@@ -384,11 +375,13 @@ pub fn brightness_set(percent: u32) {
     std::thread::spawn(|| loop {
         let v = BRI_PENDING.swap(-1, SeqCst);
         if v >= 0 {
-            if !native_brightness_set(v as u32) {
-                let _ = powershell(&format!(
-                    "Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods | Invoke-CimMethod -MethodName WmiSetBrightness -Arguments @{{Timeout=1;Brightness={}}}",
-                    v
-                ));
+            let pct = v as u32;
+            let mut ok = native_brightness_set(pct);
+            if crate::mon::set_ddc_brightness_all(pct) {
+                ok = true;
+            }
+            if !ok {
+                log_brightness("brightness_set: neither native LCD nor DDC/CI succeeded");
             }
             continue;
         }

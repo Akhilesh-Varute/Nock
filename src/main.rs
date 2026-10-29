@@ -13,6 +13,7 @@ mod scene;
 mod gfx;
 mod pop;
 mod media;
+mod mon;
 mod radio;
 mod store;
 mod sys;
