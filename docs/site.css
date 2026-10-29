@@ -232,7 +232,12 @@ h1 .hl::after { content: ""; position: absolute; left: 0; right: 0; bottom: -.04
 .chips > span { font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .08em; margin-right: 2px; }
 .chip { all: unset; cursor: pointer; border: 2px solid var(--ink); border-radius: 999px; padding: 8px 14px; font: 600 14px var(--body); min-height: 40px; box-sizing: border-box; display: inline-flex; align-items: center; transition: background .15s, color .15s; }
 .chip:hover { background: var(--ink); color: var(--bone); } .chip:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
-.stickers { position: absolute; right: 2vw; top: 128px; width: min(36vw, 440px); height: 62%; pointer-events: none; }
+.hero .wrap { position: relative; }
+.stickers { position: static; display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
+@media (min-width: 1100px) {
+  h1 { font-size: clamp(60px, 7.4vw, 108px); }
+  .stickers { position: absolute; right: 0; top: 24px; width: 320px; height: 430px; display: block; margin: 0; pointer-events: none; }
+}
 .sticker {
   position: absolute; font: 400 clamp(22px, 3vw, 40px)/1 var(--display); text-transform: uppercase; padding: 10px 16px; border: 3px solid var(--ink);
   border-radius: 14px; box-shadow: 5px 5px 0 var(--ink); background: var(--bone); animation: bob 5s ease-in-out infinite; animation-delay: var(--d, 0s);
@@ -328,9 +333,10 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 14px 26px; justify-content: 
 footer a { text-underline-offset: 3px; }
 
 /* small screens */
-@media (max-width: 880px) {
-  .stickers { position: static; width: auto; height: auto; display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; pointer-events: auto; }
+@media (max-width: 1099px) {
   .sticker { position: static; animation: none; }
+}
+@media (max-width: 880px) {
   .poke { left: calc(50% + 70px); }
   .bar-r .hide-s { display: none; }
 }
