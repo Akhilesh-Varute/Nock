@@ -221,6 +221,7 @@ pub struct App {
     pub radio: radio::Handle,
     pub radios: Radios,
     pub brightness: Option<u32>,
+    pub all_brightness: Option<u32>,
     pub displays: Vec<sys::DisplayInfo>,
     pub filter_active: bool,
     pub filter_pct: u32,
@@ -383,6 +384,7 @@ impl App {
             radio: radio::start(hwnd.0 as isize),
             radios: Radios::default(),
             brightness: None,
+            all_brightness: None,
             displays: Vec::new(),
             filter_active: false,
             filter_pct: 30,
@@ -1941,6 +1943,9 @@ impl App {
 
     pub fn on_brightness(&mut self, supported: bool, percent: u32) {
         self.brightness = supported.then_some(percent.min(100));
+        if self.all_brightness.is_none() {
+            self.all_brightness = self.brightness;
+        }
         self.displays = sys::display_monitors();
         if self.expanded && self.page == Page::Controls {
             self.render();
@@ -1950,6 +1955,7 @@ impl App {
     }
 
     pub fn set_all_bri(&mut self, pct: u32) {
+        self.all_brightness = Some(pct);
         self.brightness = Some(pct);
         for d in &mut self.displays {
             d.brightness = pct;
@@ -1968,14 +1974,16 @@ impl App {
         } else if self.displays.is_empty() {
             sys::brightness_set_all(pct);
         }
-        if idx == 0 || self.displays.is_empty() {
+        if self.displays.len() <= 1 {
             self.brightness = Some(pct);
+            self.all_brightness = Some(pct);
         }
     }
 
     pub fn adjust_brightness(&mut self, delta: i32) {
-        let cur = self.brightness.unwrap_or(50) as i32;
+        let cur = self.all_brightness.or(self.brightness).unwrap_or(50) as i32;
         let next = (cur + delta).clamp(0, 100) as u32;
+        self.all_brightness = Some(next);
         self.brightness = Some(next);
         for d in &mut self.displays {
             let d_cur = d.brightness as i32;

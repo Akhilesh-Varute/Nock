@@ -463,6 +463,7 @@ impl App {
         let devices = self.radio.devices.lock().unwrap().clone();
         let (vol, muted) = (self.volume, self.muted);
         let bri = self.brightness;
+        let all_bri = self.all_brightness.or(self.brightness).unwrap_or(50);
         let displays = self.displays.clone();
         let filter_active = self.filter_active;
         let filter_pct = self.filter_pct;
@@ -807,7 +808,6 @@ impl App {
                 ops.push(title("Display", y));
                 y += 34.0;
                 if displays.len() > 1 {
-                    let all_bri = bri.unwrap_or(50);
                     ops.push(Box::new(move |g, _h, _| {
                         g.text(
                             &format!("All Screens ({}%)", all_bri),
@@ -1229,7 +1229,7 @@ impl App {
                     }
                     if self.pop_kind() == Some(BarAct::Brightness) {
                         if is_all {
-                            if let Some(b) = self.brightness {
+                            if let Some(b) = self.all_brightness.or(self.brightness) {
                                 sys::brightness_set_all(b);
                             }
                         } else if let Some(idx) = bri_idx {
