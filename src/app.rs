@@ -1967,7 +1967,9 @@ impl App {
     /// The pointer touched the top edge while a full-screen app is running.
     pub fn on_edge(&mut self) {
         if self.fs_peekable && !self.peek {
-            self.set_timer(T_EDGE, 250); // short dwell so a stray flick does nothing
+            // short dwell so a stray flick does nothing; shorter when the notch is
+            // meant to live behind the edge
+            self.set_timer(T_EDGE, if self.cfg.auto_hide { 80 } else { 250 });
         }
     }
 
