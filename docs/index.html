@@ -48,6 +48,14 @@
   <symbol id="i-prev" viewBox="0 0 24 24"><path d="M18 5v14L8.5 12zM6 5v14" fill="currentColor"/></symbol>
   <symbol id="i-next" viewBox="0 0 24 24"><path d="M6 5v14l9.5-7zM18 5v14" fill="currentColor"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></symbol>
+  <symbol id="i-text" viewBox="0 0 24 24"><path d="M5 6h14M12 6v13M9 19h6"/></symbol>
 </svg>
 
 <noscript><p style="padding:90px 20px 20px;font:17px system-ui">The notch demo needs JavaScript. You can still <a href="https://github.com/Akhilesh-Varute/Nock/releases/latest">download Nock</a>.</p></noscript>
@@ -75,30 +83,34 @@
   <div class="panel" id="panel" inert>
     <div class="pinner">
       <div class="tabs" role="tablist" aria-label="Nock tabs">
-        <button class="tab" role="tab" id="t-media" data-tab="media" aria-selected="true"><svg class="icon"><use href="#i-music"/></svg><span>Media</span></button>
-        <button class="tab" role="tab" id="t-controls" data-tab="controls" aria-selected="false"><svg class="icon"><use href="#i-sliders"/></svg><span>Controls</span></button>
-        <button class="tab" role="tab" id="t-today" data-tab="today" aria-selected="false"><svg class="icon"><use href="#i-check"/></svg><span>Today</span></button>
-        <button class="tab" role="tab" id="t-stats" data-tab="stats" aria-selected="false"><svg class="icon"><use href="#i-bars"/></svg><span>Stats</span></button>
-        <button class="tab" role="tab" id="t-clip" data-tab="clip" aria-selected="false"><svg class="icon"><use href="#i-clip"/></svg><span>Clipboard</span></button>
-        <button class="tab" role="tab" id="t-apps" data-tab="apps" aria-selected="false"><svg class="icon"><use href="#i-grid"/></svg><span>Apps</span></button>
-        <button class="tab" role="tab" id="t-games" data-tab="games" aria-selected="false"><svg class="icon"><use href="#i-pad"/></svg><span>Games</span></button>
-        <button class="tab" role="tab" id="t-power" data-tab="power" aria-selected="false"><svg class="icon"><use href="#i-power"/></svg><span>Power</span></button>
+        <button class="tb-i" id="pinBtn" type="button" aria-label="Keep the notch open" aria-pressed="false"><svg class="icon"><use href="#i-pin"/></svg></button>
+        <button class="tab" role="tab" id="t-media" data-tab="media" aria-selected="true">Media</button>
+        <button class="tab" role="tab" id="t-controls" data-tab="controls" aria-selected="false">Controls</button>
+        <button class="tab" role="tab" id="t-today" data-tab="today" aria-selected="false">Today</button>
+        <button class="tab" role="tab" id="t-stats" data-tab="stats" aria-selected="false">Stats</button>
+        <button class="tab" role="tab" id="t-clip" data-tab="clip" aria-selected="false">Clipboard</button>
+        <button class="tab" role="tab" id="t-apps" data-tab="apps" aria-selected="false">Apps</button>
+        <button class="tab" role="tab" id="t-games" data-tab="games" aria-selected="false">Games</button>
+        <button class="tab" role="tab" id="t-power" data-tab="power" aria-selected="false">Power</button>
+        <span class="sp"></span>
+        <button class="tb-i" id="closeBtn" type="button" aria-label="Collapse the notch"><svg class="icon"><use href="#i-chev"/></svg></button>
       </div>
       <div class="pages">
 
         <div class="page" data-page="media" role="tabpanel" aria-labelledby="t-media">
           <div class="m-wrap">
-            <div class="art" aria-hidden="true"></div>
+            <div class="art" aria-hidden="true"><svg class="icon"><use href="#i-music"/></svg></div>
             <div class="m-info">
               <div class="m-title" id="mTitle">Late Night Compile</div>
               <div class="m-sub" id="mSub">The Demo Band</div>
+              <div class="m-src">Demo player</div>
+              <div class="seek" id="seek" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><b id="seekFill"></b></div>
+              <div class="m-time"><span id="mCur">0:00</span><span id="mDur">3:12</span></div>
               <div class="m-ctrl">
                 <button class="btn-i" id="mPrev" aria-label="Previous track"><svg class="icon"><use href="#i-prev"/></svg></button>
                 <button class="btn-i big" id="mPlay" aria-label="Play"><svg class="icon"><use href="#i-play"/></svg></button>
                 <button class="btn-i" id="mNext" aria-label="Next track"><svg class="icon"><use href="#i-next"/></svg></button>
               </div>
-              <div class="seek" id="seek" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><b id="seekFill"></b></div>
-              <div class="m-time"><span id="mCur">0:00</span><span id="mDur">3:12</span></div>
             </div>
           </div>
         </div>
@@ -116,42 +128,56 @@
 
         <div class="page" data-page="today" role="tabpanel" aria-labelledby="t-today" hidden>
           <div class="t-wrap">
-            <div class="t-date"><b id="tDay">Mon 1</b><span id="tMonth">January</span><em>Standup 10:30</em></div>
-            <div>
-              <div class="t-list" id="tList"></div>
-              <form class="add" id="addForm" autocomplete="off">
-                <input id="addInput" type="text" maxlength="48" placeholder="Add a task, press Enter" aria-label="New task">
-                <button class="btn-i" type="submit" aria-label="Add task"><svg class="icon"><use href="#i-plus"/></svg></button>
-              </form>
+            <div class="t-card t-focus">
+              <h4>Focus timer</h4>
+              <div class="f-time" id="fTime">25:00</div>
+              <div class="f-pre" id="fPre" role="group" aria-label="Focus length">
+                <button data-m="5" aria-pressed="false">5m</button><button data-m="15" aria-pressed="false">15m</button><button data-m="25" aria-pressed="true">25m</button><button data-m="50" aria-pressed="false">50m</button>
+              </div>
+              <div class="f-act"><button class="f-start" id="fStart">Start</button><button class="btn-i" id="fReset" aria-label="Reset the timer"><svg class="icon"><use href="#i-redo"/></svg></button></div>
+              <div class="f-foot" id="fFoot">Today: 0 min focus · 0 done</div>
             </div>
+            <div class="t-card t-todo">
+              <h4>To-do</h4>
+              <div class="td-list" id="tList"></div>
+              <button class="td-add" id="addBtn" type="button"><svg class="icon"><use href="#i-plus"/></svg>Add task</button>
+              <form class="td-in" id="addForm" autocomplete="off"><input id="addInput" type="text" maxlength="40" placeholder="Ship the demo" aria-label="New task"><small>Enter to add · Esc to cancel</small></form>
+            </div>
+            <div class="t-card t-cal"><h4 id="calHead">October</h4><div class="cal" id="cal"></div></div>
           </div>
         </div>
 
         <div class="page" data-page="stats" role="tabpanel" aria-labelledby="t-stats" hidden>
           <div class="s-wrap">
-            <div class="ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="tr" cx="60" cy="60" r="50"/><circle class="fg" id="ringCpu" cx="60" cy="60" r="50" stroke-dasharray="314" stroke-dashoffset="290"/></svg><div><b id="cpuV">4%</b><span>CPU</span></div></div>
-            <div class="ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="tr" cx="60" cy="60" r="50"/><circle class="fg" id="ringMem" cx="60" cy="60" r="50" stroke-dasharray="314" stroke-dashoffset="190" style="stroke:var(--amber)"/></svg><div><b id="memV">39%</b><span>Memory</span></div></div>
-            <div class="s-side">
-              <div class="s-card"><small>Battery</small><b>82%, charging</b><div class="bat"><i></i></div></div>
-              <div class="s-card"><small>Uptime</small><b id="upV">2h 14m</b></div>
-            </div>
+            <div class="s-card"><small class="c-cpu"><svg class="icon"><use href="#i-bars"/></svg>CPU</small><b id="cpuV">23%</b><div class="spark" id="spark" aria-hidden="true"></div><div class="s-bar"><i id="cpuB" style="background:#669eff;width:23%"></i></div></div>
+            <div class="s-card"><small class="c-mem"><svg class="icon"><use href="#i-bars"/></svg>Memory</small><b id="memV">61%</b><div class="s-bar"><i id="memB" style="background:#f5a34b;width:61%"></i></div></div>
+            <div class="s-card"><small class="c-bat"><svg class="icon"><use href="#i-bat"/></svg>Battery</small><em>Plugged in</em><b>80%</b><div class="s-bar"><i style="background:#4cd68b;width:80%"></i></div></div>
+            <div class="s-card"><small class="c-up"><svg class="icon"><use href="#i-clock"/></svg>Uptime</small><b id="upV">3h 15m</b></div>
           </div>
           <span class="demo-note">demo values</span>
         </div>
 
         <div class="page" data-page="clip" role="tabpanel" aria-labelledby="t-clip" hidden>
           <div class="c-wrap">
-            <div class="c-search"><svg class="icon"><use href="#i-search"/></svg><input id="cSearch" type="search" placeholder="Search your clipboard" aria-label="Search clipboard"></div>
+            <div class="c-head"><span id="cCount">Clipboard · 5</span><span class="sp"></span><svg class="icon"><use href="#i-search"/></svg><input id="cSearch" type="search" placeholder="Search" aria-label="Search clipboard"><button class="c-clear" id="cClear" type="button">Clear</button></div>
             <div class="c-list" id="cList"></div>
           </div>
         </div>
 
         <div class="page" data-page="apps" role="tabpanel" aria-labelledby="t-apps" hidden>
           <div class="apps">
-            <button class="app" data-toast="Pinned apps launch from here on your real PC"><svg class="icon"><use href="#i-term"/></svg>Terminal</button>
-            <button class="app" data-toast="Pin anything: apps, folders, links"><svg class="icon"><use href="#i-note"/></svg>Notes</button>
-            <button class="app" data-toast="Your own shortcuts, one click away"><svg class="icon"><use href="#i-globe"/></svg>Browser</button>
-            <a class="app get" href="https://github.com/Akhilesh-Varute/Nock/releases/latest" data-dl="setup"><svg class="icon"><use href="#i-dl"/></svg>Get Nock</a>
+            <button class="app" data-toast="Pin apps and they launch from here" style="--c:#f2c14e"><i><svg class="icon"><use href="#i-folder"/></svg></i>File Explorer</button>
+            <button class="app" data-toast="Your own shortcuts, one click away" style="--c:#7fd1ff"><i><svg class="icon"><use href="#i-globe"/></svg></i>Browser</button>
+            <button class="app" data-toast="Pin anything: apps, folders, links" style="--c:#9be37a"><i><svg class="icon"><use href="#i-term"/></svg></i>Terminal</button>
+            <button class="app" data-toast="Pinned apps launch from here on your real PC" style="--c:#c9c9d6"><i><svg class="icon"><use href="#i-gear"/></svg></i>Settings</button>
+            <button class="app" data-toast="Pick from everything installed" style="--c:#ffe27a"><i><svg class="icon"><use href="#i-note"/></svg></i>Notepad</button>
+            <button class="app" data-toast="No config files to edit" style="--c:#b7a4ff"><i><svg class="icon"><use href="#i-grid"/></svg></i>Calculator</button>
+            <button class="app" data-toast="Pinned apps launch from here" style="--c:#ff8fa3"><i><svg class="icon"><use href="#i-music"/></svg></i>Music</button>
+            <button class="app" data-toast="Pinned apps launch from here" style="--c:#7fe0c3"><i><svg class="icon"><use href="#i-mail"/></svg></i>Mail</button>
+            <button class="app" data-toast="Pinned apps launch from here" style="--c:#ffb36b"><i><svg class="icon"><use href="#i-cam"/></svg></i>Photos</button>
+            <button class="app" data-toast="Pinned apps launch from here" style="--c:#8bb8ff"><i><svg class="icon"><use href="#i-pin"/></svg></i>Maps</button>
+            <button class="app" data-toast="Pinned apps launch from here" style="--c:#d6d6e0"><i><svg class="icon"><use href="#i-clock"/></svg></i>Clock</button>
+            <a class="app get" href="https://github.com/Akhilesh-Varute/Nock/releases/latest" data-dl="setup" style="--c:#ff4d14"><i><svg class="icon"><use href="#i-dl"/></svg></i>Get Nock</a>
           </div>
         </div>
 
@@ -167,10 +193,10 @@
 
         <div class="page" data-page="power" role="tabpanel" aria-labelledby="t-power" hidden>
           <div class="p-grid">
-            <button class="row" data-toast="Lock: not in the demo. Your real PC is safe."><svg class="icon"><use href="#i-lock"/></svg><b>Lock</b></button>
-            <button class="row" data-toast="Sleep: not in the demo. Your real PC is safe."><svg class="icon"><use href="#i-moon"/></svg><b>Sleep</b></button>
-            <button class="row" data-toast="Restart: not in the demo. Your real PC is safe."><svg class="icon"><use href="#i-redo"/></svg><b>Restart</b></button>
-            <button class="row" data-toast="Shut down: not in the demo. Your real PC is safe."><svg class="icon"><use href="#i-power"/></svg><b>Shut down</b></button>
+            <button class="pw" data-toast="Lock: not in the demo. Your real PC is safe." style="--bg:#1c3358;--fg:#6fa8ff"><i><svg class="icon"><use href="#i-lock"/></svg></i>Lock</button>
+            <button class="pw" data-toast="Sleep: not in the demo. Your real PC is safe." style="--bg:#2c2250;--fg:#b794f4"><i><svg class="icon"><use href="#i-moon"/></svg></i>Sleep</button>
+            <button class="pw" data-toast="Restart asks to confirm, and it's not in the demo." style="--bg:#3d2c14;--fg:#f5a34b"><i><svg class="icon"><use href="#i-redo"/></svg></i>Restart<small>Asks to confirm</small></button>
+            <button class="pw" data-toast="Shut down asks to confirm, and it's not in the demo." style="--bg:#40181e;--fg:#ff6b81"><i><svg class="icon"><use href="#i-power"/></svg></i>Shut down<small>Asks to confirm</small></button>
           </div>
         </div>
 
