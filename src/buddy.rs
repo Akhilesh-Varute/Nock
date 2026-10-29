@@ -38,6 +38,7 @@ pub enum BuddyKind {
     Courier,
     Necro,
     Clippy,
+    Merlin,
 }
 
 impl BuddyKind {
@@ -64,6 +65,14 @@ impl BuddyKind {
                 "Would you like help with that?",
                 "Remember to save your work!",
             ],
+            BuddyKind::Merlin => &[
+                "By the ancient stars!",
+                "A wizard's code is never late.",
+                "Ponder the orb of knowledge.",
+                "Behold, an enchantment!",
+                "Focus turns spells into reality.",
+                "Hocus Pocus!",
+            ],
             _ => return None,
         };
         Some(list[(r as usize) % list.len()])
@@ -81,6 +90,7 @@ impl BuddyKind {
             7 => Some(BuddyKind::Courier),
             8 => Some(BuddyKind::Necro),
             9 => Some(BuddyKind::Clippy),
+            10 => Some(BuddyKind::Merlin),
             _ => None,
         }
     }
@@ -706,6 +716,134 @@ fn palette(kind: BuddyKind) -> (Color, Color) {
         BuddyKind::Robot => (Color(0.74, 0.8, 0.9, 1.0), Color(0.5, 0.57, 0.7, 1.0)),
         BuddyKind::Ronin | BuddyKind::Courier | BuddyKind::Necro => (Color(0.5, 0.5, 0.5, 1.0), Color(0.3, 0.3, 0.3, 1.0)),
         BuddyKind::Clippy => (Color(0.82, 0.85, 0.90, 1.0), Color(0.48, 0.52, 0.58, 1.0)),
+        BuddyKind::Merlin => (Color(0.24, 0.35, 0.72, 1.0), Color(0.96, 0.80, 0.25, 1.0)),
+    }
+}
+
+fn draw_merlin(g: &Gfx, cx: f32, bob: f32, p: &Pose, mode: Mode, tick: u32, body: Color, dark: Color, ink: Color) {
+    let t = tick as f32;
+    let wand_dir = p.dir;
+
+    // Ground shadow
+    g.fill_rrect(
+        Rect::new(cx - 7.5, 27.0, 15.0, 2.4),
+        1.2,
+        Color(0.0, 0.0, 0.0, (0.24 - bob.max(0.0) * 0.03).max(0.08)),
+    );
+
+    // Wizard Robe (flowing blue gown)
+    g.fill_poly(
+        &[
+            (cx - 5.5, 16.5 - bob),
+            (cx + 5.5, 16.5 - bob),
+            (cx + 7.5, 26.5 - bob),
+            (cx - 7.5, 26.5 - bob),
+        ],
+        body,
+    );
+    // Gold trim at hem
+    g.fill_rrect(Rect::new(cx - 7.5, 25.5 - bob, 15.0, 1.4), 0.7, dark);
+
+    // Wand in hand
+    let arm_raise = p.arms * 4.0;
+    let hand = (cx + wand_dir * 5.8, 18.0 - bob - arm_raise);
+    let wand_tip = (cx + wand_dir * (11.0 + arm_raise * 0.5), 11.0 - bob - arm_raise * 1.5);
+    g.line(hand, wand_tip, 1.6, Color(0.55, 0.35, 0.18, 1.0));
+
+    // Wand glowing star tip
+    let star_pulse = 1.0 + 0.3 * (t * 0.25).sin();
+    g.fill_circle(wand_tip.0, wand_tip.1, 1.8 * star_pulse, dark);
+    if mode != Mode::Sleep {
+        g.line(
+            (wand_tip.0 - 3.0 * star_pulse, wand_tip.1),
+            (wand_tip.0 + 3.0 * star_pulse, wand_tip.1),
+            0.8,
+            Color::white(0.9),
+        );
+        g.line(
+            (wand_tip.0, wand_tip.1 - 3.0 * star_pulse),
+            (wand_tip.0, wand_tip.1 + 3.0 * star_pulse),
+            0.8,
+            Color::white(0.9),
+        );
+    }
+
+    // Head (face)
+    let skin = Color(1.0, 0.86, 0.74, 1.0);
+    g.fill_circle(cx, 13.0 - bob, 4.8, skin);
+
+    // Eyes
+    let lx = p.look.0 * 1.0;
+    let ly = p.look.1 * 0.8;
+    for sx in [-2.0f32, 2.0f32] {
+        let ex = cx + sx;
+        let ey = 12.0 - bob;
+        match p.eyes {
+            Eyes::Closed => {
+                g.line((ex - 1.2, ey), (ex + 1.2, ey), 1.0, ink);
+            }
+            Eyes::Happy => {
+                g.line((ex - 1.2, ey + 0.6), (ex, ey - 0.7), 1.0, ink);
+                g.line((ex, ey - 0.7), (ex + 1.2, ey + 0.6), 1.0, ink);
+            }
+            Eyes::Open => {
+                g.fill_circle(ex + lx, ey + ly, 1.1, ink);
+            }
+        }
+    }
+
+    // Fluffy White Beard & Moustache
+    let beard_col = Color::white(0.96);
+    g.fill_circle(cx - 2.6, 16.0 - bob, 2.4, beard_col);
+    g.fill_circle(cx + 2.6, 16.0 - bob, 2.4, beard_col);
+    g.fill_circle(cx, 17.5 - bob, 3.0, beard_col);
+    g.fill_poly(
+        &[
+            (cx - 4.5, 14.5 - bob),
+            (cx + 4.5, 14.5 - bob),
+            (cx, 21.0 - bob),
+        ],
+        beard_col,
+    );
+
+    // Wizard Conical Hat
+    let hat_tip_x = cx + 1.0 + p.wag * 0.8;
+    let hat_tip_y = 1.0 - bob;
+    // Brim
+    g.fill_rrect(Rect::new(cx - 8.2, 10.0 - bob, 16.4, 2.4), 1.2, body);
+    // Gold band
+    g.fill_rrect(Rect::new(cx - 6.2, 9.0 - bob, 12.4, 1.4), 0.7, dark);
+    // Cone
+    g.fill_poly(
+        &[
+            (cx - 5.8, 10.0 - bob),
+            (cx + 5.5, 10.0 - bob),
+            (hat_tip_x, hat_tip_y),
+        ],
+        body,
+    );
+    // Star ornament on hat
+    g.fill_circle(cx + 0.2, 6.0 - bob, 1.3, dark);
+
+    // Mode-specific extras
+    match mode {
+        Mode::Sleep => {
+            let c = Color(0.6, 0.65, 0.8, 0.9);
+            g.text("z", Rect::new(cx + 7.0, 6.0, 9.0, 9.0), &g.fonts.tiny, c, Align::Left);
+            g.text("Z", Rect::new(cx + 11.0, 0.5, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+        }
+        Mode::Dance => {
+            let c = Color(0.95, 0.55, 0.95, 0.95);
+            let side = if (tick / 5) % 2 == 0 { 12.0 } else { -20.0 };
+            g.text("\u{266A}", Rect::new(cx + side, 3.0, 12.0, 12.0), &g.fonts.small, c, Align::Left);
+        }
+        Mode::Cheer => {
+            let c = Color(1.0, 0.82, 0.2, 0.95);
+            let a = if (tick / 4) % 2 == 0 { 0.0 } else { 3.0 };
+            g.text("\u{2728}", Rect::new(cx - 20.0, 2.0 + a, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+            g.text("\u{2728}", Rect::new(cx + 12.0, 5.0 - a, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+        }
+        _ => {}
     }
 }
 
@@ -808,6 +946,10 @@ fn draw_sprite(g: &Gfx, kind: BuddyKind, p: &Pose, mode: Mode, tick: u32) {
 
     if kind == BuddyKind::Clippy {
         draw_clippy(g, cx, bob, p, mode, tick, body, dark, ink);
+        return;
+    }
+    if kind == BuddyKind::Merlin {
+        draw_merlin(g, cx, bob, p, mode, tick, body, dark, ink);
         return;
     }
     let d = p.dir;
@@ -1069,5 +1211,13 @@ mod clippy_tests {
         let q = BuddyKind::Clippy.quote(0).expect("clippy quote");
         assert!(q.contains("code"));
         assert!(BuddyKind::Clippy.quote(1).is_some());
+    }
+
+    #[test]
+    fn merlin_id_and_quotes() {
+        assert_eq!(BuddyKind::from_id(10), Some(BuddyKind::Merlin));
+        let q = BuddyKind::Merlin.quote(0).expect("merlin quote");
+        assert!(q.contains("stars"));
+        assert!(BuddyKind::Merlin.quote(1).is_some());
     }
 }
