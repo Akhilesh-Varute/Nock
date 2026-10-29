@@ -13,7 +13,7 @@ use crate::gfx::*;
 use crate::sys;
 
 const POP_W: f32 = 300.0;
-const POP_MAX_H: f32 = 340.0;
+const POP_MAX_H: f32 = 460.0;
 const GAP: f32 = 4.0;
 const WM_MOUSELEAVE: u32 = 0x02A3;
 pub const T_POPLEAVE: usize = 7;
@@ -57,6 +57,7 @@ enum PopAct {
     Toggle(u8), // 0 = Wi-Fi, 1 = Bluetooth, 2 = Night Filter
     Mute,
     Vol(Rect),
+    BriAll(Rect),
     Bri(usize, Rect),
     FilterBri(Rect),
     Wifi(usize),
@@ -81,6 +82,7 @@ pub struct Pop {
     tracking: bool,
     drag: Option<Rect>,
     drag_bri_idx: Option<usize>,
+    drag_all: bool,
     filter_drag: bool,
     h: f32,
 }
@@ -111,6 +113,7 @@ impl Pop {
             tracking: false,
             drag: None,
             drag_bri_idx: None,
+            drag_all: false,
             filter_drag: false,
             h: 100.0,
         })
@@ -804,6 +807,32 @@ impl App {
                 ops.push(title("Display", y));
                 y += 34.0;
                 if displays.len() > 1 {
+                    let all_bri = bri.unwrap_or(50);
+                    ops.push(Box::new(move |g, _h, _| {
+                        g.text(
+                            &format!("All Screens ({}%)", all_bri),
+                            Rect::new(20.0, y, w - 40.0, 18.0),
+                            &g.fonts.small,
+                            th.t1,
+                            Align::Left,
+                        );
+                    }));
+                    y += 20.0;
+                    let sr = Rect::new(20.0, y, w - 40.0, 24.0);
+                    let frac = all_bri as f32 / 100.0;
+                    ops.push(Box::new(move |g, h, hot| {
+                        let track = Rect::new(sr.x, sr.cy() - 3.0, sr.w, 6.0);
+                        g.fill_rrect(track, 3.0, th.hover);
+                        let fw = (sr.w * frac.clamp(0.0, 1.0)).max(0.0);
+                        if fw > 0.5 {
+                            g.fill_rrect(Rect::new(sr.x, track.y, fw, 6.0), 3.0, accent);
+                        }
+                        let idx = h.len();
+                        g.fill_circle(sr.x + fw, sr.cy(), if hot == Some(idx) { 8.0 } else { 7.0 }, Color::white(1.0));
+                        h.push((Rect::new(sr.x - 8.0, sr.y, sr.w + 16.0, sr.h), PopAct::BriAll(sr)));
+                    }));
+                    y += 32.0;
+
                     for (i, d) in displays.iter().enumerate() {
                         let disp_name = d.name.clone();
                         let b_val = d.brightness;
@@ -832,7 +861,7 @@ impl App {
                         }));
                         y += 32.0;
                     }
-                    y += 6.0;
+                    y += 4.0;
                 } else {
                     let sr = Rect::new(20.0, y, w - 40.0, 24.0);
                     let frac = bri.map(|b| b as f32 / 100.0).unwrap_or(0.5);
@@ -1079,6 +1108,7 @@ impl App {
                 if let Some(r) = vol_drag {
                     if self.pop_kind() == Some(BarAct::Brightness) {
                         let is_filter = self.pop.as_ref().map(|p| p.filter_drag).unwrap_or(false);
+                        let is_all = self.pop.as_ref().map(|p| p.drag_all).unwrap_or(false);
                         if is_filter {
                             let v = ((x - r.x) / r.w).clamp(0.0, 1.0);
                             let pct = (v * 70.0).round() as u32;
@@ -1086,6 +1116,10 @@ impl App {
                             if self.filter_active {
                                 crate::filter::set_filter(true, pct);
                             }
+                        } else if is_all {
+                            let v = ((x - r.x) / r.w).clamp(0.0, 1.0);
+                            let pct = (v * 100.0).round() as u32;
+                            self.set_all_bri(pct);
                         } else {
                             let v = ((x - r.x) / r.w).clamp(0.0, 1.0);
                             let pct = (v * 100.0).round() as u32;
@@ -1123,6 +1157,7 @@ impl App {
                     if let Some(p) = self.pop.as_mut() {
                         p.drag = Some(r);
                         p.drag_bri_idx = None;
+                        p.drag_all = false;
                         p.filter_drag = false;
                     }
                     unsafe {
@@ -1130,10 +1165,25 @@ impl App {
                     }
                     self.set_vol_from(r, x);
                     self.render_pop();
+                } else if let Some(PopAct::BriAll(r)) = act {
+                    if let Some(p) = self.pop.as_mut() {
+                        p.drag = Some(r);
+                        p.drag_bri_idx = None;
+                        p.drag_all = true;
+                        p.filter_drag = false;
+                    }
+                    unsafe {
+                        SetCapture(hwnd);
+                    }
+                    let v = ((x - r.x) / r.w).clamp(0.0, 1.0);
+                    let pct = (v * 100.0).round() as u32;
+                    self.set_all_bri(pct);
+                    self.render_pop();
                 } else if let Some(PopAct::Bri(idx, r)) = act {
                     if let Some(p) = self.pop.as_mut() {
                         p.drag = Some(r);
                         p.drag_bri_idx = Some(idx);
+                        p.drag_all = false;
                         p.filter_drag = false;
                     }
                     unsafe {
@@ -1147,6 +1197,7 @@ impl App {
                     if let Some(p) = self.pop.as_mut() {
                         p.drag = Some(r);
                         p.drag_bri_idx = None;
+                        p.drag_all = false;
                         p.filter_drag = true;
                     }
                     unsafe {
@@ -1166,21 +1217,29 @@ impl App {
                 let dragging = self.pop.as_ref().map(|p| p.drag.is_some()).unwrap_or(false);
                 if dragging {
                     let bri_idx = self.pop.as_ref().and_then(|p| p.drag_bri_idx);
+                    let is_all = self.pop.as_ref().map(|p| p.drag_all).unwrap_or(false);
                     if let Some(p) = self.pop.as_mut() {
                         p.drag = None;
                         p.drag_bri_idx = None;
+                        p.drag_all = false;
                         p.filter_drag = false;
                     }
                     unsafe {
                         let _ = ReleaseCapture();
                     }
                     if self.pop_kind() == Some(BarAct::Brightness) {
-                        if let Some(idx) = bri_idx {
-                            if let Some(d) = self.displays.get(idx) {
-                                sys::brightness_set_display(idx, d.brightness);
+                        if is_all {
+                            if let Some(b) = self.brightness {
+                                sys::brightness_set_all(b);
                             }
-                        } else if let Some(b) = self.brightness {
-                            sys::brightness_set(b);
+                        } else if let Some(idx) = bri_idx {
+                            if let Some(d) = self.displays.get(idx) {
+                                if d.is_internal {
+                                    sys::brightness_set_internal(d.brightness);
+                                } else if let Some(ext_idx) = d.external_idx {
+                                    sys::brightness_set_external(ext_idx, d.brightness);
+                                }
+                            }
                         }
                     }
                     self.render_bar();

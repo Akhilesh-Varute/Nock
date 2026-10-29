@@ -11,6 +11,8 @@ use windows::Win32::Media::Audio::Endpoints::{IAudioEndpointVolume, IAudioMeterI
 use windows::Win32::Media::Audio::*;
 use windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES;
 use windows::Win32::System::Com::*;
+use windows::Win32::System::Wmi::*;
+use windows::Win32::System::Variant::*;
 use windows::Win32::System::DataExchange::*;
 use windows::Win32::System::Memory::*;
 use windows::Win32::System::Registry::*;
@@ -358,13 +360,173 @@ pub fn display_monitors() -> Vec<DisplayInfo> {
     DISPLAY_MONITORS.lock().unwrap().clone()
 }
 
+fn wmi_brightness_get() -> Option<u32> {
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        let locator: IWbemLocator = CoCreateInstance(&WbemLocator, None, CLSCTX_INPROC_SERVER).ok()?;
+        let services = locator
+            .ConnectServer(
+                &windows::core::BSTR::from("ROOT\\WMI"),
+                &windows::core::BSTR::new(),
+                &windows::core::BSTR::new(),
+                &windows::core::BSTR::new(),
+                0,
+                &windows::core::BSTR::new(),
+                None,
+            )
+            .ok()?;
+        let _ = CoSetProxyBlanket(
+            &services,
+            10,
+            0,
+            None,
+            RPC_C_AUTHN_LEVEL_CALL,
+            RPC_C_IMP_LEVEL_IMPERSONATE,
+            None,
+            EOAC_NONE,
+        );
+        let query = services
+            .ExecQuery(
+                &windows::core::BSTR::from("WQL"),
+                &windows::core::BSTR::from("SELECT CurrentBrightness FROM WmiMonitorBrightness"),
+                WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+                None,
+            )
+            .ok()?;
+        let mut objects = [None; 1];
+        let mut returned = 0u32;
+        if query.Next(WBEM_INFINITE, &mut objects, &mut returned).is_ok() && returned > 0 {
+            if let Some(obj) = &objects[0] {
+                let mut var = VARIANT::default();
+                if obj.Get(windows::core::w!("CurrentBrightness"), 0, &mut var, None, None).is_ok() {
+                    let b = (*var.Anonymous.Anonymous).Anonymous.bVal;
+                    return Some(b as u32);
+                }
+            }
+        }
+        None
+    }
+}
+
+fn wmi_brightness_set(percent: u32) -> bool {
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        let locator: IWbemLocator = match CoCreateInstance(&WbemLocator, None, CLSCTX_INPROC_SERVER) {
+            Ok(l) => l,
+            Err(_) => return false,
+        };
+        let services = match locator.ConnectServer(
+            &windows::core::BSTR::from("ROOT\\WMI"),
+            &windows::core::BSTR::new(),
+            &windows::core::BSTR::new(),
+            &windows::core::BSTR::new(),
+            0,
+            &windows::core::BSTR::new(),
+            None,
+        ) {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
+        let _ = CoSetProxyBlanket(
+            &services,
+            10,
+            0,
+            None,
+            RPC_C_AUTHN_LEVEL_CALL,
+            RPC_C_IMP_LEVEL_IMPERSONATE,
+            None,
+            EOAC_NONE,
+        );
+        let mut class_obj: Option<IWbemClassObject> = None;
+        if services
+            .GetObject(
+                &windows::core::BSTR::from("WmiMonitorBrightnessMethods"),
+                WBEM_GENERIC_FLAG_TYPE(0),
+                None,
+                Some(&mut class_obj),
+                None,
+            )
+            .is_err()
+        {
+            return false;
+        }
+        let Some(class_obj) = class_obj else { return false };
+        let mut in_params_def: Option<IWbemClassObject> = None;
+        if class_obj
+            .GetMethod(
+                windows::core::w!("WmiSetBrightness"),
+                0,
+                &mut in_params_def,
+                std::ptr::null_mut(),
+            )
+            .is_err()
+        {
+            return false;
+        }
+        let Some(in_params_def) = in_params_def else { return false };
+        let Ok(in_params) = in_params_def.SpawnInstance(0) else { return false };
+
+        let mut v_timeout = VARIANT::default();
+        let anon_t = &mut *v_timeout.Anonymous.Anonymous;
+        anon_t.vt = VARENUM(3); // VT_I4
+        anon_t.Anonymous.lVal = 1;
+        if in_params.Put(windows::core::w!("Timeout"), 0, &v_timeout, 0).is_err() {
+            return false;
+        }
+
+        let mut v_bri = VARIANT::default();
+        let anon_b = &mut *v_bri.Anonymous.Anonymous;
+        anon_b.vt = VARENUM(17); // VT_UI1
+        anon_b.Anonymous.bVal = percent.min(100) as u8;
+        if in_params.Put(windows::core::w!("Brightness"), 0, &v_bri, 0).is_err() {
+            return false;
+        }
+
+        let Ok(query) = services.ExecQuery(
+            &windows::core::BSTR::from("WQL"),
+            &windows::core::BSTR::from("SELECT * FROM WmiMonitorBrightnessMethods"),
+            WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+            None,
+        ) else {
+            return false;
+        };
+
+        let mut objects = [None; 1];
+        let mut returned = 0u32;
+        let mut ok = false;
+        while query.Next(WBEM_INFINITE, &mut objects, &mut returned).is_ok() && returned > 0 {
+            if let Some(obj) = &objects[0] {
+                let mut v_path = VARIANT::default();
+                if obj.Get(windows::core::w!("__PATH"), 0, &mut v_path, None, None).is_ok() {
+                    let anon = &*v_path.Anonymous.Anonymous;
+                    let bstr_ref = &*anon.Anonymous.bstrVal;
+                    if services
+                        .ExecMethod(
+                            bstr_ref,
+                            &windows::core::BSTR::from("WmiSetBrightness"),
+                            WBEM_GENERIC_FLAG_TYPE(0),
+                            None,
+                            &in_params,
+                            None,
+                            None,
+                        )
+                        .is_ok()
+                    {
+                        ok = true;
+                    }
+                }
+            }
+        }
+        ok
+    }
+}
+
+fn internal_brightness_set(percent: u32) -> bool {
+    native_brightness_set(percent) || wmi_brightness_set(percent)
+}
+
 fn internal_brightness_get() -> Option<u32> {
-    native_brightness_get().or_else(|| {
-        powershell(
-            "$b = (Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightness -ErrorAction SilentlyContinue | Select-Object -First 1).CurrentBrightness; if ($null -eq $b) { $b = (Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightness -ErrorAction SilentlyContinue | Select-Object -First 1).CurrentBrightness }; Write-Output $b",
-        )
-        .and_then(|s| s.trim().parse::<u32>().ok())
-    })
+    native_brightness_get().or_else(wmi_brightness_get)
 }
 
 pub fn brightness_load(hwnd: isize) {
@@ -402,60 +564,89 @@ pub fn brightness_load(hwnd: isize) {
     });
 }
 
-static BRI_PENDING: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
-static BRI_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static BRI_ALL_PENDING: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
+static BRI_INT_PENDING: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
+static BRI_EXT_PENDING: [std::sync::atomic::AtomicI32; 8] = [
+    std::sync::atomic::AtomicI32::new(-1),
+    std::sync::atomic::AtomicI32::new(-1),
+    std::sync::atomic::AtomicI32::new(-1),
+    std::sync::atomic::AtomicI32::new(-1),
+    std::sync::atomic::AtomicI32::new(-1),
+    std::sync::atomic::AtomicI32::new(-1),
+    std::sync::atomic::AtomicI32::new(-1),
+    std::sync::atomic::AtomicI32::new(-1),
+];
+static BRI_WORKER_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Set the brightness on a specific display index, or all displays if out of bounds.
-pub fn brightness_set_display(idx: usize, percent: u32) {
-    let monitors = DISPLAY_MONITORS.lock().unwrap().clone();
-    if let Some(disp) = monitors.get(idx) {
-        if disp.is_internal {
-            brightness_set(percent);
-        } else if let Some(ext_idx) = disp.external_idx {
-            let pct = percent.min(100);
-            std::thread::spawn(move || {
-                let _ = crate::mon::set_ddc_brightness_index(ext_idx, pct);
-            });
+fn trigger_brightness_worker() {
+    use std::sync::atomic::Ordering::SeqCst;
+    if BRI_WORKER_RUNNING.swap(true, SeqCst) {
+        return;
+    }
+    std::thread::spawn(|| {
+        loop {
+            let all = BRI_ALL_PENDING.swap(-1, SeqCst);
+            if all >= 0 {
+                let pct = all as u32;
+                internal_brightness_set(pct);
+                let _ = crate::mon::set_ddc_brightness_all(pct);
+                continue;
+            }
+
+            let internal = BRI_INT_PENDING.swap(-1, SeqCst);
+            if internal >= 0 {
+                let pct = internal as u32;
+                internal_brightness_set(pct);
+            }
+
+            for (i, slot) in BRI_EXT_PENDING.iter().enumerate() {
+                let ext = slot.swap(-1, SeqCst);
+                if ext >= 0 {
+                    let _ = crate::mon::set_ddc_brightness_index(i, ext as u32);
+                }
+            }
+
+            BRI_WORKER_RUNNING.store(false, SeqCst);
+            if BRI_ALL_PENDING.load(SeqCst) >= 0
+                || BRI_INT_PENDING.load(SeqCst) >= 0
+                || BRI_EXT_PENDING.iter().any(|s| s.load(SeqCst) >= 0)
+            {
+                if !BRI_WORKER_RUNNING.swap(true, SeqCst) {
+                    continue;
+                }
+            }
+            break;
         }
-    } else {
-        brightness_set(percent);
+    });
+}
+
+/// Set brightness on internal panel only.
+pub fn brightness_set_internal(percent: u32) {
+    use std::sync::atomic::Ordering::SeqCst;
+    BRI_INT_PENDING.store(percent.min(100) as i32, SeqCst);
+    trigger_brightness_worker();
+}
+
+/// Set brightness on a specific external DDC/CI monitor by index.
+pub fn brightness_set_external(ext_idx: usize, percent: u32) {
+    use std::sync::atomic::Ordering::SeqCst;
+    if ext_idx < BRI_EXT_PENDING.len() {
+        BRI_EXT_PENDING[ext_idx].store(percent.min(100) as i32, SeqCst);
+        trigger_brightness_worker();
     }
 }
 
-/// Set the brightness. Safe to call many times while dragging: calls are coalesced
-/// so only the latest value is applied, one at a time.
-pub fn brightness_set(percent: u32) {
+/// Set brightness on all connected displays simultaneously.
+pub fn brightness_set_all(percent: u32) {
     use std::sync::atomic::Ordering::SeqCst;
-    BRI_PENDING.store(percent.min(100) as i32, SeqCst);
-    if BRI_RUNNING.swap(true, SeqCst) {
-        return;
-    }
-    std::thread::spawn(|| loop {
-        let v = BRI_PENDING.swap(-1, SeqCst);
-        if v >= 0 {
-            let pct = v as u32;
-            let mut ok = native_brightness_set(pct);
-            if !ok {
-                let _ = powershell(&format!(
-                    "Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods | Invoke-CimMethod -MethodName WmiSetBrightness -Arguments @{{Timeout=1;Brightness={}}}",
-                    pct
-                ));
-            }
-            if crate::mon::set_ddc_brightness_all(pct) {
-                ok = true;
-            }
-            if !ok {
-                log_brightness("brightness_set: neither native LCD nor DDC/CI succeeded");
-            }
-            continue;
-        }
-        BRI_RUNNING.store(false, SeqCst);
-        // a call may have slipped in between the swap and the store
-        if BRI_PENDING.load(SeqCst) >= 0 && !BRI_RUNNING.swap(true, SeqCst) {
-            continue;
-        }
-        break;
-    });
+    BRI_ALL_PENDING.store(percent.min(100) as i32, SeqCst);
+    trigger_brightness_worker();
+}
+
+/// Legacy alias for brightness_set_all.
+#[allow(dead_code)]
+pub fn brightness_set(percent: u32) {
+    brightness_set_all(percent);
 }
 
 // ------------------------------------------------------- status bar helpers

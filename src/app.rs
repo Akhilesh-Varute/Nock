@@ -1949,33 +1949,40 @@ impl App {
         self.on_pop_data();
     }
 
+    pub fn set_all_bri(&mut self, pct: u32) {
+        self.brightness = Some(pct);
+        for d in &mut self.displays {
+            d.brightness = pct;
+        }
+        sys::brightness_set_all(pct);
+    }
+
     pub fn set_display_bri(&mut self, idx: usize, pct: u32) {
         if let Some(d) = self.displays.get_mut(idx) {
             d.brightness = pct;
+            if d.is_internal {
+                sys::brightness_set_internal(pct);
+            } else if let Some(ext_idx) = d.external_idx {
+                sys::brightness_set_external(ext_idx, pct);
+            }
+        } else if self.displays.is_empty() {
+            sys::brightness_set_all(pct);
         }
         if idx == 0 || self.displays.is_empty() {
             self.brightness = Some(pct);
         }
-        sys::brightness_set_display(idx, pct);
     }
 
     pub fn adjust_brightness(&mut self, delta: i32) {
         let cur = self.brightness.unwrap_or(50) as i32;
         let next = (cur + delta).clamp(0, 100) as u32;
         self.brightness = Some(next);
-        sys::brightness_set(next);
         for d in &mut self.displays {
             let d_cur = d.brightness as i32;
             let d_next = (d_cur + delta).clamp(0, 100) as u32;
             d.brightness = d_next;
-            if !d.is_internal {
-                if let Some(ext_idx) = d.external_idx {
-                    std::thread::spawn(move || {
-                        let _ = crate::mon::set_ddc_brightness_index(ext_idx, d_next);
-                    });
-                }
-            }
         }
+        sys::brightness_set_all(next);
         self.render_bar();
         if self.expanded && self.page == Page::Controls {
             self.render();

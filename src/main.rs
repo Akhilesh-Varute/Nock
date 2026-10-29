@@ -198,28 +198,28 @@ fn main() -> Result<()> {
         let _ = RegisterHotKey(
             Some(hwnd),
             4,
-            MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
+            MOD_CONTROL | MOD_ALT,
             VK_PRIOR.0 as u32,
         );
         // Ctrl+Alt+PageDown: Brightness -5%
         let _ = RegisterHotKey(
             Some(hwnd),
             5,
-            MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
+            MOD_CONTROL | MOD_ALT,
             VK_NEXT.0 as u32,
         );
         // Ctrl+Alt+Up: Brightness +5%
         let _ = RegisterHotKey(
             Some(hwnd),
             6,
-            MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
+            MOD_CONTROL | MOD_ALT,
             VK_UP.0 as u32,
         );
         // Ctrl+Alt+Down: Brightness -5%
         let _ = RegisterHotKey(
             Some(hwnd),
             7,
-            MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
+            MOD_CONTROL | MOD_ALT,
             VK_DOWN.0 as u32,
         );
         let _ = SetWinEventHook(
