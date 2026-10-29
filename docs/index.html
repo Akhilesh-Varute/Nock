@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nock: a notch for Windows</title>
+<meta name="description" content="A tiny native notch and top bar for Windows, written in Rust. About 1 MB, about 0% CPU when idle, no Electron. Free and MIT licensed.">
+<meta property="og:title" content="Nock: a notch for Windows in 1 MB of Rust">
+<meta property="og:description" content="Media, timers, to-dos, clipboard history and system dropdowns in a native notch. No Electron, about 0% CPU idle.">
+<meta property="og:image" content="https://nock.akhilvarute.me/icon.png">
+<link rel="icon" href="icon.png">
+<style>
+:root {
+  --bg: #0d0e11;
+  --panel: #16181d;
+  --text: #eceef2;
+  --dim: #a3a9b5;
+  --line: #262a32;
+  --accent: #7cc4ff;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg: #f6f7f9; --panel: #fff; --text: #14161a; --dim: #566070; --line: #dde1e8; --accent: #0b6fc2; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+a { color: var(--accent); }
+.wrap { max-width: 860px; margin: 0 auto; padding: 0 16px; }
+header { padding: 56px 0 24px; text-align: center; }
+header img { width: 72px; height: 72px; }
+h1 { font-size: clamp(2rem, 6vw, 3rem); line-height: 1.15; margin: 16px 0 12px; }
+.lead { color: var(--dim); font-size: 1.15rem; max-width: 560px; margin: 0 auto 28px; }
+.btn { display: inline-block; background: var(--accent); color: #04121f; font-weight: 600; padding: 14px 28px; border-radius: 10px; text-decoration: none; }
+.sub { color: var(--dim); font-size: .9rem; margin-top: 12px; }
+.demo { width: 100%; border-radius: 12px; border: 1px solid var(--line); margin: 36px 0; }
+h2 { font-size: 1.5rem; margin: 48px 0 16px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.card b { display: block; margin-bottom: 4px; }
+.card span { color: var(--dim); font-size: .95rem; }
+.nums { display: flex; flex-wrap: wrap; gap: 14px; }
+.num { flex: 1 1 140px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; text-align: center; }
+.num b { display: block; font-size: 1.6rem; }
+.num span { color: var(--dim); font-size: .9rem; }
+.scenes { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.scenes img { width: 100%; border-radius: 8px; border: 1px solid var(--line); }
+.note { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; color: var(--dim); }
+footer { text-align: center; color: var(--dim); font-size: .9rem; padding: 48px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="icon.png" alt="Nock icon">
+    <h1>A notch for Windows,<br>in 1&nbsp;MB of Rust</h1>
+    <p class="lead">Media, timers, to-dos, clipboard history and Wi-Fi, Bluetooth and volume dropdowns, in a native notch and top bar. No Electron, no webview.</p>
+    <a class="btn" href="https://github.com/Akhilesh-Varute/Nock/releases/latest">Download for Windows 10/11</a>
+    <p class="sub">Free and open source (MIT). Installer or a single portable .exe.</p>
+  </header>
+
+  <img class="demo" src="demo.gif" alt="Nock demo: the notch opens, shows its tabs and the Wi-Fi and Bluetooth dropdowns">
+
+  <h2>What it does</h2>
+  <div class="grid">
+    <div class="card"><b>Quick add, from anywhere</b><span>Press Ctrl+Alt+T, type a task, press Enter. You're back in your work before you forget it.</span></div>
+    <div class="card"><b>Focus timer in the notch</b><span>One click starts a timer on a task, and the countdown stays visible.</span></div>
+    <div class="card"><b>Everything in one panel</b><span>Music controls, clipboard history with search, system stats, pinned apps and a calendar.</span></div>
+    <div class="card"><b>Top bar with dropdowns</b><span>Join Wi-Fi, connect Bluetooth devices, set volume and brightness, check the battery.</span></div>
+    <div class="card"><b>Smart hints</b><span>Low battery, mic on, a copied link or code, a break after long sessions, and meeting countdowns.</span></div>
+    <div class="card"><b>Auto-hide</b><span>Keep it out of sight until you touch the top edge, and it hides itself in full-screen games and video.</span></div>
+  </div>
+
+  <h2>Light on purpose</h2>
+  <div class="nums">
+    <div class="num"><b>~1 MB</b><span>download</span></div>
+    <div class="num"><b>~0%</b><span>CPU while idle</span></div>
+    <div class="num"><b>~32 MB</b><span>memory while idle</span></div>
+    <div class="num"><b>0</b><span>webviews</span></div>
+  </div>
+  <p class="sub">Direct2D and DirectWrite draw into a layered window, and it only redraws when something changes. Check it yourself in Task Manager.</p>
+
+  <h2>And a little life</h2>
+  <p class="sub" style="margin-top:0">A buddy lives on the bar and acts out a short scene every few minutes. Nothing runs between scenes.</p>
+  <div class="scenes">
+    <img loading="lazy" src="scenes/friday-deploy.gif" alt="Scene: a Friday deploy">
+    <img loading="lazy" src="scenes/on-mute.gif" alt="Scene: you're on mute">
+    <img loading="lazy" src="scenes/cricket-six.gif" alt="Scene: a cricket six">
+    <img loading="lazy" src="scenes/heist.gif" alt="Scene: a heist">
+  </div>
+
+  <h2>About the Windows warning</h2>
+  <p class="note">Nock isn't code-signed yet, so Windows may show "Windows protected your PC" (choose <b>More info</b>, then <b>Run anyway</b>). A PC with Smart App Control on may block it outright. The source is public and the <a href="https://github.com/Akhilesh-Varute/Nock#windows-says-smart-app-control-blocked-an-app">README explains the fix</a>.</p>
+
+  <footer>
+    <a href="https://github.com/Akhilesh-Varute/Nock">Source on GitHub</a> ·
+    <a href="https://github.com/Akhilesh-Varute/Nock/issues">Report a bug or idea</a> ·
+    MIT license
+  </footer>
+</div>
+</body>
+</html>
