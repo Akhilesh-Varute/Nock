@@ -194,6 +194,20 @@ fn main() -> Result<()> {
             MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
             'H' as u32,
         );
+        // Ctrl+Alt+PageUp: Brightness +5%
+        let _ = RegisterHotKey(
+            Some(hwnd),
+            4,
+            MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
+            VK_PRIOR.0 as u32,
+        );
+        // Ctrl+Alt+PageDown: Brightness -5%
+        let _ = RegisterHotKey(
+            Some(hwnd),
+            5,
+            MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
+            VK_NEXT.0 as u32,
+        );
         let _ = SetWinEventHook(
             EVENT_SYSTEM_FOREGROUND,
             EVENT_SYSTEM_FOREGROUND,
@@ -330,6 +344,8 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             match wp.0 {
                 2 => a.toggle_tucked(),
                 3 => a.quick_capture(),
+                4 => a.adjust_brightness(5),
+                5 => a.adjust_brightness(-5),
                 _ => a.toggle_pinned_open(),
             }
         }

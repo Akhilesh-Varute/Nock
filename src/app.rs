@@ -1959,6 +1959,22 @@ impl App {
         sys::brightness_set_display(idx, pct);
     }
 
+    pub fn adjust_brightness(&mut self, delta: i32) {
+        let cur = self.brightness.unwrap_or(50) as i32;
+        let next = (cur + delta).clamp(0, 100) as u32;
+        self.brightness = Some(next);
+        sys::brightness_set(next);
+        for d in &mut self.displays {
+            let d_cur = d.brightness as i32;
+            d.brightness = (d_cur + delta).clamp(0, 100) as u32;
+        }
+        self.render_bar();
+        if self.expanded && self.page == Page::Controls {
+            self.render();
+        }
+        self.on_pop_data();
+    }
+
     /// Ask for the brightness once so the top bar knows whether to show the icon.
     pub fn load_brightness_once(&mut self) {
         if !self.bri_asked {
