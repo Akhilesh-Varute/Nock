@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.1
+
+- Auto-hide: new tray option that keeps the notch and bar out of sight until the pointer touches the top-center edge of the screen. Saved as `auto_hide=` in `config.ini`, off by default.
+
 ## 0.11.0
 
 - Multi-display: the tray menu has a new *Show on display* submenu (when more than one display is connected) to put the notch, top bar, buddy and scenes on any display. Saved as `monitor=` in `config.ini`; falls back to the primary display if the chosen one is unplugged.
