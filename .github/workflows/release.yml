@@ -2,6 +2,13 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to build (ignored for tag releases)"
+        required: true
+        type: string
+        default: "Portable"
 permissions:
   contents: write
 jobs:
@@ -22,7 +29,20 @@ jobs:
         run: |
           $v = "${{ github.ref_name }}".TrimStart('v')
           Copy-Item target\release\nock.exe "Nock-portable-$v.exe"
-      - uses: softprops/action-gh-release@v2
+      - name: Upload manual build artifacts
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nock-manual-build-${{ github.run_number }}
+          path: |
+            installer/Output/NockSetup-*.exe
+            Nock-portable-*.exe
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             installer/Output/NockSetup-*.exe
