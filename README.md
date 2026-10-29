@@ -25,18 +25,20 @@ Written in Rust. No webview, no framework, no runtime. One small <code>.exe</cod
 - **A little life**: a buddy character on the bar, scripted scenes, an arcade with four mouse-only games, and small reactions on the pill (squish on click, glow with the music, confetti when the timer ends).
 - **Smart pill**: the notch tells you things without a click. Amber "Battery low" with time left, "Mic on" with the time and a click-to-mute mic icon, "Link / Path / Colour / Code copied" (click a link or path to open it), a break nudge after 90 minutes of steady use, and meeting countdowns from your calendar. Tray → *Smart hints* turns it off. See [Smart pill](#smart-pill).
 - **Gentle reminders** (all off by default): drink water, and look away from the screen (20-20-20).
-- **Zero idle cost**: event driven, no polling loop; about 0% CPU and about 32 MB of memory while idle (see [Why it is light](#why-it-is-light)). Hides itself in full-screen video and games, with a top-edge reveal.
+- **Zero idle cost**: event driven, no polling loop; about 0% CPU and about 32 MB of memory while idle (see [Why it is light](#why-it-is-light)). Hides itself in full-screen video and games, with a top-edge reveal. Tray → *Auto-hide* keeps it out of sight all the time until the pointer touches the top-centre edge.
 - Follows the Windows light/dark theme.
 
 ## Install
 
 Download **`NockSetup-<version>.exe`** from the [latest release](../../releases/latest) and run it. It installs just for you (no admin rights), adds Nock to the Start menu so you can find it by searching "Nock", and can start it with Windows. Uninstall it from Windows Settings → Apps like any other app.
 
+Nock is not code-signed yet, so Windows may show a "Windows protected your PC" note (**More info → Run anyway**), and a PC with Smart App Control on may block it outright. See [Smart App Control](#windows-says-smart-app-control-blocked-an-app) for the fix.
+
 Prefer no installer? The same release also has **`Nock-portable-<version>.exe`**: put it in a folder you will keep and run it. (Nock adds its own Start menu shortcut when it runs, so search finds it either way; tray → *Show in Start menu and search* turns that off.)
 
 Right-click the tray icon → **Start with Windows** to launch it at login.
 
-**Updates:** right-click the tray icon → **Check for updates**. If a newer release exists Nock offers to update; for a copy installed with the installer it downloads the new installer, runs it silently and restarts itself. The portable file just opens the download page. It only checks when you click, never in the background.
+**Updates:** right-click the tray icon → **Check for updates**. If a newer release exists Nock offers to update; for a copy installed with the installer it downloads the new installer, runs it silently and restarts itself. The portable file can update itself too: *Yes* downloads the new `Nock-portable-<version>.exe`, replaces itself and restarts; *No* opens the download page. It only checks when you click, never in the background.
 
 ## Build
 
@@ -197,7 +199,7 @@ The exe carries its own icon and file details (`assets/notch.ico`, embedded by `
 
 Everything is in `%APPDATA%\Nock\` (tray → *Open settings folder*). Most settings are in the tray menu; `config.ini` holds them too:
 
-- `config.ini`: `hover_expand` (open on hover instead of click), `eq_animation` (animate the equaliser bars), `clock_24h`, `reserve_space` (keep a thin strip at the top so maximised windows sit below the notch), `top_bar`, `buddy`, `scenes`, `scene_min`, `stats` (CPU/RAM on the bar), `clock_style` (0 digital, 1 analog, 2 binary, 3 until Friday), `water_min` and `eye_min` (minutes between reminders, 0 = off), `auto_break`, `start_menu` (the Start menu shortcut), `fs_hide` (hide while a full-screen app or game is in front; also in the tray as *Hide in full-screen apps*), `smart` (the hints above), `calendar_url` (your calendar link, empty = off), and `auto_close` (close the open panel when the pointer leaves it or another window comes to the front; tray: *Close the panel when the pointer leaves*).
+- `config.ini`: `hover_expand` (open on hover instead of click), `eq_animation` (animate the equaliser bars), `clock_24h`, `reserve_space` (keep a thin strip at the top so maximised windows sit below the notch), `top_bar`, `buddy`, `scenes`, `scene_min`, `stats` (CPU/RAM on the bar), `clock_style` (0 digital, 1 analog, 2 binary, 3 until Friday), `water_min` and `eye_min` (minutes between reminders, 0 = off), `auto_break`, `start_menu` (the Start menu shortcut), `fs_hide` (hide while a full-screen app or game is in front; also in the tray as *Hide in full-screen apps*), `auto_hide` (stay hidden until the pointer touches the top-centre edge; tray: *Auto-hide*), `smart` (the hints above), `calendar_url` (your calendar link, empty = off), and `auto_close` (close the open panel when the pointer leaves it or another window comes to the front; tray: *Close the panel when the pointer leaves*).
 - `apps.txt`: pinned launcher entries, one per line: `Name|target|optional arguments`. The Apps tab edits it for you (+ and ×), but you can edit it by hand too: the target can be an exe, folder, URL or `ms-settings:` link. After editing, use tray → *Reload pinned apps*.
 - `todos.txt`: the to-do list.
 - `pinned_clips.txt`: the clipboard items you starred.
