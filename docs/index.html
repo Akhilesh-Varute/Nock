@@ -7,7 +7,7 @@
 <meta name="description" content="A native notch and top bar for Windows, written in Rust. About 1 MB, about 0% CPU when idle, no Electron. Free and MIT licensed. The demo on this page is playable.">
 <meta property="og:title" content="Nock: a notch for Windows in 1 MB of Rust">
 <meta property="og:description" content="Tasks, a focus timer, music, clipboard history and system dropdowns in a native notch. No Electron. Try it right on the page.">
-<meta property="og:image" content="https://nock.akhilvarute.me/icon.png">
+<meta property="og:image" content="https://nock.akhileshvarute.me/icon.png">
 <meta name="theme-color" content="#0a0a0b">
 <link rel="icon" href="icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -62,7 +62,7 @@
 
 <!-- fake Windows top bar -->
 <div class="bar" aria-hidden="true">
-  <div class="bar-l"><span>nock.akhilvarute.me</span></div>
+  <div class="bar-l"><span>nock.akhileshvarute.me</span></div>
   <div class="bar-r">
     <svg class="icon hide-s"><use href="#i-wifi"/></svg>
     <svg class="icon hide-s"><use href="#i-bt"/></svg>
@@ -213,11 +213,17 @@
   </div>
   <div class="wrap">
     <div class="eyebrow"><b>Nock</b><span>Free</span><span>/</span><span>Windows 10/11</span><span>/</span><span>about 1 MB</span></div>
+    <div class="h1w">
+    <div class="sticker o ov ov1" aria-hidden="true" style="--r:-5deg; --d:0s">No Electron</div>
+    <div class="sticker b ov ov2" aria-hidden="true" style="--r:-3deg; --d:-2s">About 1 MB</div>
     <h1 aria-label="The top of your screen is doing nothing.">
       <span class="w"><span style="--i:0">The</span></span> <span class="w"><span style="--i:1">top</span></span> <span class="w"><span style="--i:2">of</span></span> <span class="w"><span style="--i:3">your</span></span><br>
       <span class="w"><span style="--i:4">screen</span></span> <span class="w"><span style="--i:5">is</span></span> <span class="w"><span style="--i:6">doing</span></span><br>
       <span class="w hl"><span style="--i:7">nothing.</span></span>
     </h1>
+    </div>
+    <div class="hero-row">
+    <div>
     <p class="lede">Nock hangs a notch off it. Tasks, a focus timer, music, clipboard history. <b>The one at the top of this page is live.</b> Click it.</p>
     <div class="ctas">
       <a class="btn" id="dlMain" href="https://github.com/Akhilesh-Varute/Nock/releases/latest" data-dl="setup"><svg class="icon"><use href="#i-dl"/></svg>Download for Windows</a>
@@ -225,6 +231,14 @@
     </div>
     <div class="ver" id="verLine">Free. MIT licensed. Installer or one portable .exe.</div>
     <div class="note-os" id="osNote">Heads up: Nock is Windows 10/11 only for now. A Linux port is in progress. You can still poke the demo.</div>
+    </div>
+    <div class="stickers" aria-hidden="true">
+      <div class="sticker o s-ov" style="--r:-5deg; --d:0s">No Electron</div>
+      <div class="sticker k" style="--r:4deg; --d:-1.4s">MIT licensed</div>
+      <div class="sticker b s-ov" style="--r:-3deg; --d:-2.6s">About 1 MB</div>
+      <div class="sticker" style="--r:5deg; --d:-.8s">0.0% CPU idle</div>
+    </div>
+    </div>
     <div class="chips" role="group" aria-label="Trigger a hint on the notch">
       <span>Make it react</span>
       <button class="chip" data-hint="battery">Low battery</button>
@@ -242,12 +256,6 @@
       <div class="quest" data-q="brick"><i></i>Break a brick</div>
     </div>
     <div class="unlock" id="unlock" role="status">That's the whole app. It's free and about 1 MB. Download it above, it keeps going on your real top edge.</div>
-  </div>
-  <div class="stickers" aria-hidden="true">
-    <div class="sticker o" style="top:2%; right:22%; --r:-6deg; --d:0s">No Electron</div>
-    <div class="sticker k" style="top:20%; right:2%; --r:5deg; --d:-1.4s">MIT licensed</div>
-    <div class="sticker b" style="top:40%; right:30%; --r:-3deg; --d:-2.6s">About 1 MB</div>
-    <div class="sticker" style="top:60%; right:4%; --r:6deg; --d:-.8s">0.0% CPU idle</div>
   </div>
 </section>
 
