@@ -109,7 +109,8 @@
     notch.classList.toggle('open', v);
     pill.setAttribute('aria-expanded', v);
     panel.inert = !v;
-    if (v) { document.body.classList.add('touched'); quest('open'); }
+    document.body.classList.toggle('touched', v); // the "poke it" hint hides while open and returns on close
+    if (v) quest('open');
     else { stopGame(); cancelAdd(); }
     size(); renderPill();
   }

@@ -259,7 +259,6 @@ h1 .hl::after { content: ""; position: absolute; left: 0; right: 0; bottom: -.04
 .poke svg { width: 70px; height: 56px; stroke: currentColor; fill: none; stroke-width: 2.4; stroke-linecap: round; display: block; margin-left: -48px; }
 .poke span { display: inline-block; rotate: -5deg; background: var(--bone); padding: 2px 6px; border: 2px solid var(--ink); border-radius: 8px; animation: bob 2.4s ease-in-out infinite; }
 body.touched .poke { opacity: 0; }
-
 /* quests */
 .quests { margin-top: 30px; display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
 .q-head { display: flex; flex-direction: column; justify-content: center; margin-right: 8px; }
