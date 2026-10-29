@@ -13,7 +13,7 @@
              timer: null, mins: 25, game: null, quests: {}, done: false, focusDone: 0, focusMin: 0 };
   var tracks = [
     ['Late Night Compile', 'The Demo Band', 192],
-    ['Merge Conflict Blues', 'The Demo Band', 224],
+    ['Ship It Friday', 'The Demo Band', 224],
     ['Green Build', 'The Demo Band', 171]
   ];
   var todos = [
@@ -185,18 +185,19 @@
   /* ---------- original loops, synthesised live with Web Audio (no audio files, no licensing) ---------- */
   var SYN = (function () {
     var ctx, out, noise, iv, nextT, step, tr;
+    // prog: [root offset in semitones, 'm' | 'M'] per bar; style picks the drums, bass and lead
     var TR = [
-      { bpm: 76, root: 57, ch: [[0, 3, 7, 10], [5, 8, 12, 15], [3, 7, 10, 14], [7, 10, 14, 17]] },
-      { bpm: 68, root: 52, ch: [[0, 4, 7, 11], [9, 12, 16, 19], [5, 9, 12, 16], [7, 11, 14, 17]] },
-      { bpm: 84, root: 60, ch: [[0, 3, 7, 10], [8, 12, 15, 19], [5, 8, 12, 15], [10, 14, 17, 21]] }
+      { bpm: 112, root: 57, style: 'synth', prog: [[0, 'm'], [-4, 'M'], [3, 'M'], [-2, 'M']] },  // A minor synthwave arpeggio
+      { bpm: 124, root: 53, style: 'house', prog: [[0, 'm'], [-4, 'M'], [3, 'M'], [-2, 'M']] },  // F minor four-on-the-floor stabs
+      { bpm: 132, root: 60, style: 'chip', prog: [[0, 'M'], [-3, 'm'], [-7, 'M'], [-5, 'M']] }   // C major chiptune
     ];
     function hz(m) { return 440 * Math.pow(2, (m - 69) / 12); }
     function init() {
       if (ctx) return;
       ctx = new (window.AudioContext || window.webkitAudioContext)();
-      var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200;
+      var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 9000;
       var comp = ctx.createDynamicsCompressor();
-      out = ctx.createGain(); out.gain.value = 0.55;
+      out = ctx.createGain(); out.gain.value = 0.85;
       out.connect(lp); lp.connect(comp); comp.connect(ctx.destination);
       noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
       var d = noise.getChannelData(0); for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -220,18 +221,21 @@
       g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
       s.connect(fl); fl.connect(g); g.connect(out); s.start(t); s.stop(t + dur + 0.02);
     }
-    function eighth(i, t, e) { // one eighth note of a 4-bar loop: chords, bass, kick, snare, hats, a few random notes
-      var c = tr.ch[Math.floor(i / 8) % 4], k = i % 8;
-      if (k === 0) c.forEach(function (n) { tone('triangle', hz(tr.root + n + 12), t, e * 7.5, 0.045, 0.12, 1400); });
-      if (k === 0 || k === 3 || k === 4) tone('sine', hz(tr.root + c[0] - 12), t, e * 1.8, 0.34, 0.01);
-      if (k === 0 || k === 4) kick(t);
-      if (k === 2 || k === 6) hit(t, 'bandpass', 1900, 0.16, 0.13);
-      hit(t + (k % 2 ? e * 0.18 : 0), 'highpass', 7500, k % 2 ? 0.035 : 0.06, 0.04);
-      if (k % 2 && Math.random() < 0.4) tone('triangle', hz(tr.root + c[Math.floor(Math.random() * c.length)] + 24), t, e * 2.2, 0.06, 0.01, 2600);
+    function sixteenth(i, t, e) { // one 16th note of a 4-bar loop: pad, drums, bass and a hook that repeats
+      var p = tr.prog[Math.floor(i / 16) % 4], k = i % 16, s = tr.style, house = s === 'house';
+      var q = p[1] === 'm' ? [0, 3, 7] : [0, 4, 7], r = tr.root + p[0];
+      if (k === 0) q.forEach(function (n) { tone('triangle', hz(r + n + 12), t, e * 15, 0.04, 0.1, 2200); });
+      if (house ? k % 4 === 0 : (k === 0 || k === 8 || (s === 'synth' && k === 11))) kick(t);
+      if (k === 4 || k === 12) hit(t, 'bandpass', 1900, 0.2, 0.14);
+      hit(t, 'highpass', 8000, k % 2 ? 0.03 : 0.05, 0.035);
+      if (house && k % 4 === 2) hit(t, 'highpass', 6000, 0.09, 0.09);
+      if (house ? k % 4 === 2 : k % 2 === 0) tone(s === 'chip' ? 'square' : 'sawtooth', hz(r - 12), t, e * 1.7, s === 'chip' ? 0.11 : 0.15, 0.005, 420);
+      if (house) { if (k % 4 === 2) q.forEach(function (n) { tone('sawtooth', hz(r + n + 12), t, e * 1.2, 0.03, 0.005, 2200); }); }
+      else tone(s === 'chip' ? 'square' : 'sawtooth', hz(r + q[[0, 1, 2, 1][k % 4]] + (k % 8 < 4 ? 12 : 24)), t, e * 1.6, s === 'chip' ? 0.05 : 0.045, 0.004, 2600);
     }
     function tick() {
-      var e = 30 / tr.bpm;
-      while (nextT < ctx.currentTime + 0.3) { eighth(step, nextT, e); nextT += e; step++; }
+      var e = 15 / tr.bpm;
+      while (nextT < ctx.currentTime + 0.3) { sixteenth(step, nextT, e); nextT += e; step++; }
     }
     return {
       play: function (n) {
