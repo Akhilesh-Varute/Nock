@@ -221,6 +221,10 @@ pub struct App {
     pub radio: radio::Handle,
     pub radios: Radios,
     pub brightness: Option<u32>,
+    pub all_brightness: Option<u32>,
+    pub displays: Vec<sys::DisplayInfo>,
+    pub filter_active: bool,
+    pub filter_pct: u32,
     bri_asked: bool,
 
     // clipboard
@@ -380,6 +384,10 @@ impl App {
             radio: radio::start(hwnd.0 as isize),
             radios: Radios::default(),
             brightness: None,
+            all_brightness: None,
+            displays: Vec::new(),
+            filter_active: false,
+            filter_pct: 30,
             bri_asked: false,
             clips: Vec::new(),
             pins: store::load_pins(),
@@ -1935,10 +1943,58 @@ impl App {
 
     pub fn on_brightness(&mut self, supported: bool, percent: u32) {
         self.brightness = supported.then_some(percent.min(100));
+        if self.all_brightness.is_none() {
+            self.all_brightness = self.brightness;
+        }
+        self.displays = sys::display_monitors();
         if self.expanded && self.page == Page::Controls {
             self.render();
         }
         self.render_bar();
+        self.on_pop_data();
+    }
+
+    pub fn set_all_bri(&mut self, pct: u32) {
+        self.all_brightness = Some(pct);
+        self.brightness = Some(pct);
+        for d in &mut self.displays {
+            d.brightness = pct;
+        }
+        sys::brightness_set_all(pct);
+    }
+
+    pub fn set_display_bri(&mut self, idx: usize, pct: u32) {
+        if let Some(d) = self.displays.get_mut(idx) {
+            d.brightness = pct;
+            if d.is_internal {
+                sys::brightness_set_internal(pct);
+            } else if let Some(ext_idx) = d.external_idx {
+                sys::brightness_set_external(ext_idx, pct);
+            }
+        } else if self.displays.is_empty() {
+            sys::brightness_set_all(pct);
+        }
+        if self.displays.len() <= 1 {
+            self.brightness = Some(pct);
+            self.all_brightness = Some(pct);
+        }
+    }
+
+    pub fn adjust_brightness(&mut self, delta: i32) {
+        let cur = self.all_brightness.or(self.brightness).unwrap_or(50) as i32;
+        let next = (cur + delta).clamp(0, 100) as u32;
+        self.all_brightness = Some(next);
+        self.brightness = Some(next);
+        for d in &mut self.displays {
+            let d_cur = d.brightness as i32;
+            let d_next = (d_cur + delta).clamp(0, 100) as u32;
+            d.brightness = d_next;
+        }
+        sys::brightness_set_all(next);
+        self.render_bar();
+        if self.expanded && self.page == Page::Controls {
+            self.render();
+        }
         self.on_pop_data();
     }
 

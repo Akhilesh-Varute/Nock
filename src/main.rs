@@ -4,6 +4,7 @@ mod app;
 mod bar;
 mod buddy;
 mod cal;
+mod filter;
 mod cast;
 mod game;
 mod games;
@@ -13,6 +14,7 @@ mod scene;
 mod gfx;
 mod pop;
 mod media;
+mod mon;
 mod radio;
 mod store;
 mod sys;
@@ -192,6 +194,34 @@ fn main() -> Result<()> {
             MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
             'H' as u32,
         );
+        // Ctrl+Alt+PageUp: Brightness +5%
+        let _ = RegisterHotKey(
+            Some(hwnd),
+            4,
+            MOD_CONTROL | MOD_ALT,
+            VK_PRIOR.0 as u32,
+        );
+        // Ctrl+Alt+PageDown: Brightness -5%
+        let _ = RegisterHotKey(
+            Some(hwnd),
+            5,
+            MOD_CONTROL | MOD_ALT,
+            VK_NEXT.0 as u32,
+        );
+        // Ctrl+Alt+Up: Brightness +5%
+        let _ = RegisterHotKey(
+            Some(hwnd),
+            6,
+            MOD_CONTROL | MOD_ALT,
+            VK_UP.0 as u32,
+        );
+        // Ctrl+Alt+Down: Brightness -5%
+        let _ = RegisterHotKey(
+            Some(hwnd),
+            7,
+            MOD_CONTROL | MOD_ALT,
+            VK_DOWN.0 as u32,
+        );
         let _ = SetWinEventHook(
             EVENT_SYSTEM_FOREGROUND,
             EVENT_SYSTEM_FOREGROUND,
@@ -328,11 +358,16 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             match wp.0 {
                 2 => a.toggle_tucked(),
                 3 => a.quick_capture(),
+                4 | 6 => a.adjust_brightness(5),
+                5 | 7 => a.adjust_brightness(-5),
                 _ => a.toggle_pinned_open(),
             }
         }
         WM_DPICHANGED => a.on_display_change((wp.0 & 0xffff) as f32 / 96.0),
-        WM_DISPLAYCHANGE => a.on_display_change(sys::scale_of(sys::pick_monitor(a.cfg.monitor))),
+        WM_DISPLAYCHANGE => {
+            crate::filter::update_geometry();
+            a.on_display_change(sys::scale_of(sys::pick_monitor(a.cfg.monitor)))
+        }
         WM_TRAY => on_tray(hwnd, a, lp),
         WM_DESTROY => {
             sys::reserve_top(hwnd, &RECT::default(), 0);
@@ -448,28 +483,38 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             let _ = AppendMenuW(sub, MF_STRING | mark(6), 26, w!("Ronin (pixel, talks)"));
             let _ = AppendMenuW(sub, MF_STRING | mark(7), 27, w!("Courier (pixel, talks)"));
             let _ = AppendMenuW(sub, MF_STRING | mark(8), 28, w!("Necromancer (pixel, talks)"));
+            let _ = AppendMenuW(sub, MF_SEPARATOR, 0, PCWSTR::null());
+            let _ = AppendMenuW(sub, MF_STRING | mark(9), 29, w!("Clippy (Office assistant)"));
+            let _ = AppendMenuW(sub, MF_STRING | mark(10), 30, w!("Merlin (Wizard)"));
+            let _ = AppendMenuW(sub, MF_STRING | mark(11), 31, w!("Genie (Magic lamp)"));
+            let _ = AppendMenuW(sub, MF_STRING | mark(12), 32, w!("Rover (XP Puppy)"));
             let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Buddy"));
         }
         if let Ok(sub) = CreatePopupMenu() {
             let on = if a.cfg.scenes { MF_CHECKED } else { MF_UNCHECKED };
-            let _ = AppendMenuW(sub, MF_STRING | on, 30, w!("Play scenes now and then"));
+            let _ = AppendMenuW(sub, MF_STRING | on, 130, w!("Play scenes now and then"));
             let _ = AppendMenuW(sub, MF_SEPARATOR, 0, PCWSTR::null());
-            let _ = AppendMenuW(sub, MF_STRING, 31, w!("Play: Showdown"));
-            let _ = AppendMenuW(sub, MF_STRING, 32, w!("Play: Heist"));
-            let _ = AppendMenuW(sub, MF_STRING, 33, w!("Play: Team-up"));
-            let _ = AppendMenuW(sub, MF_STRING, 34, w!("Play: Duel at dusk"));
-            let _ = AppendMenuW(sub, MF_STRING, 35, w!("Play: Rise"));
-            let _ = AppendMenuW(sub, MF_STRING, 36, w!("Play: Alley fight"));
-            let _ = AppendMenuW(sub, MF_STRING, 37, w!("Play: Press conference"));
-            let _ = AppendMenuW(sub, MF_STRING, 38, w!("Play: Harry vs Voldemort"));
-            let _ = AppendMenuW(sub, MF_STRING, 39, w!("Play: Owl post"));
-            let _ = AppendMenuW(sub, MF_STRING, 40, w!("Play: Harry and friends vs Voldemort"));
-            let _ = AppendMenuW(sub, MF_STRING, 41, w!("Play: Quidditch"));
-            let _ = AppendMenuW(sub, MF_STRING, 42, w!("Play: Dementor"));
-            let _ = AppendMenuW(sub, MF_STRING, 43, w!("Play: Friday deploy"));
-            let _ = AppendMenuW(sub, MF_STRING, 44, w!("Play: You're on mute"));
-            let _ = AppendMenuW(sub, MF_STRING, 45, w!("Play: Low battery"));
-            let _ = AppendMenuW(sub, MF_STRING, 46, w!("Play: Cricket six"));
+            let _ = AppendMenuW(sub, MF_STRING, 131, w!("Play: Showdown"));
+            let _ = AppendMenuW(sub, MF_STRING, 132, w!("Play: Heist"));
+            let _ = AppendMenuW(sub, MF_STRING, 133, w!("Play: Team-up"));
+            let _ = AppendMenuW(sub, MF_STRING, 134, w!("Play: Duel at dusk"));
+            let _ = AppendMenuW(sub, MF_STRING, 135, w!("Play: Rise"));
+            let _ = AppendMenuW(sub, MF_STRING, 136, w!("Play: Alley fight"));
+            let _ = AppendMenuW(sub, MF_STRING, 137, w!("Play: Press conference"));
+            let _ = AppendMenuW(sub, MF_STRING, 138, w!("Play: Harry vs Voldemort"));
+            let _ = AppendMenuW(sub, MF_STRING, 139, w!("Play: Owl post"));
+            let _ = AppendMenuW(sub, MF_STRING, 140, w!("Play: Harry and friends vs Voldemort"));
+            let _ = AppendMenuW(sub, MF_STRING, 141, w!("Play: Quidditch"));
+            let _ = AppendMenuW(sub, MF_STRING, 142, w!("Play: Dementor"));
+            let _ = AppendMenuW(sub, MF_STRING, 143, w!("Play: Friday deploy"));
+            let _ = AppendMenuW(sub, MF_STRING, 144, w!("Play: You're on mute"));
+            let _ = AppendMenuW(sub, MF_STRING, 145, w!("Play: Low battery"));
+            let _ = AppendMenuW(sub, MF_STRING, 146, w!("Play: Cricket six"));
+            let _ = AppendMenuW(sub, MF_SEPARATOR, 0, PCWSTR::null());
+            let _ = AppendMenuW(sub, MF_STRING, 147, w!("Play: Writing a letter (Clippy)"));
+            let _ = AppendMenuW(sub, MF_STRING, 148, w!("Play: The magic wish (Genie)"));
+            let _ = AppendMenuW(sub, MF_STRING, 149, w!("Play: Fetch the bone (Rover)"));
+            let _ = AppendMenuW(sub, MF_STRING, 150, w!("Play: The spell duel (Merlin)"));
             let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Scenes"));
         }
         if let Ok(sub) = CreatePopupMenu() {
@@ -558,13 +603,13 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             }
             4 => sys::open(&store::data_dir().to_string_lossy(), ""),
             15 => sys::check_update(hwnd.0 as isize),
-            20..=29 => a.set_buddy((cmd.0 - 20) as u8),
-            30 => a.toggle_scenes(),
+            20..=32 => a.set_buddy((cmd.0 - 20) as u8),
+            130 => a.toggle_scenes(),
             60..=63 => a.set_clock_style((cmd.0 - 60) as u8),
             80..=83 => a.set_eye_min([0u16, 20, 30, 45][(cmd.0 - 80) as usize]),
             70..=74 => a.set_water_min([0u16, 30, 45, 60, 90][(cmd.0 - 70) as usize]),
             100..=116 => a.set_monitor((cmd.0 - 100) as u8),
-            31..=46 => a.play_scene((cmd.0 - 31) as usize),
+            131..=150 => a.play_scene((cmd.0 - 131) as usize),
             9 => {
                 // Clean up, then end the process outright so no helper thread,
                 // hook or COM apartment can keep notch.exe alive.

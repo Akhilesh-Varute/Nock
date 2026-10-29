@@ -13,7 +13,7 @@ use crate::gfx::*;
 use crate::sys;
 
 const POP_W: f32 = 300.0;
-const POP_MAX_H: f32 = 340.0;
+const POP_MAX_H: f32 = 460.0;
 const GAP: f32 = 4.0;
 const WM_MOUSELEAVE: u32 = 0x02A3;
 pub const T_POPLEAVE: usize = 7;
@@ -54,10 +54,12 @@ fn spinner(g: &Gfx, cx: f32, cy: f32, phase: u32, c: Color) {
 
 #[derive(Clone, Copy)]
 enum PopAct {
-    Toggle(u8), // 0 = Wi-Fi, 1 = Bluetooth
+    Toggle(u8), // 0 = Wi-Fi, 1 = Bluetooth, 2 = Night Filter
     Mute,
     Vol(Rect),
-    Bri(Rect),
+    BriAll(Rect),
+    Bri(usize, Rect),
+    FilterBri(Rect),
     Wifi(usize),
     Bt(usize),
     Link(&'static str),
@@ -79,6 +81,9 @@ pub struct Pop {
     hot: Option<usize>,
     tracking: bool,
     drag: Option<Rect>,
+    drag_bri_idx: Option<usize>,
+    drag_all: bool,
+    filter_drag: bool,
     h: f32,
 }
 
@@ -107,6 +112,9 @@ impl Pop {
             hot: None,
             tracking: false,
             drag: None,
+            drag_bri_idx: None,
+            drag_all: false,
+            filter_drag: false,
             h: 100.0,
         })
     }
@@ -455,6 +463,10 @@ impl App {
         let devices = self.radio.devices.lock().unwrap().clone();
         let (vol, muted) = (self.volume, self.muted);
         let bri = self.brightness;
+        let all_bri = self.all_brightness.or(self.brightness).unwrap_or(50);
+        let displays = self.displays.clone();
+        let filter_active = self.filter_active;
+        let filter_pct = self.filter_pct;
         let accent = self.accent;
         let binfo = sys::battery_info();
         let (year, month, day, wday, hh, mm, ..) = sys::local_time();
@@ -794,30 +806,121 @@ impl App {
             }
             BarAct::Brightness => {
                 ops.push(title("Display", y));
-                y += 40.0;
-                let sr = Rect::new(20.0, y, w - 40.0, 24.0);
-                let frac = bri.map(|b| b as f32 / 100.0).unwrap_or(0.5);
-                let ok = true;
-                ops.push(Box::new(move |g, h, hot| {
-                    let track = Rect::new(sr.x, sr.cy() - 3.0, sr.w, 6.0);
-                    g.fill_rrect(track, 3.0, th.hover);
-                    let fw = (sr.w * frac.clamp(0.0, 1.0)).max(0.0);
-                    if ok {
+                y += 34.0;
+                if displays.len() > 1 {
+                    ops.push(Box::new(move |g, _h, _| {
+                        g.text(
+                            &format!("All Screens ({}%)", all_bri),
+                            Rect::new(20.0, y, w - 40.0, 18.0),
+                            &g.fonts.small,
+                            th.t1,
+                            Align::Left,
+                        );
+                    }));
+                    y += 20.0;
+                    let sr = Rect::new(20.0, y, w - 40.0, 24.0);
+                    let frac = all_bri as f32 / 100.0;
+                    ops.push(Box::new(move |g, h, hot| {
+                        let track = Rect::new(sr.x, sr.cy() - 3.0, sr.w, 6.0);
+                        g.fill_rrect(track, 3.0, th.hover);
+                        let fw = (sr.w * frac.clamp(0.0, 1.0)).max(0.0);
                         if fw > 0.5 {
                             g.fill_rrect(Rect::new(sr.x, track.y, fw, 6.0), 3.0, accent);
                         }
                         let idx = h.len();
                         g.fill_circle(sr.x + fw, sr.cy(), if hot == Some(idx) { 8.0 } else { 7.0 }, Color::white(1.0));
-                        h.push((Rect::new(sr.x - 8.0, sr.y, sr.w + 16.0, sr.h), PopAct::Bri(sr)));
+                        h.push((Rect::new(sr.x - 8.0, sr.y, sr.w + 16.0, sr.h), PopAct::BriAll(sr)));
+                    }));
+                    y += 32.0;
+
+                    for (i, d) in displays.iter().enumerate() {
+                        let disp_name = d.name.clone();
+                        let b_val = d.brightness;
+                        ops.push(Box::new(move |g, _h, _| {
+                            g.text(
+                                &format!("{} ({}%)", disp_name, b_val),
+                                Rect::new(20.0, y, w - 40.0, 18.0),
+                                &g.fonts.small,
+                                th.t2,
+                                Align::Left,
+                            );
+                        }));
+                        y += 20.0;
+                        let sr = Rect::new(20.0, y, w - 40.0, 24.0);
+                        let frac = b_val as f32 / 100.0;
+                        ops.push(Box::new(move |g, h, hot| {
+                            let track = Rect::new(sr.x, sr.cy() - 3.0, sr.w, 6.0);
+                            g.fill_rrect(track, 3.0, th.hover);
+                            let fw = (sr.w * frac.clamp(0.0, 1.0)).max(0.0);
+                            if fw > 0.5 {
+                                g.fill_rrect(Rect::new(sr.x, track.y, fw, 6.0), 3.0, accent);
+                            }
+                            let idx = h.len();
+                            g.fill_circle(sr.x + fw, sr.cy(), if hot == Some(idx) { 8.0 } else { 7.0 }, Color::white(1.0));
+                            h.push((Rect::new(sr.x - 8.0, sr.y, sr.w + 16.0, sr.h), PopAct::Bri(i, sr)));
+                        }));
+                        y += 32.0;
                     }
+                    y += 4.0;
+                } else {
+                    let sr = Rect::new(20.0, y, w - 40.0, 24.0);
+                    let frac = bri.map(|b| b as f32 / 100.0).unwrap_or(0.5);
+                    let ok = true;
+                    ops.push(Box::new(move |g, h, hot| {
+                        let track = Rect::new(sr.x, sr.cy() - 3.0, sr.w, 6.0);
+                        g.fill_rrect(track, 3.0, th.hover);
+                        let fw = (sr.w * frac.clamp(0.0, 1.0)).max(0.0);
+                        if ok {
+                            if fw > 0.5 {
+                                g.fill_rrect(Rect::new(sr.x, track.y, fw, 6.0), 3.0, accent);
+                            }
+                            let idx = h.len();
+                            g.fill_circle(sr.x + fw, sr.cy(), if hot == Some(idx) { 8.0 } else { 7.0 }, Color::white(1.0));
+                            h.push((Rect::new(sr.x - 8.0, sr.y, sr.w + 16.0, sr.h), PopAct::Bri(0, sr)));
+                        }
+                    }));
+                    y += 36.0;
+                    let display_title = displays.first().map(|d| d.name.as_str()).unwrap_or("Brightness");
+                    let t = match bri {
+                        Some(b) => format!("{} {}%", display_title, b),
+                        None => "Drag to set brightness".to_string(),
+                    };
+                    ops.push(note(t, y - 4.0, th.t2));
+                    y += 22.0;
+                }
+
+                ops.push(line(y));
+                y += 12.0;
+                ops.push(Box::new(move |g, _h, _| {
+                    g.text(
+                        "Night Dimmer",
+                        Rect::new(20.0, y, w - 80.0, 24.0),
+                        &g.fonts.body,
+                        th.t1,
+                        Align::Left,
+                    );
                 }));
-                y += 36.0;
-                let t = match bri {
-                    Some(b) => format!("Brightness {}%", b),
-                    None => "Drag to set brightness".to_string(),
-                };
-                ops.push(note(t, y - 4.0, th.t2));
-                y += 22.0;
+                ops.push(switch(filter_active, 2, y));
+                y += 28.0;
+
+                if filter_active {
+                    let sr = Rect::new(20.0, y, w - 40.0, 24.0);
+                    let frac = (filter_pct as f32 / 70.0).clamp(0.0, 1.0);
+                    ops.push(Box::new(move |g, h, hot| {
+                        let track = Rect::new(sr.x, sr.cy() - 3.0, sr.w, 6.0);
+                        g.fill_rrect(track, 3.0, th.hover);
+                        let fw = (sr.w * frac).max(0.0);
+                        if fw > 0.5 {
+                            g.fill_rrect(Rect::new(sr.x, track.y, fw, 6.0), 3.0, accent);
+                        }
+                        let idx = h.len();
+                        g.fill_circle(sr.x + fw, sr.cy(), if hot == Some(idx) { 8.0 } else { 7.0 }, Color::white(1.0));
+                        h.push((Rect::new(sr.x - 8.0, sr.y, sr.w + 16.0, sr.h), PopAct::FilterBri(sr)));
+                    }));
+                    y += 32.0;
+                    ops.push(note(format!("Darkness {}%", filter_pct), y - 4.0, th.t2));
+                    y += 22.0;
+                }
             }
             BarAct::Battery => {
                 ops.push(title("Battery", y));
@@ -1004,10 +1107,25 @@ impl App {
                 }
                 if let Some(r) = vol_drag {
                     if self.pop_kind() == Some(BarAct::Brightness) {
-                        let v = ((x - r.x) / r.w).clamp(0.0, 1.0);
-                        let pct = (v * 100.0).round() as u32;
-                        self.brightness = Some(pct);
-                        sys::brightness_set(pct); // coalesced, so cheap to call per move
+                        let is_filter = self.pop.as_ref().map(|p| p.filter_drag).unwrap_or(false);
+                        let is_all = self.pop.as_ref().map(|p| p.drag_all).unwrap_or(false);
+                        if is_filter {
+                            let v = ((x - r.x) / r.w).clamp(0.0, 1.0);
+                            let pct = (v * 70.0).round() as u32;
+                            self.filter_pct = pct;
+                            if self.filter_active {
+                                crate::filter::set_filter(true, pct);
+                            }
+                        } else if is_all {
+                            let v = ((x - r.x) / r.w).clamp(0.0, 1.0);
+                            let pct = (v * 100.0).round() as u32;
+                            self.set_all_bri(pct);
+                        } else {
+                            let v = ((x - r.x) / r.w).clamp(0.0, 1.0);
+                            let pct = (v * 100.0).round() as u32;
+                            let idx = self.pop.as_ref().and_then(|p| p.drag_bri_idx).unwrap_or(0);
+                            self.set_display_bri(idx, pct);
+                        }
                     } else {
                         self.set_vol_from(r, x);
                     }
@@ -1035,18 +1153,61 @@ impl App {
                     .pop
                     .as_ref()
                     .and_then(|p| p.hits.iter().find(|(r, _)| r.contains(x, y)).map(|h| h.1));
-                if let Some(PopAct::Vol(r)) | Some(PopAct::Bri(r)) = act {
+                if let Some(PopAct::Vol(r)) = act {
                     if let Some(p) = self.pop.as_mut() {
                         p.drag = Some(r);
+                        p.drag_bri_idx = None;
+                        p.drag_all = false;
+                        p.filter_drag = false;
                     }
                     unsafe {
                         SetCapture(hwnd);
                     }
-                    if matches!(act, Some(PopAct::Bri(_))) {
-                        let v = ((x - r.x) / r.w).clamp(0.0, 1.0);
-                        self.brightness = Some((v * 100.0).round() as u32);
-                    } else {
-                        self.set_vol_from(r, x);
+                    self.set_vol_from(r, x);
+                    self.render_pop();
+                } else if let Some(PopAct::BriAll(r)) = act {
+                    if let Some(p) = self.pop.as_mut() {
+                        p.drag = Some(r);
+                        p.drag_bri_idx = None;
+                        p.drag_all = true;
+                        p.filter_drag = false;
+                    }
+                    unsafe {
+                        SetCapture(hwnd);
+                    }
+                    let v = ((x - r.x) / r.w).clamp(0.0, 1.0);
+                    let pct = (v * 100.0).round() as u32;
+                    self.set_all_bri(pct);
+                    self.render_pop();
+                } else if let Some(PopAct::Bri(idx, r)) = act {
+                    if let Some(p) = self.pop.as_mut() {
+                        p.drag = Some(r);
+                        p.drag_bri_idx = Some(idx);
+                        p.drag_all = false;
+                        p.filter_drag = false;
+                    }
+                    unsafe {
+                        SetCapture(hwnd);
+                    }
+                    let v = ((x - r.x) / r.w).clamp(0.0, 1.0);
+                    let pct = (v * 100.0).round() as u32;
+                    self.set_display_bri(idx, pct);
+                    self.render_pop();
+                } else if let Some(PopAct::FilterBri(r)) = act {
+                    if let Some(p) = self.pop.as_mut() {
+                        p.drag = Some(r);
+                        p.drag_bri_idx = None;
+                        p.drag_all = false;
+                        p.filter_drag = true;
+                    }
+                    unsafe {
+                        SetCapture(hwnd);
+                    }
+                    let v = ((x - r.x) / r.w).clamp(0.0, 1.0);
+                    let pct = (v * 70.0).round() as u32;
+                    self.filter_pct = pct;
+                    if self.filter_active {
+                        crate::filter::set_filter(true, pct);
                     }
                     self.render_pop();
                 }
@@ -1055,15 +1216,30 @@ impl App {
             WM_LBUTTONUP => {
                 let dragging = self.pop.as_ref().map(|p| p.drag.is_some()).unwrap_or(false);
                 if dragging {
+                    let bri_idx = self.pop.as_ref().and_then(|p| p.drag_bri_idx);
+                    let is_all = self.pop.as_ref().map(|p| p.drag_all).unwrap_or(false);
                     if let Some(p) = self.pop.as_mut() {
                         p.drag = None;
+                        p.drag_bri_idx = None;
+                        p.drag_all = false;
+                        p.filter_drag = false;
                     }
                     unsafe {
                         let _ = ReleaseCapture();
                     }
                     if self.pop_kind() == Some(BarAct::Brightness) {
-                        if let Some(b) = self.brightness {
-                            sys::brightness_set(b); // slow call, so only on release
+                        if is_all {
+                            if let Some(b) = self.all_brightness.or(self.brightness) {
+                                sys::brightness_set_all(b);
+                            }
+                        } else if let Some(idx) = bri_idx {
+                            if let Some(d) = self.displays.get(idx) {
+                                if d.is_internal {
+                                    sys::brightness_set_internal(d.brightness);
+                                } else if let Some(ext_idx) = d.external_idx {
+                                    sys::brightness_set_external(ext_idx, d.brightness);
+                                }
+                            }
                         }
                     }
                     self.render_bar();
@@ -1074,6 +1250,11 @@ impl App {
                     .as_ref()
                     .and_then(|p| p.hits.iter().find(|(r, _)| r.contains(x, y)).map(|h| h.1));
                 match act {
+                    Some(PopAct::Toggle(2)) => {
+                        self.filter_active = !self.filter_active;
+                        crate::filter::set_filter(self.filter_active, self.filter_pct);
+                        self.render_pop();
+                    }
                     Some(PopAct::Toggle(i)) => {
                         self.do_act(Act::Quick(i), 0.0);
                         self.render_pop();

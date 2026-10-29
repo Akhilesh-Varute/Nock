@@ -35,7 +35,7 @@ const GROUND: f32 = 28.0;
 const MAX_W: f32 = 460.0;
 const MIN_W: f32 = 160.0;
 /// Number of scripted scenes (0..SCENES).
-const SCENES: usize = 16;
+const SCENES: usize = 20;
 /// The press conference needs room for its long speech bubbles.
 const PRESS_W: f32 = 420.0;
 
@@ -636,6 +636,103 @@ fn script(id: usize) -> Script {
                 say(6.2, 1.2, 1, "Six."),
             ],
             len: 8.4,
+        },
+        // 16: "Writing a letter" (Clippy tribute)
+        16 => Script {
+            tracks: vec![
+                tr(Who::Dev, &[
+                    (0.0, -0.1, Walk, 1.0), (1.5, 0.38, Stand, 1.0), (2.0, 0.38, Crouch, 1.0),
+                    (3.2, 0.38, Stand, 1.0), (3.8, 0.38, Hurt, 1.0), (4.5, 0.38, Run, -1.0),
+                    (6.0, -0.12, Stand, -1.0),
+                ]),
+                tr(Who::Intern, &[
+                    (1.0, 1.1, Walk, -1.0), (2.5, 0.68, Stand, -1.0), (3.0, 0.68, Cheer, -1.0),
+                    (4.5, 0.68, Stand, -1.0), (4.8, 0.68, Walk, 1.0), (6.0, 1.1, Stand, 1.0),
+                ]),
+            ],
+            evs: vec![
+                ev(3.0, 0.5, Fx::Burst(1), 1, 0),
+            ],
+            says: vec![
+                say(1.6, 1.2, 0, "Writing documentation..."),
+                say(2.8, 1.6, 1, "It looks like you need help!"),
+                say(3.8, 1.2, 0, "Noooo! Close without saving!"),
+            ],
+            len: 6.0,
+        },
+        // 17: "The magic wish" (Genie tribute)
+        17 => Script {
+            tracks: vec![
+                tr(Who::Spark, &[
+                    (0.0, -0.1, Run, 1.0), (1.5, 0.32, Stand, 1.0), (2.2, 0.32, Cast, 1.0),
+                    (3.0, 0.32, Stand, 1.0), (4.2, 0.32, Cheer, 1.0), (5.5, 0.32, Walk, -1.0),
+                    (7.0, -0.1, Stand, -1.0),
+                ]),
+                tr(Who::Krag, &[
+                    (1.5, 1.1, Run, -1.0), (2.8, 0.68, Jump, -1.0), (3.5, 0.68, Stand, -1.0),
+                    (5.0, 0.68, Stand, -1.0), (5.5, 0.68, Walk, 1.0), (7.0, 1.12, Stand, 1.0),
+                ]),
+            ],
+            evs: vec![
+                ev(2.5, 0.5, Fx::Gem, 0, 1),
+                ev(2.9, 0.6, Fx::Burst(2), 1, 0),
+            ],
+            says: vec![
+                say(1.6, 1.1, 0, "Rubbing the brass lamp..."),
+                say(3.0, 1.6, 1, "Your wish is my command!"),
+                say(4.3, 1.4, 0, "Three zero-bug deploys!"),
+            ],
+            len: 7.0,
+        },
+        // 18: "Fetch the bone" (Rover tribute)
+        18 => Script {
+            tracks: vec![
+                tr(Who::Krag, &[
+                    (0.0, 1.1, Walk, -1.0), (1.5, 0.72, Stand, -1.0), (2.0, 0.72, Throw, -1.0),
+                    (2.8, 0.72, Stand, -1.0), (4.8, 0.72, Cheer, -1.0), (5.5, 0.72, Walk, 1.0),
+                    (7.0, 1.1, Stand, 1.0),
+                ]),
+                tr(Who::Veil, &[
+                    (0.5, -0.1, Walk, 1.0), (1.8, 0.28, Stand, 1.0), (2.4, 0.28, Run, 1.0),
+                    (3.5, 0.60, Jump, 1.0), (4.2, 0.60, Cheer, -1.0), (5.2, 0.60, Run, -1.0),
+                    (7.0, -0.15, Stand, -1.0),
+                ]),
+            ],
+            evs: vec![
+                ev(2.2, 0.6, Fx::Ring, 0, 1),
+                ev(3.6, 0.4, Fx::Burst(0), 1, 0),
+            ],
+            says: vec![
+                say(1.6, 1.0, 0, "Fetch, Rover!"),
+                say(4.2, 1.4, 1, "Woof! Found 0 bugs!"),
+                say(5.0, 1.2, 0, "Good boy!"),
+            ],
+            len: 7.0,
+        },
+        // 19: "The spell duel" (Merlin tribute)
+        19 => Script {
+            tracks: vec![
+                tr(Who::Dumbledore, &[
+                    (0.0, -0.1, Walk, 1.0), (1.5, 0.32, Stand, 1.0), (2.0, 0.32, Cast, 1.0),
+                    (3.2, 0.32, Stand, 1.0), (4.5, 0.32, Cheer, 1.0), (5.8, 0.32, Walk, -1.0),
+                    (7.2, -0.12, Stand, -1.0),
+                ]),
+                tr(Who::Voldemort, &[
+                    (0.0, 1.1, Walk, -1.0), (1.5, 0.74, Stand, -1.0), (2.0, 0.74, Cast, -1.0),
+                    (3.0, 0.74, Hurt, -1.0), (4.0, 0.74, Kneel, -1.0), (5.6, 0.74, Run, 1.0),
+                    (7.2, 1.15, Stand, 1.0),
+                ]),
+            ],
+            evs: vec![
+                ev(2.1, 0.8, Fx::Clash(0, 1), 0, 1),
+                ev(2.9, 0.5, Fx::Burst(2), 0, 1),
+            ],
+            says: vec![
+                say(1.4, 1.2, 1, "Avada--!"),
+                say(2.0, 1.5, 0, "A wizard is never late!"),
+                say(4.2, 1.4, 0, "Knowledge is true magic."),
+            ],
+            len: 7.2,
         },
         // Spark (0) + Cinder (1) vs Krag (2)
         _ => Script {

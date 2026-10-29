@@ -45,6 +45,7 @@ windows = { version = "0.62.2", features = [
   "Win32_System_Power",
   "Win32_Devices_Bluetooth",
   "Win32_System_IO",
+  "Win32_System_Wmi",
   "Win32_UI_Accessibility",
   "Win32_UI_HiDpi",
   "Win32_UI_Input_KeyboardAndMouse",
