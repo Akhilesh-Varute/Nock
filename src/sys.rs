@@ -358,10 +358,19 @@ pub fn display_monitors() -> Vec<DisplayInfo> {
     DISPLAY_MONITORS.lock().unwrap().clone()
 }
 
+fn internal_brightness_get() -> Option<u32> {
+    native_brightness_get().or_else(|| {
+        powershell(
+            "$b = (Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightness -ErrorAction SilentlyContinue | Select-Object -First 1).CurrentBrightness; if ($null -eq $b) { $b = (Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightness -ErrorAction SilentlyContinue | Select-Object -First 1).CurrentBrightness }; Write-Output $b",
+        )
+        .and_then(|s| s.trim().parse::<u32>().ok())
+    })
+}
+
 pub fn brightness_load(hwnd: isize) {
     std::thread::spawn(move || {
         let mut list = Vec::new();
-        let internal_bri = native_brightness_get();
+        let internal_bri = internal_brightness_get();
         if let Some(ib) = internal_bri {
             list.push(DisplayInfo {
                 name: "Built-in Screen".to_string(),
@@ -426,6 +435,12 @@ pub fn brightness_set(percent: u32) {
         if v >= 0 {
             let pct = v as u32;
             let mut ok = native_brightness_set(pct);
+            if !ok {
+                let _ = powershell(&format!(
+                    "Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods | Invoke-CimMethod -MethodName WmiSetBrightness -Arguments @{{Timeout=1;Brightness={}}}",
+                    pct
+                ));
+            }
             if crate::mon::set_ddc_brightness_all(pct) {
                 ok = true;
             }

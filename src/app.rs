@@ -1966,7 +1966,15 @@ impl App {
         sys::brightness_set(next);
         for d in &mut self.displays {
             let d_cur = d.brightness as i32;
-            d.brightness = (d_cur + delta).clamp(0, 100) as u32;
+            let d_next = (d_cur + delta).clamp(0, 100) as u32;
+            d.brightness = d_next;
+            if !d.is_internal {
+                if let Some(ext_idx) = d.external_idx {
+                    std::thread::spawn(move || {
+                        let _ = crate::mon::set_ddc_brightness_index(ext_idx, d_next);
+                    });
+                }
+            }
         }
         self.render_bar();
         if self.expanded && self.page == Page::Controls {

@@ -238,13 +238,13 @@ pub fn set_ddc_brightness_index(target_idx: usize, percent: u32) -> bool {
             ];
             if unsafe { (ctx.api.get_monitors)(hmon, count, monitors.as_mut_ptr()) }.as_bool() {
                 for pm in &monitors {
-                    if ctx.current_idx == ctx.target_idx {
-                        let mut min = 0u32;
-                        let mut cur = 0u32;
-                        let mut max = 0u32;
-                        if unsafe { (ctx.api.get_brightness)(pm.handle, &mut min, &mut cur, &mut max) }
-                            .as_bool()
-                        {
+                    let mut min = 0u32;
+                    let mut cur = 0u32;
+                    let mut max = 0u32;
+                    if unsafe { (ctx.api.get_brightness)(pm.handle, &mut min, &mut cur, &mut max) }
+                        .as_bool()
+                    {
+                        if ctx.current_idx == ctx.target_idx {
                             let target = if max > min {
                                 min + ((max - min) as f64 * (ctx.percent.min(100) as f64 / 100.0)).round()
                                     as u32
@@ -255,8 +255,8 @@ pub fn set_ddc_brightness_index(target_idx: usize, percent: u32) -> bool {
                                 ctx.success = true;
                             }
                         }
+                        ctx.current_idx += 1;
                     }
-                    ctx.current_idx += 1;
                 }
                 unsafe {
                     let _ = (ctx.api.destroy_monitors)(count, monitors.as_ptr());

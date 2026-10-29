@@ -113,8 +113,10 @@ pub fn update_geometry() {
             vy,
             vw,
             vh,
-            SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOREDRAW,
+            SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED,
         );
+        let _ = InvalidateRect(Some(hwnd), None, true);
+        let _ = UpdateWindow(hwnd);
     }
 }
 
@@ -134,9 +136,11 @@ pub fn set_filter(enabled: bool, percent: u32) {
 
     unsafe {
         if enabled && alpha > 0 {
-            let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), alpha, LWA_ALPHA);
             update_geometry();
+            let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), alpha, LWA_ALPHA);
             let _ = ShowWindow(hwnd, SW_SHOWNA);
+            let _ = InvalidateRect(Some(hwnd), None, true);
+            let _ = UpdateWindow(hwnd);
         } else {
             let _ = ShowWindow(hwnd, SW_HIDE);
         }
