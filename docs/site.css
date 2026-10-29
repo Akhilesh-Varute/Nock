@@ -235,6 +235,7 @@ h1 .hl::after { content: ""; position: absolute; left: 0; right: 0; bottom: -.04
 .chips > span { font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .08em; margin-right: 2px; }
 .chip { all: unset; cursor: pointer; border: 2px solid var(--ink); border-radius: 999px; padding: 8px 14px; font: 600 14px var(--body); min-height: 40px; box-sizing: border-box; display: inline-flex; align-items: center; transition: background .15s, color .15s; }
 .chip:hover { background: var(--ink); color: var(--bone); } .chip:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+.chip.on-hot { background: var(--bone); } .chip.on-hot:hover { background: var(--ink); color: var(--bone); }
 .hero .wrap { position: relative; }
 .h1w { position: relative; width: fit-content; max-width: 100%; }
 .h1w .ov { display: none; }
