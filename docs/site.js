@@ -390,7 +390,8 @@
   /* ---------- live counts: downloads across all releases, GitHub stars ---------- */
   function showProof(stars, dls) {
     $$('[data-proof]').forEach(function (el) {
-      el.textContent = dls.toLocaleString('en') + ' downloads · ' + stars.toLocaleString('en') + ' GitHub stars';
+      el.innerHTML = '<span class="pn"><b>' + dls.toLocaleString('en') + '</b>downloads</span>' +
+        '<span class="pn"><b>' + stars.toLocaleString('en') + '</b>GitHub stars</span>';
       el.hidden = false;
     });
   }
