@@ -4,6 +4,7 @@ mod app;
 mod bar;
 mod buddy;
 mod cal;
+mod filter;
 mod cast;
 mod game;
 mod games;
@@ -333,7 +334,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             }
         }
         WM_DPICHANGED => a.on_display_change((wp.0 & 0xffff) as f32 / 96.0),
-        WM_DISPLAYCHANGE => a.on_display_change(sys::scale_of(sys::pick_monitor(a.cfg.monitor))),
+        WM_DISPLAYCHANGE => {
+            crate::filter::update_geometry();
+            a.on_display_change(sys::scale_of(sys::pick_monitor(a.cfg.monitor)))
+        }
         WM_TRAY => on_tray(hwnd, a, lp),
         WM_DESTROY => {
             sys::reserve_top(hwnd, &RECT::default(), 0);

@@ -222,6 +222,8 @@ pub struct App {
     pub radios: Radios,
     pub brightness: Option<u32>,
     pub displays: Vec<sys::DisplayInfo>,
+    pub filter_active: bool,
+    pub filter_pct: u32,
     bri_asked: bool,
 
     // clipboard
@@ -382,6 +384,8 @@ impl App {
             radios: Radios::default(),
             brightness: None,
             displays: Vec::new(),
+            filter_active: false,
+            filter_pct: 30,
             bri_asked: false,
             clips: Vec::new(),
             pins: store::load_pins(),
