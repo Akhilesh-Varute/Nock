@@ -422,6 +422,8 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
         let st = if a.cfg.stats { MF_CHECKED } else { MF_UNCHECKED };
         let fh = if a.cfg.fs_hide { MF_CHECKED } else { MF_UNCHECKED };
         let _ = AppendMenuW(menu, MF_STRING | fh, 16, w!("Hide in full-screen apps"));
+        let ah = if a.cfg.auto_hide { MF_CHECKED } else { MF_UNCHECKED };
+        let _ = AppendMenuW(menu, MF_STRING | ah, 50, w!("Auto-hide (show when pointer hits the top edge)"));
         let ac = if a.cfg.auto_close { MF_CHECKED } else { MF_UNCHECKED };
         let _ = AppendMenuW(menu, MF_STRING | ac, 17, w!("Close the panel when the pointer leaves"));
         let sm = if a.cfg.smart { MF_CHECKED } else { MF_UNCHECKED };
@@ -546,6 +548,7 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             13 => a.toggle_auto_break(),
             16 => a.toggle_fs_hide(),
             17 => a.toggle_auto_close(),
+            50 => a.toggle_auto_hide(),
             18 => a.toggle_smart(),
             19 => a.toggle_smart_sound(),
             14 => {
