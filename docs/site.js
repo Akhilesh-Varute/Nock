@@ -107,6 +107,7 @@
     if (st.open === v) return;
     st.open = v;
     notch.classList.toggle('open', v);
+    notch.classList.toggle('attn', !v); // a soft blue pulse while closed, so the notch is easy to spot
     pill.setAttribute('aria-expanded', v);
     panel.inert = !v;
     document.body.classList.toggle('touched', v); // the "poke it" hint hides while open and returns on close
@@ -485,5 +486,6 @@
   if (!/Windows/i.test(navigator.userAgent)) $('#osNote').style.display = 'block';
 
   /* ---------- init ---------- */
+  notch.classList.add('attn');
   renderTodos(); renderClips(); renderCal(); loadTrack(); statsTick(); focusView(); showTab('media'); size(); renderPill();
 })();
