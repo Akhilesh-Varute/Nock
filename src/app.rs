@@ -221,6 +221,7 @@ pub struct App {
     pub radio: radio::Handle,
     pub radios: Radios,
     pub brightness: Option<u32>,
+    pub displays: Vec<sys::DisplayInfo>,
     bri_asked: bool,
 
     // clipboard
@@ -380,6 +381,7 @@ impl App {
             radio: radio::start(hwnd.0 as isize),
             radios: Radios::default(),
             brightness: None,
+            displays: Vec::new(),
             bri_asked: false,
             clips: Vec::new(),
             pins: store::load_pins(),
@@ -1935,11 +1937,22 @@ impl App {
 
     pub fn on_brightness(&mut self, supported: bool, percent: u32) {
         self.brightness = supported.then_some(percent.min(100));
+        self.displays = sys::display_monitors();
         if self.expanded && self.page == Page::Controls {
             self.render();
         }
         self.render_bar();
         self.on_pop_data();
+    }
+
+    pub fn set_display_bri(&mut self, idx: usize, pct: u32) {
+        if let Some(d) = self.displays.get_mut(idx) {
+            d.brightness = pct;
+        }
+        if idx == 0 || self.displays.is_empty() {
+            self.brightness = Some(pct);
+        }
+        sys::brightness_set_display(idx, pct);
     }
 
     /// Ask for the brightness once so the top bar knows whether to show the icon.

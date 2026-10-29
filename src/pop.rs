@@ -57,7 +57,7 @@ enum PopAct {
     Toggle(u8), // 0 = Wi-Fi, 1 = Bluetooth
     Mute,
     Vol(Rect),
-    Bri(Rect),
+    Bri(usize, Rect),
     Wifi(usize),
     Bt(usize),
     Link(&'static str),
@@ -79,6 +79,7 @@ pub struct Pop {
     hot: Option<usize>,
     tracking: bool,
     drag: Option<Rect>,
+    drag_bri_idx: Option<usize>,
     h: f32,
 }
 
@@ -107,6 +108,7 @@ impl Pop {
             hot: None,
             tracking: false,
             drag: None,
+            drag_bri_idx: None,
             h: 100.0,
         })
     }
@@ -455,6 +457,7 @@ impl App {
         let devices = self.radio.devices.lock().unwrap().clone();
         let (vol, muted) = (self.volume, self.muted);
         let bri = self.brightness;
+        let displays = self.displays.clone();
         let accent = self.accent;
         let binfo = sys::battery_info();
         let (year, month, day, wday, hh, mm, ..) = sys::local_time();
@@ -794,30 +797,63 @@ impl App {
             }
             BarAct::Brightness => {
                 ops.push(title("Display", y));
-                y += 40.0;
-                let sr = Rect::new(20.0, y, w - 40.0, 24.0);
-                let frac = bri.map(|b| b as f32 / 100.0).unwrap_or(0.5);
-                let ok = true;
-                ops.push(Box::new(move |g, h, hot| {
-                    let track = Rect::new(sr.x, sr.cy() - 3.0, sr.w, 6.0);
-                    g.fill_rrect(track, 3.0, th.hover);
-                    let fw = (sr.w * frac.clamp(0.0, 1.0)).max(0.0);
-                    if ok {
-                        if fw > 0.5 {
-                            g.fill_rrect(Rect::new(sr.x, track.y, fw, 6.0), 3.0, accent);
-                        }
-                        let idx = h.len();
-                        g.fill_circle(sr.x + fw, sr.cy(), if hot == Some(idx) { 8.0 } else { 7.0 }, Color::white(1.0));
-                        h.push((Rect::new(sr.x - 8.0, sr.y, sr.w + 16.0, sr.h), PopAct::Bri(sr)));
+                y += 34.0;
+                if displays.len() > 1 {
+                    for (i, d) in displays.iter().enumerate() {
+                        let disp_name = d.name.clone();
+                        let b_val = d.brightness;
+                        ops.push(Box::new(move |g, _h, _| {
+                            g.text(
+                                &format!("{} ({}%)", disp_name, b_val),
+                                Rect::new(20.0, y, w - 40.0, 18.0),
+                                &g.fonts.small,
+                                th.t2,
+                                Align::Left,
+                            );
+                        }));
+                        y += 20.0;
+                        let sr = Rect::new(20.0, y, w - 40.0, 24.0);
+                        let frac = b_val as f32 / 100.0;
+                        ops.push(Box::new(move |g, h, hot| {
+                            let track = Rect::new(sr.x, sr.cy() - 3.0, sr.w, 6.0);
+                            g.fill_rrect(track, 3.0, th.hover);
+                            let fw = (sr.w * frac.clamp(0.0, 1.0)).max(0.0);
+                            if fw > 0.5 {
+                                g.fill_rrect(Rect::new(sr.x, track.y, fw, 6.0), 3.0, accent);
+                            }
+                            let idx = h.len();
+                            g.fill_circle(sr.x + fw, sr.cy(), if hot == Some(idx) { 8.0 } else { 7.0 }, Color::white(1.0));
+                            h.push((Rect::new(sr.x - 8.0, sr.y, sr.w + 16.0, sr.h), PopAct::Bri(i, sr)));
+                        }));
+                        y += 32.0;
                     }
-                }));
-                y += 36.0;
-                let t = match bri {
-                    Some(b) => format!("Brightness {}%", b),
-                    None => "Drag to set brightness".to_string(),
-                };
-                ops.push(note(t, y - 4.0, th.t2));
-                y += 22.0;
+                    y += 6.0;
+                } else {
+                    let sr = Rect::new(20.0, y, w - 40.0, 24.0);
+                    let frac = bri.map(|b| b as f32 / 100.0).unwrap_or(0.5);
+                    let ok = true;
+                    ops.push(Box::new(move |g, h, hot| {
+                        let track = Rect::new(sr.x, sr.cy() - 3.0, sr.w, 6.0);
+                        g.fill_rrect(track, 3.0, th.hover);
+                        let fw = (sr.w * frac.clamp(0.0, 1.0)).max(0.0);
+                        if ok {
+                            if fw > 0.5 {
+                                g.fill_rrect(Rect::new(sr.x, track.y, fw, 6.0), 3.0, accent);
+                            }
+                            let idx = h.len();
+                            g.fill_circle(sr.x + fw, sr.cy(), if hot == Some(idx) { 8.0 } else { 7.0 }, Color::white(1.0));
+                            h.push((Rect::new(sr.x - 8.0, sr.y, sr.w + 16.0, sr.h), PopAct::Bri(0, sr)));
+                        }
+                    }));
+                    y += 36.0;
+                    let display_title = displays.first().map(|d| d.name.as_str()).unwrap_or("Brightness");
+                    let t = match bri {
+                        Some(b) => format!("{} {}%", display_title, b),
+                        None => "Drag to set brightness".to_string(),
+                    };
+                    ops.push(note(t, y - 4.0, th.t2));
+                    y += 22.0;
+                }
             }
             BarAct::Battery => {
                 ops.push(title("Battery", y));
@@ -1006,8 +1042,8 @@ impl App {
                     if self.pop_kind() == Some(BarAct::Brightness) {
                         let v = ((x - r.x) / r.w).clamp(0.0, 1.0);
                         let pct = (v * 100.0).round() as u32;
-                        self.brightness = Some(pct);
-                        sys::brightness_set(pct); // coalesced, so cheap to call per move
+                        let idx = self.pop.as_ref().and_then(|p| p.drag_bri_idx).unwrap_or(0);
+                        self.set_display_bri(idx, pct);
                     } else {
                         self.set_vol_from(r, x);
                     }
@@ -1035,19 +1071,27 @@ impl App {
                     .pop
                     .as_ref()
                     .and_then(|p| p.hits.iter().find(|(r, _)| r.contains(x, y)).map(|h| h.1));
-                if let Some(PopAct::Vol(r)) | Some(PopAct::Bri(r)) = act {
+                if let Some(PopAct::Vol(r)) = act {
                     if let Some(p) = self.pop.as_mut() {
                         p.drag = Some(r);
+                        p.drag_bri_idx = None;
                     }
                     unsafe {
                         SetCapture(hwnd);
                     }
-                    if matches!(act, Some(PopAct::Bri(_))) {
-                        let v = ((x - r.x) / r.w).clamp(0.0, 1.0);
-                        self.brightness = Some((v * 100.0).round() as u32);
-                    } else {
-                        self.set_vol_from(r, x);
+                    self.set_vol_from(r, x);
+                    self.render_pop();
+                } else if let Some(PopAct::Bri(idx, r)) = act {
+                    if let Some(p) = self.pop.as_mut() {
+                        p.drag = Some(r);
+                        p.drag_bri_idx = Some(idx);
                     }
+                    unsafe {
+                        SetCapture(hwnd);
+                    }
+                    let v = ((x - r.x) / r.w).clamp(0.0, 1.0);
+                    let pct = (v * 100.0).round() as u32;
+                    self.set_display_bri(idx, pct);
                     self.render_pop();
                 }
                 LRESULT(0)
@@ -1055,15 +1099,21 @@ impl App {
             WM_LBUTTONUP => {
                 let dragging = self.pop.as_ref().map(|p| p.drag.is_some()).unwrap_or(false);
                 if dragging {
+                    let bri_idx = self.pop.as_ref().and_then(|p| p.drag_bri_idx);
                     if let Some(p) = self.pop.as_mut() {
                         p.drag = None;
+                        p.drag_bri_idx = None;
                     }
                     unsafe {
                         let _ = ReleaseCapture();
                     }
                     if self.pop_kind() == Some(BarAct::Brightness) {
-                        if let Some(b) = self.brightness {
-                            sys::brightness_set(b); // slow call, so only on release
+                        if let Some(idx) = bri_idx {
+                            if let Some(d) = self.displays.get(idx) {
+                                sys::brightness_set_display(idx, d.brightness);
+                            }
+                        } else if let Some(b) = self.brightness {
+                            sys::brightness_set(b);
                         }
                     }
                     self.render_bar();

@@ -344,18 +344,50 @@ fn native_brightness_set(percent: u32) -> bool {
     ok
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct DisplayInfo {
+    pub name: String,
+    pub is_internal: bool,
+    pub brightness: u32,
+    pub external_idx: Option<usize>,
+}
+
+pub static DISPLAY_MONITORS: std::sync::Mutex<Vec<DisplayInfo>> = std::sync::Mutex::new(Vec::new());
+
+pub fn display_monitors() -> Vec<DisplayInfo> {
+    DISPLAY_MONITORS.lock().unwrap().clone()
+}
+
 pub fn brightness_load(hwnd: isize) {
     std::thread::spawn(move || {
-        let v = native_brightness_get().or_else(|| {
-            let ddc = crate::mon::get_ddc_brightness_all();
-            ddc.first().map(|m| m.current)
-        });
+        let mut list = Vec::new();
+        let internal_bri = native_brightness_get();
+        if let Some(ib) = internal_bri {
+            list.push(DisplayInfo {
+                name: "Built-in Screen".to_string(),
+                is_internal: true,
+                brightness: ib,
+                external_idx: None,
+            });
+        }
+        let ddc_displays = crate::mon::get_ddc_brightness_all();
+        for (i, d) in ddc_displays.into_iter().enumerate() {
+            list.push(DisplayInfo {
+                name: d.name,
+                is_internal: false,
+                brightness: d.current,
+                external_idx: Some(i),
+            });
+        }
+        let primary_bri = list.first().map(|d| d.brightness).or(internal_bri);
+        *DISPLAY_MONITORS.lock().unwrap() = list;
+
         unsafe {
             let _ = PostMessageW(
                 Some(HWND(hwnd as *mut _)),
                 WM_BRIGHT,
-                WPARAM(v.is_some() as usize),
-                LPARAM(v.unwrap_or(0) as isize),
+                WPARAM(primary_bri.is_some() as usize),
+                LPARAM(primary_bri.unwrap_or(0) as isize),
             );
         }
     });
@@ -363,6 +395,23 @@ pub fn brightness_load(hwnd: isize) {
 
 static BRI_PENDING: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
 static BRI_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Set the brightness on a specific display index, or all displays if out of bounds.
+pub fn brightness_set_display(idx: usize, percent: u32) {
+    let monitors = DISPLAY_MONITORS.lock().unwrap().clone();
+    if let Some(disp) = monitors.get(idx) {
+        if disp.is_internal {
+            brightness_set(percent);
+        } else if let Some(ext_idx) = disp.external_idx {
+            let pct = percent.min(100);
+            std::thread::spawn(move || {
+                let _ = crate::mon::set_ddc_brightness_index(ext_idx, pct);
+            });
+        }
+    } else {
+        brightness_set(percent);
+    }
+}
 
 /// Set the brightness. Safe to call many times while dragging: calls are coalesced
 /// so only the latest value is applied, one at a time.

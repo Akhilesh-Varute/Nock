@@ -208,6 +208,84 @@ pub fn set_ddc_brightness_all(percent: u32) -> bool {
     ctx.success
 }
 
+/// Set brightness on a specific physical DDC/CI monitor by index.
+pub fn set_ddc_brightness_index(target_idx: usize, percent: u32) -> bool {
+    let Some(api) = dxva2() else { return false };
+
+    struct Context<'a> {
+        api: &'a Dxva2,
+        target_idx: usize,
+        current_idx: usize,
+        percent: u32,
+        success: bool,
+    }
+
+    unsafe extern "system" fn enum_proc(
+        hmon: HMONITOR,
+        _hdc: HDC,
+        _rect: *mut RECT,
+        lparam: LPARAM,
+    ) -> BOOL {
+        let ctx = unsafe { &mut *(lparam.0 as *mut Context) };
+        let mut count = 0u32;
+        if unsafe { (ctx.api.get_count)(hmon, &mut count) }.as_bool() && count > 0 {
+            let mut monitors = vec![
+                PhysicalMonitor {
+                    handle: HANDLE(std::ptr::null_mut()),
+                    desc: [0; 128],
+                };
+                count as usize
+            ];
+            if unsafe { (ctx.api.get_monitors)(hmon, count, monitors.as_mut_ptr()) }.as_bool() {
+                for pm in &monitors {
+                    if ctx.current_idx == ctx.target_idx {
+                        let mut min = 0u32;
+                        let mut cur = 0u32;
+                        let mut max = 0u32;
+                        if unsafe { (ctx.api.get_brightness)(pm.handle, &mut min, &mut cur, &mut max) }
+                            .as_bool()
+                        {
+                            let target = if max > min {
+                                min + ((max - min) as f64 * (ctx.percent.min(100) as f64 / 100.0)).round()
+                                    as u32
+                            } else {
+                                ctx.percent.min(100)
+                            };
+                            if unsafe { (ctx.api.set_brightness)(pm.handle, target) }.as_bool() {
+                                ctx.success = true;
+                            }
+                        }
+                    }
+                    ctx.current_idx += 1;
+                }
+                unsafe {
+                    let _ = (ctx.api.destroy_monitors)(count, monitors.as_ptr());
+                }
+            }
+        }
+        BOOL(1)
+    }
+
+    let mut ctx = Context {
+        api,
+        target_idx,
+        current_idx: 0,
+        percent,
+        success: false,
+    };
+
+    unsafe {
+        let _ = EnumDisplayMonitors(
+            None,
+            None,
+            Some(enum_proc),
+            LPARAM(&mut ctx as *mut _ as isize),
+        );
+    }
+
+    ctx.success
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
