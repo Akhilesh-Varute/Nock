@@ -126,7 +126,7 @@
     notch.classList.remove('jig'); void notch.offsetWidth; notch.classList.add('jig');
   });
   document.addEventListener('pointerdown', function (e) {
-    if (st.open && !st.pinned && !notch.contains(e.target) && !e.target.closest('[data-hint]')) setOpen(false);
+    if (st.open && !st.pinned && !notch.contains(e.target) && !e.target.closest('[data-hint], .quest')) setOpen(false);
   });
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
@@ -490,6 +490,14 @@
   if (!/Windows/i.test(navigator.userAgent)) $('#osNote').style.display = 'block';
 
   /* ---------- init ---------- */
+  var QDO = { // clicking a quest does the action for you
+    open: function () { setOpen(true); },
+    task: quickAdd,
+    focus: function () { setOpen(true); showTab('today'); if (!st.timer) startFocus(); },
+    copy: function () { if (st.open && !st.pinned) setOpen(false); hint('Link copied', 'ok', 2800, 190); quest('copy'); },
+    brick: function () { setOpen(true); showTab('games'); startGame(); }
+  };
+  $$('.quest').forEach(function (q) { q.addEventListener('click', function () { (QDO[q.dataset.q] || function () {})(); }); });
   notch.classList.add('attn');
   renderTodos(); renderClips(); renderCal(); loadTrack(); statsTick(); focusView(); showTab('media'); size(); renderPill();
 })();

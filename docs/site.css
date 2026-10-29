@@ -277,6 +277,8 @@ body.touched .poke { opacity: 0; }
 .quest { display: flex; align-items: center; gap: 10px; border: 2px solid var(--ink); border-radius: 12px; padding: 9px 14px 9px 10px; font: 600 14px var(--body); background: var(--bone); transition: background .3s, transform .3s; }
 .quest i { width: 22px; height: 22px; border: 2px solid var(--ink); border-radius: 7px; display: grid; place-items: center; flex: none; }
 .quest.done { background: var(--ink); color: var(--bone); transform: rotate(-1deg); } .quest.done i { background: var(--ok); border-color: var(--ok); }
+.quest { appearance: none; cursor: pointer; color: inherit; text-align: left; }
+.quest:hover:not(.done) { background: var(--bone2); transform: translateY(-2px); }
 .quest.done i::after { content: ""; width: 5px; height: 10px; border: solid #000; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg) translate(-1px, -1px); }
 .unlock { margin-top: 14px; display: none; font: 700 16px var(--body); background: var(--hot); border: 2px solid var(--ink); padding: 12px 16px; border-radius: 12px; box-shadow: 5px 5px 0 var(--ink); max-width: 640px; }
 .unlock.on { display: block; animation: pop .5s cubic-bezier(.2,1.5,.3,1); } @keyframes pop { from { transform: scale(.7); opacity: 0; } }
