@@ -182,6 +182,66 @@
     if (label) { hint(label + ' copied', 'ok', 2800, 200); if (label === 'Link') quest('copy'); }
   });
 
+  /* ---------- original loops, synthesised live with Web Audio (no audio files, no licensing) ---------- */
+  var SYN = (function () {
+    var ctx, out, noise, iv, nextT, step, tr;
+    var TR = [
+      { bpm: 76, root: 57, ch: [[0, 3, 7, 10], [5, 8, 12, 15], [3, 7, 10, 14], [7, 10, 14, 17]] },
+      { bpm: 68, root: 52, ch: [[0, 4, 7, 11], [9, 12, 16, 19], [5, 9, 12, 16], [7, 11, 14, 17]] },
+      { bpm: 84, root: 60, ch: [[0, 3, 7, 10], [8, 12, 15, 19], [5, 8, 12, 15], [10, 14, 17, 21]] }
+    ];
+    function hz(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+    function init() {
+      if (ctx) return;
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200;
+      var comp = ctx.createDynamicsCompressor();
+      out = ctx.createGain(); out.gain.value = 0.55;
+      out.connect(lp); lp.connect(comp); comp.connect(ctx.destination);
+      noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      var d = noise.getChannelData(0); for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    function tone(type, f, t, dur, vol, atk, lpf) {
+      var o = ctx.createOscillator(), g = ctx.createGain(), n = lpf ? ctx.createBiquadFilter() : null;
+      o.type = type; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + atk); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      if (n) { n.type = 'lowpass'; n.frequency.value = lpf; o.connect(n); n.connect(g); } else o.connect(g);
+      g.connect(out); o.start(t); o.stop(t + dur + 0.05);
+    }
+    function kick(t) {
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.14);
+      g.gain.setValueAtTime(0.7, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.25);
+    }
+    function hit(t, type, f, vol, dur) {
+      var s = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), g = ctx.createGain();
+      s.buffer = noise; fl.type = type; fl.frequency.value = f;
+      g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      s.connect(fl); fl.connect(g); g.connect(out); s.start(t); s.stop(t + dur + 0.02);
+    }
+    function eighth(i, t, e) { // one eighth note of a 4-bar loop: chords, bass, kick, snare, hats, a few random notes
+      var c = tr.ch[Math.floor(i / 8) % 4], k = i % 8;
+      if (k === 0) c.forEach(function (n) { tone('triangle', hz(tr.root + n + 12), t, e * 7.5, 0.045, 0.12, 1400); });
+      if (k === 0 || k === 3 || k === 4) tone('sine', hz(tr.root + c[0] - 12), t, e * 1.8, 0.34, 0.01);
+      if (k === 0 || k === 4) kick(t);
+      if (k === 2 || k === 6) hit(t, 'bandpass', 1900, 0.16, 0.13);
+      hit(t + (k % 2 ? e * 0.18 : 0), 'highpass', 7500, k % 2 ? 0.035 : 0.06, 0.04);
+      if (k % 2 && Math.random() < 0.4) tone('triangle', hz(tr.root + c[Math.floor(Math.random() * c.length)] + 24), t, e * 2.2, 0.06, 0.01, 2600);
+    }
+    function tick() {
+      var e = 30 / tr.bpm;
+      while (nextT < ctx.currentTime + 0.3) { eighth(step, nextT, e); nextT += e; step++; }
+    }
+    return {
+      play: function (n) {
+        init(); clearInterval(iv); tr = TR[n % TR.length]; step = 0;
+        ctx.resume(); nextT = ctx.currentTime + 0.08; tick(); iv = setInterval(tick, 60);
+      },
+      pause: function () { clearInterval(iv); if (ctx) ctx.suspend(); }
+    };
+  })();
+
   /* ---------- media ---------- */
   function loadTrack() {
     var t = tracks[st.track]; st.pos = 0;
@@ -195,9 +255,17 @@
     var b = $('#mPlay'); b.setAttribute('aria-label', st.playing ? 'Pause' : 'Play');
     b.innerHTML = icon(st.playing ? 'pause' : 'play');
   }
-  $('#mPlay').addEventListener('click', function () { st.playing = !st.playing; mediaView(); renderPill(); });
-  $('#mNext').addEventListener('click', function () { st.track = (st.track + 1) % tracks.length; loadTrack(); });
-  $('#mPrev').addEventListener('click', function () { st.track = (st.track + tracks.length - 1) % tracks.length; loadTrack(); });
+  $('#mPlay').addEventListener('click', function () {
+    st.playing = !st.playing;
+    try { if (st.playing) { SYN.play(st.track); toast('Playing: made live in your browser'); } else SYN.pause(); } catch (e) {}
+    mediaView(); renderPill();
+  });
+  function goTrack(d) {
+    st.track = (st.track + d + tracks.length) % tracks.length; loadTrack();
+    if (st.playing) { try { SYN.play(st.track); } catch (e) {} }
+  }
+  $('#mNext').addEventListener('click', function () { goTrack(1); });
+  $('#mPrev').addEventListener('click', function () { goTrack(-1); });
   function seekTo(e) {
     var r = $('#seek').getBoundingClientRect(), f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
     st.pos = f * tracks[st.track][2]; mediaView();
@@ -341,7 +409,7 @@
   /* ---------- clocks and the 1 Hz tick ---------- */
   setInterval(function () {
     $('#barClock').textContent = clock().bar;
-    if (st.playing) { st.pos++; if (st.pos >= tracks[st.track][2]) { st.track = (st.track + 1) % tracks.length; loadTrack(); } mediaView(); }
+    if (st.playing) { st.pos++; if (st.pos >= tracks[st.track][2]) goTrack(1); mediaView(); }
     up++; if (st.open && st.tab === 'stats') statsTick();
     if (!st.hint && !st.timer) renderPill();
   }, 1000);
