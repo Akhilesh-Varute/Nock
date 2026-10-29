@@ -26,7 +26,7 @@ const SPR_X: f32 = 342.0;
 pub const T_BUDDY: usize = 14;
 pub const T_BWAKE: usize = 15;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BuddyKind {
     Blob,
     Cat,
@@ -37,6 +37,7 @@ pub enum BuddyKind {
     Ronin,
     Courier,
     Necro,
+    Clippy,
 }
 
 impl BuddyKind {
@@ -55,6 +56,14 @@ impl BuddyKind {
             BuddyKind::Ronin => &["Patience.", "The blade is quiet.", "One cut.", "Rain will come.", "Breathe.", "Hm."],
             BuddyKind::Courier => &["Delivery's late. Again.", "Not my problem.", "Neon never sleeps.", "Fast lane.", "Tip me.", "Zero ping."],
             BuddyKind::Necro => &["Rise.", "Death is a pause.", "Mind the bones.", "Souls. So many.", "Hush...", "Not dead yet?"],
+            BuddyKind::Clippy => &[
+                "It looks like you're writing code.",
+                "Need assistance with that function?",
+                "Don't forget to commit!",
+                "Just checking in on you!",
+                "Would you like help with that?",
+                "Remember to save your work!",
+            ],
             _ => return None,
         };
         Some(list[(r as usize) % list.len()])
@@ -71,6 +80,7 @@ impl BuddyKind {
             6 => Some(BuddyKind::Ronin),
             7 => Some(BuddyKind::Courier),
             8 => Some(BuddyKind::Necro),
+            9 => Some(BuddyKind::Clippy),
             _ => None,
         }
     }
@@ -695,11 +705,111 @@ fn palette(kind: BuddyKind) -> (Color, Color) {
         BuddyKind::Hero => (Color(0.18, 0.70, 0.76, 1.0), Color(0.1, 0.5, 0.58, 1.0)),
         BuddyKind::Robot => (Color(0.74, 0.8, 0.9, 1.0), Color(0.5, 0.57, 0.7, 1.0)),
         BuddyKind::Ronin | BuddyKind::Courier | BuddyKind::Necro => (Color(0.5, 0.5, 0.5, 1.0), Color(0.3, 0.3, 0.3, 1.0)),
+        BuddyKind::Clippy => (Color(0.82, 0.85, 0.90, 1.0), Color(0.48, 0.52, 0.58, 1.0)),
+    }
+}
+
+fn draw_clippy(g: &Gfx, cx: f32, bob: f32, p: &Pose, mode: Mode, tick: u32, body: Color, dark: Color, ink: Color) {
+    let flex = p.wag * 1.5;
+
+    // Ground shadow
+    g.fill_rrect(
+        Rect::new(cx - 7.0, 27.0, 14.0, 2.2),
+        1.1,
+        Color(0.0, 0.0, 0.0, (0.22 - bob.max(0.0) * 0.03).max(0.08)),
+    );
+
+    // Wire loops:
+    let r_out = Rect::new(cx - 5.5 + flex * 0.3, 8.0 - bob, 11.0, 18.5);
+    g.stroke_rrect(Rect::new(r_out.x + 0.5, r_out.y + 0.5, r_out.w, r_out.h), 5.5, dark, 1.8);
+    g.stroke_rrect(r_out, 5.5, body, 1.8);
+
+    let r_in = Rect::new(cx - 3.0 + flex * 0.15, 12.0 - bob, 6.0, 12.5);
+    g.stroke_rrect(Rect::new(r_in.x + 0.5, r_in.y + 0.5, r_in.w, r_in.h), 3.0, dark, 1.5);
+    g.stroke_rrect(r_in, 3.0, body, 1.5);
+
+    g.line((cx + 3.0 + flex * 0.15, 14.5 - bob), (cx + 3.0 + flex * 0.15, 23.5 - bob), 1.5, body);
+
+    // Googly Eyes
+    let eye_y = 13.5 - bob;
+    let lx = p.look.0 * 1.4;
+    let ly = p.look.1 * 1.2;
+
+    for (sx, look_offset) in [(-3.0f32, -0.2f32), (3.0f32, 0.2f32)] {
+        let ex = cx + sx + flex * 0.2;
+        g.fill_circle(ex, eye_y, 3.3, Color::white(1.0));
+        g.fill_circle(ex, eye_y, 3.3, Color(0.0, 0.0, 0.0, 0.2));
+        g.fill_circle(ex, eye_y, 3.0, Color::white(1.0));
+
+        match p.eyes {
+            Eyes::Closed => {
+                g.line((ex - 2.0, eye_y), (ex + 2.0, eye_y), 1.2, ink);
+            }
+            Eyes::Happy => {
+                g.line((ex - 1.8, eye_y + 0.8), (ex, eye_y - 1.0), 1.3, ink);
+                g.line((ex, eye_y - 1.0), (ex + 1.8, eye_y + 0.8), 1.3, ink);
+            }
+            Eyes::Open => {
+                let px = (ex + lx + look_offset).clamp(ex - 1.6, ex + 1.6);
+                let py = (eye_y + ly).clamp(eye_y - 1.5, eye_y + 1.5);
+                g.fill_circle(px, py, 1.5, ink);
+                g.fill_circle(px - 0.5, py - 0.5, 0.5, Color::white(1.0));
+            }
+        }
+    }
+
+    // Eyebrows
+    let brow_wag = if mode == Mode::Dance || mode == Mode::Cheer {
+        ((tick as f32) * 0.4).sin() * 1.0
+    } else {
+        0.0
+    };
+    match p.eyes {
+        Eyes::Happy => {
+            g.line((cx - 5.5, 8.8 - bob - brow_wag), (cx - 1.2, 7.8 - bob - brow_wag), 1.3, ink);
+            g.line((cx + 1.2, 7.8 - bob - brow_wag), (cx + 5.5, 8.8 - bob - brow_wag), 1.3, ink);
+        }
+        Eyes::Closed => {
+            g.line((cx - 5.0, 10.0 - bob), (cx - 1.2, 10.0 - bob), 1.1, dark);
+            g.line((cx + 1.2, 10.0 - bob), (cx + 5.0, 10.0 - bob), 1.1, dark);
+        }
+        Eyes::Open => {
+            g.line((cx - 5.6, 9.8 - bob - brow_wag), (cx - 1.0, 8.6 - bob - brow_wag), 1.3, ink);
+            g.line((cx + 1.0, 9.2 - bob - brow_wag), (cx + 5.6, 10.2 - bob - brow_wag), 1.3, ink);
+        }
+    }
+
+    match mode {
+        Mode::Sleep => {
+            let c = Color(0.6, 0.65, 0.8, 0.9);
+            g.text("z", Rect::new(cx + 7.0, 6.0, 9.0, 9.0), &g.fonts.tiny, c, Align::Left);
+            g.text("Z", Rect::new(cx + 11.0, 0.5, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+        }
+        Mode::Dance => {
+            let c = Color(0.95, 0.55, 0.95, 0.95);
+            let side = if (tick / 5) % 2 == 0 { 12.0 } else { -20.0 };
+            g.text("\u{266A}", Rect::new(cx + side, 3.0, 12.0, 12.0), &g.fonts.small, c, Align::Left);
+        }
+        Mode::Cheer => {
+            let c = Color(1.0, 0.82, 0.2, 0.95);
+            let a = if (tick / 4) % 2 == 0 { 0.0 } else { 3.0 };
+            g.text("\u{2726}", Rect::new(cx - 20.0, 2.0 + a, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+            g.text("\u{2726}", Rect::new(cx + 12.0, 5.0 - a, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+        }
+        _ => {}
     }
 }
 
 fn draw_sprite(g: &Gfx, kind: BuddyKind, p: &Pose, mode: Mode, tick: u32) {
     let cx = SPR_X;
+    let bob = p.bob;
+    let (body, dark) = palette(kind);
+    let ink = Color(0.13, 0.12, 0.17, 1.0);
+
+    if kind == BuddyKind::Clippy {
+        draw_clippy(g, cx, bob, p, mode, tick, body, dark, ink);
+        return;
+    }
     let d = p.dir;
     let s = -d; // "behind" the character
     let bob = p.bob;
@@ -827,7 +937,7 @@ fn draw_sprite(g: &Gfx, kind: BuddyKind, p: &Pose, mode: Mode, tick: u32) {
             g.line((cx, hy - 7.5), (cx + 1.0, hy - 9.0), 1.1, Color(0.35, 0.7, 0.4, 1.0));
             g.fill_circle(cx + 2.2, hy - 9.3, 1.5, Color(0.45, 0.82, 0.5, 1.0));
         }
-        BuddyKind::Hero | BuddyKind::Ronin | BuddyKind::Courier | BuddyKind::Necro => {}
+        _ => {}
     }
 
     // head
@@ -946,5 +1056,18 @@ fn draw_sprite(g: &Gfx, kind: BuddyKind, p: &Pose, mode: Mode, tick: u32) {
             g.text("\u{2726}", Rect::new(cx + 12.0, 5.0 - a, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod clippy_tests {
+    use super::*;
+
+    #[test]
+    fn clippy_id_and_quotes() {
+        assert_eq!(BuddyKind::from_id(9), Some(BuddyKind::Clippy));
+        let q = BuddyKind::Clippy.quote(0).expect("clippy quote");
+        assert!(q.contains("code"));
+        assert!(BuddyKind::Clippy.quote(1).is_some());
     }
 }
