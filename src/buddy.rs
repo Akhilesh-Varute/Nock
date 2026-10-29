@@ -40,6 +40,7 @@ pub enum BuddyKind {
     Clippy,
     Merlin,
     Genie,
+    Rover,
 }
 
 impl BuddyKind {
@@ -82,6 +83,14 @@ impl BuddyKind {
                 "Poof! What can I do for ya?",
                 "Ain't never had a buddy like me!",
             ],
+            BuddyKind::Rover => &[
+                "Woof! Ready to fetch files!",
+                "Found 0 bugs on your screen!",
+                "Did somebody say treat?",
+                "Sniffing around the bar...",
+                "Ruff! You're doing great!",
+                "Squirrel?! Where?!",
+            ],
             _ => return None,
         };
         Some(list[(r as usize) % list.len()])
@@ -101,6 +110,7 @@ impl BuddyKind {
             9 => Some(BuddyKind::Clippy),
             10 => Some(BuddyKind::Merlin),
             11 => Some(BuddyKind::Genie),
+            12 => Some(BuddyKind::Rover),
             _ => None,
         }
     }
@@ -728,6 +738,106 @@ fn palette(kind: BuddyKind) -> (Color, Color) {
         BuddyKind::Clippy => (Color(0.82, 0.85, 0.90, 1.0), Color(0.48, 0.52, 0.58, 1.0)),
         BuddyKind::Merlin => (Color(0.24, 0.35, 0.72, 1.0), Color(0.96, 0.80, 0.25, 1.0)),
         BuddyKind::Genie => (Color(0.28, 0.72, 0.95, 1.0), Color(0.95, 0.78, 0.20, 1.0)),
+        BuddyKind::Rover => (Color(0.96, 0.78, 0.38, 1.0), Color(0.68, 0.42, 0.18, 1.0)),
+    }
+}
+
+fn draw_rover(g: &Gfx, cx: f32, bob: f32, p: &Pose, mode: Mode, tick: u32, body: Color, dark: Color, ink: Color) {
+    let d = p.dir;
+    let tail_wag = p.wag * 2.8;
+
+    // Ground shadow
+    g.fill_rrect(
+        Rect::new(cx - 9.0, 27.0, 18.0, 2.4),
+        1.2,
+        Color(0.0, 0.0, 0.0, (0.24 - bob.max(0.0) * 0.03).max(0.08)),
+    );
+
+    // Wagging tail behind body
+    let tail_start = (cx - d * 6.5, 20.0 - bob);
+    let tail_tip = (cx - d * (11.5 + tail_wag.abs() * 0.4), 14.0 - bob - tail_wag);
+    g.line(tail_start, tail_tip, 2.4, body);
+    g.fill_circle(tail_tip.0, tail_tip.1, 1.5, body);
+
+    // 4 Paws bobbing with walk
+    for (i, lx) in [-6.0f32, -2.0, 2.0, 6.0].iter().enumerate() {
+        let lift = if i % 2 == 0 { p.lift[0] } else { p.lift[1] };
+        g.fill_rrect(Rect::new(cx + lx, 24.8 - lift, 3.4, 3.0), 1.4, dark);
+    }
+
+    // Puppy Body
+    g.fill_rrect(Rect::new(cx - 7.5, 17.0 - bob, 15.0, 8.5), 4.2, body);
+    // White chest patch
+    g.fill_circle(cx + d * 3.5, 21.0 - bob, 2.6, Color::white(0.85));
+
+    // Red Collar & Golden Tag
+    let neck_x = cx + d * 3.2;
+    g.fill_rrect(Rect::new(neck_x - 3.8, 16.2 - bob, 7.6, 1.8), 0.9, Color(0.92, 0.22, 0.22, 1.0));
+    g.fill_circle(neck_x, 18.8 - bob, 1.2, Color(0.98, 0.82, 0.2, 1.0));
+
+    // Head
+    let head_x = cx + d * 3.6;
+    let head_y = 12.0 - bob;
+    g.fill_circle(head_x, head_y, 5.2, body);
+
+    // Floppy Brown Ears that swing with p.wag
+    let ear_swing = p.wag * 1.2;
+    g.fill_rrect(Rect::new(head_x - 5.8 + ear_swing * 0.3, head_y - 2.5, 3.2, 7.5), 1.6, dark);
+    g.fill_rrect(Rect::new(head_x + 2.6 - ear_swing * 0.3, head_y - 2.5, 3.2, 7.5), 1.6, dark);
+
+    // Snout & Nose
+    let snout_x = head_x + d * 2.8;
+    let snout_y = head_y + 1.8;
+    g.fill_circle(snout_x, snout_y, 2.5, Color(0.98, 0.88, 0.60, 1.0));
+    g.fill_circle(snout_x + d * 1.2, snout_y - 0.5, 1.2, ink);
+
+    // Panting tongue
+    if p.open_mouth {
+        let pink = Color(1.0, 0.55, 0.7, 1.0);
+        g.fill_circle(snout_x, snout_y + 1.8, 1.3, pink);
+    }
+
+    // Puppy Eyes
+    let lx = p.look.0 * 1.2;
+    let ly = p.look.1 * 1.0;
+    for sx in [-2.0f32, 2.0f32] {
+        let ex = head_x + sx;
+        let ey = head_y - 0.8;
+        match p.eyes {
+            Eyes::Closed => {
+                g.line((ex - 1.2, ey), (ex + 1.2, ey), 1.0, ink);
+            }
+            Eyes::Happy => {
+                g.line((ex - 1.2, ey + 0.6), (ex, ey - 0.7), 1.1, ink);
+                g.line((ex, ey - 0.7), (ex + 1.2, ey + 0.6), 1.1, ink);
+            }
+            Eyes::Open => {
+                g.fill_circle(ex, ey, 1.5, Color::white(1.0));
+                g.fill_circle(ex + lx * 0.4, ey + ly * 0.4, 1.0, ink);
+                g.fill_circle(ex + lx * 0.4 - 0.3, ey + ly * 0.4 - 0.3, 0.4, Color::white(1.0));
+            }
+        }
+    }
+
+    // Mode-specific extras
+    match mode {
+        Mode::Sleep => {
+            let c = Color(0.6, 0.65, 0.8, 0.9);
+            g.text("z", Rect::new(cx + 7.0, 6.0, 9.0, 9.0), &g.fonts.tiny, c, Align::Left);
+            g.text("Z", Rect::new(cx + 11.0, 0.5, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+        }
+        Mode::Dance => {
+            let c = Color(0.95, 0.55, 0.95, 0.95);
+            let side = if (tick / 5) % 2 == 0 { 12.0 } else { -20.0 };
+            g.text("\u{266A}", Rect::new(cx + side, 3.0, 12.0, 12.0), &g.fonts.small, c, Align::Left);
+        }
+        Mode::Cheer => {
+            let c = Color(1.0, 0.82, 0.2, 0.95);
+            let a = if (tick / 4) % 2 == 0 { 0.0 } else { 3.0 };
+            g.text("\u{2726}", Rect::new(cx - 20.0, 2.0 + a, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+            g.text("\u{2726}", Rect::new(cx + 12.0, 5.0 - a, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+        }
+        _ => {}
     }
 }
 
@@ -1078,6 +1188,10 @@ fn draw_sprite(g: &Gfx, kind: BuddyKind, p: &Pose, mode: Mode, tick: u32) {
         draw_genie(g, cx, bob, p, mode, tick, body, dark, ink);
         return;
     }
+    if kind == BuddyKind::Rover {
+        draw_rover(g, cx, bob, p, mode, tick, body, dark, ink);
+        return;
+    }
     let d = p.dir;
     let s = -d; // "behind" the character
     let bob = p.bob;
@@ -1353,5 +1467,13 @@ mod clippy_tests {
         let q = BuddyKind::Genie.quote(0).expect("genie quote");
         assert!(q.contains("wish"));
         assert!(BuddyKind::Genie.quote(1).is_some());
+    }
+
+    #[test]
+    fn rover_id_and_quotes() {
+        assert_eq!(BuddyKind::from_id(12), Some(BuddyKind::Rover));
+        let q = BuddyKind::Rover.quote(0).expect("rover quote");
+        assert!(q.contains("Woof"));
+        assert!(BuddyKind::Rover.quote(1).is_some());
     }
 }
