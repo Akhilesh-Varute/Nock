@@ -867,6 +867,13 @@ impl App {
         self.on_foreground();
     }
 
+    /// Tray: hide the notch until the pointer touches the top edge.
+    pub fn toggle_auto_hide(&mut self) {
+        self.cfg.auto_hide = !self.cfg.auto_hide;
+        crate::store::save_config(&self.cfg);
+        self.on_foreground();
+    }
+
     /// Tray: close the open panel automatically (on by default) or keep it until closed.
     pub fn toggle_auto_close(&mut self) {
         self.cfg.auto_close = !self.cfg.auto_close;
@@ -1993,7 +2000,11 @@ impl App {
         // foreground window), and never hide while a task is being typed.
         let fgw = unsafe { GetForegroundWindow() };
         let ours = fgw == self.hwnd || self.pop.as_ref().map(|p| p.hwnd) == Some(fgw);
-        let kind = if self.tucked || ours || self.entering.is_some() || !self.cfg.fs_hide {
+        let kind = if self.tucked || ours || self.entering.is_some() {
+            0
+        } else if self.cfg.auto_hide {
+            1 // hidden, but the top edge peeks it back (same as a full-screen app)
+        } else if !self.cfg.fs_hide {
             0
         } else {
             sys::fullscreen_kind(&[self.hwnd, self.bar.as_ref().map(|b| b.hwnd).unwrap_or_default(), self.pop.as_ref().map(|p| p.hwnd).unwrap_or_default()], &self.mon)
