@@ -4,97 +4,317 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nock: a notch for Windows</title>
-<meta name="description" content="A tiny native notch and top bar for Windows, written in Rust. About 1 MB, about 0% CPU when idle, no Electron. Free and MIT licensed.">
+<meta name="description" content="A native notch and top bar for Windows, written in Rust. About 1 MB, about 0% CPU when idle, no Electron. Free and MIT licensed. The demo on this page is playable.">
 <meta property="og:title" content="Nock: a notch for Windows in 1 MB of Rust">
-<meta property="og:description" content="Media, timers, to-dos, clipboard history and system dropdowns in a native notch. No Electron, about 0% CPU idle.">
+<meta property="og:description" content="Tasks, a focus timer, music, clipboard history and system dropdowns in a native notch. No Electron. Try it right on the page.">
 <meta property="og:image" content="https://nock.akhilvarute.me/icon.png">
+<meta name="theme-color" content="#0a0a0b">
 <link rel="icon" href="icon.png">
-<style>
-:root {
-  --bg: #0d0e11;
-  --panel: #16181d;
-  --text: #eceef2;
-  --dim: #a3a9b5;
-  --line: #262a32;
-  --accent: #7cc4ff;
-}
-@media (prefers-color-scheme: light) {
-  :root { --bg: #f6f7f9; --panel: #fff; --text: #14161a; --dim: #566070; --line: #dde1e8; --accent: #0b6fc2; }
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
-a { color: var(--accent); }
-.wrap { max-width: 860px; margin: 0 auto; padding: 0 16px; }
-header { padding: 56px 0 24px; text-align: center; }
-header img { width: 72px; height: 72px; }
-h1 { font-size: clamp(2rem, 6vw, 3rem); line-height: 1.15; margin: 16px 0 12px; }
-.lead { color: var(--dim); font-size: 1.15rem; max-width: 560px; margin: 0 auto 28px; }
-.btn { display: inline-block; background: var(--accent); color: #04121f; font-weight: 600; padding: 14px 28px; border-radius: 10px; text-decoration: none; }
-.sub { color: var(--dim); font-size: .9rem; margin-top: 12px; }
-.demo { width: 100%; border-radius: 12px; border: 1px solid var(--line); margin: 36px 0; }
-h2 { font-size: 1.5rem; margin: 48px 0 16px; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
-.card b { display: block; margin-bottom: 4px; }
-.card span { color: var(--dim); font-size: .95rem; }
-.nums { display: flex; flex-wrap: wrap; gap: 14px; }
-.num { flex: 1 1 140px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; text-align: center; }
-.num b { display: block; font-size: 1.6rem; }
-.num span { color: var(--dim); font-size: .9rem; }
-.scenes { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
-.scenes img { width: 100%; border-radius: 8px; border: 1px solid var(--line); }
-.note { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; color: var(--dim); }
-footer { text-align: center; color: var(--dim); font-size: .9rem; padding: 48px 0; }
-</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Epilogue:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site.css">
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <img src="icon.png" alt="Nock icon">
-    <h1>A notch for Windows,<br>in 1&nbsp;MB of Rust</h1>
-    <p class="lead">Media, timers, to-dos, clipboard history and Wi-Fi, Bluetooth and volume dropdowns, in a native notch and top bar. No Electron, no webview.</p>
-    <a class="btn" href="https://github.com/Akhilesh-Varute/Nock/releases/latest">Download for Windows 10/11</a>
-    <p class="sub">Free and open source (MIT). Installer or a single portable .exe.</p>
-  </header>
 
-  <img class="demo" src="demo.gif" alt="Nock demo: the notch opens, shows its tabs and the Wi-Fi and Bluetooth dropdowns">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/></symbol>
+  <symbol id="i-bars" viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4h6v3H9z"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></symbol>
+  <symbol id="i-pad" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="11" rx="5"/><path d="M7 10v5M4.5 12.5h5"/><circle cx="16" cy="11" r=".8"/><circle cx="18.5" cy="14" r=".8"/></symbol>
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.5 6.5a8 8 0 1 0 11 0"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19.5" r=".8"/></symbol>
+  <symbol id="i-bt" viewBox="0 0 24 24"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></symbol>
+  <symbol id="i-vol" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 9a4 4 0 0 1 0 6"/></symbol>
+  <symbol id="i-bat" viewBox="0 0 24 24"><rect x="3" y="8" width="16" height="9" rx="2"/><path d="M21 11v3M6 11v3M9 11v3M12 11v3"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5M8 3h8l-1 7 3 3H6l3-3z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></symbol>
+  <symbol id="i-dl" viewBox="0 0 24 24"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M7 17L17 7M8 7h9v9"/></symbol>
+  <symbol id="i-cam" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+  <symbol id="i-disp" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></symbol>
+  <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M18 5v14L8.5 12zM6 5v14" fill="currentColor"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M6 5v14l9.5-7zM18 5v14" fill="currentColor"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+</svg>
 
-  <h2>What it does</h2>
-  <div class="grid">
-    <div class="card"><b>Quick add, from anywhere</b><span>Press Ctrl+Alt+T, type a task, press Enter. You're back in your work before you forget it.</span></div>
-    <div class="card"><b>Focus timer in the notch</b><span>One click starts a timer on a task, and the countdown stays visible.</span></div>
-    <div class="card"><b>Everything in one panel</b><span>Music controls, clipboard history with search, system stats, pinned apps and a calendar.</span></div>
-    <div class="card"><b>Top bar with dropdowns</b><span>Join Wi-Fi, connect Bluetooth devices, set volume and brightness, check the battery.</span></div>
-    <div class="card"><b>Smart hints</b><span>Low battery, mic on, a copied link or code, a break after long sessions, and meeting countdowns.</span></div>
-    <div class="card"><b>Auto-hide</b><span>Keep it out of sight until you touch the top edge, and it hides itself in full-screen games and video.</span></div>
+<noscript><p style="padding:90px 20px 20px;font:17px system-ui">The notch demo needs JavaScript. You can still <a href="https://github.com/Akhilesh-Varute/Nock/releases/latest">download Nock</a>.</p></noscript>
+
+<!-- fake Windows top bar -->
+<div class="bar" aria-hidden="true">
+  <div class="bar-l"><span>nock.akhilvarute.me</span></div>
+  <div class="bar-r">
+    <svg class="icon hide-s"><use href="#i-wifi"/></svg>
+    <svg class="icon hide-s"><use href="#i-bt"/></svg>
+    <svg class="icon hide-s"><use href="#i-vol"/></svg>
+    <svg class="icon hide-s"><use href="#i-bat"/></svg>
+    <span id="barClock">--:--</span>
   </div>
-
-  <h2>Light on purpose</h2>
-  <div class="nums">
-    <div class="num"><b>~1 MB</b><span>download</span></div>
-    <div class="num"><b>~0%</b><span>CPU while idle</span></div>
-    <div class="num"><b>~32 MB</b><span>memory while idle</span></div>
-    <div class="num"><b>0</b><span>webviews</span></div>
-  </div>
-  <p class="sub">Direct2D and DirectWrite draw into a layered window, and it only redraws when something changes. Check it yourself in Task Manager.</p>
-
-  <h2>And a little life</h2>
-  <p class="sub" style="margin-top:0">A buddy lives on the bar and acts out a short scene every few minutes. Nothing runs between scenes.</p>
-  <div class="scenes">
-    <img loading="lazy" src="scenes/friday-deploy.gif" alt="Scene: a Friday deploy">
-    <img loading="lazy" src="scenes/on-mute.gif" alt="Scene: you're on mute">
-    <img loading="lazy" src="scenes/cricket-six.gif" alt="Scene: a cricket six">
-    <img loading="lazy" src="scenes/heist.gif" alt="Scene: a heist">
-  </div>
-
-  <h2>About the Windows warning</h2>
-  <p class="note">Nock isn't code-signed yet, so Windows may show "Windows protected your PC" (choose <b>More info</b>, then <b>Run anyway</b>). A PC with Smart App Control on may block it outright. The source is public and the <a href="https://github.com/Akhilesh-Varute/Nock#windows-says-smart-app-control-blocked-an-app">README explains the fix</a>.</p>
-
-  <footer>
-    <a href="https://github.com/Akhilesh-Varute/Nock">Source on GitHub</a> ·
-    <a href="https://github.com/Akhilesh-Varute/Nock/issues">Report a bug or idea</a> ·
-    MIT license
-  </footer>
 </div>
+
+<!-- the live notch -->
+<div class="notch" id="notch" role="group" aria-label="Interactive Nock demo">
+  <button class="pill" id="pill" type="button" aria-expanded="false" aria-controls="panel">
+    <span class="dot"></span>
+    <span id="pillText">12:00</span>
+    <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span class="prog" aria-hidden="true"><b id="pillProg"></b></span>
+  </button>
+  <div class="panel" id="panel" inert>
+    <div class="pinner">
+      <div class="tabs" role="tablist" aria-label="Nock tabs">
+        <button class="tab" role="tab" id="t-media" data-tab="media" aria-selected="true"><svg class="icon"><use href="#i-music"/></svg><span>Media</span></button>
+        <button class="tab" role="tab" id="t-controls" data-tab="controls" aria-selected="false"><svg class="icon"><use href="#i-sliders"/></svg><span>Controls</span></button>
+        <button class="tab" role="tab" id="t-today" data-tab="today" aria-selected="false"><svg class="icon"><use href="#i-check"/></svg><span>Today</span></button>
+        <button class="tab" role="tab" id="t-stats" data-tab="stats" aria-selected="false"><svg class="icon"><use href="#i-bars"/></svg><span>Stats</span></button>
+        <button class="tab" role="tab" id="t-clip" data-tab="clip" aria-selected="false"><svg class="icon"><use href="#i-clip"/></svg><span>Clipboard</span></button>
+        <button class="tab" role="tab" id="t-apps" data-tab="apps" aria-selected="false"><svg class="icon"><use href="#i-grid"/></svg><span>Apps</span></button>
+        <button class="tab" role="tab" id="t-games" data-tab="games" aria-selected="false"><svg class="icon"><use href="#i-pad"/></svg><span>Games</span></button>
+        <button class="tab" role="tab" id="t-power" data-tab="power" aria-selected="false"><svg class="icon"><use href="#i-power"/></svg><span>Power</span></button>
+      </div>
+      <div class="pages">
+
+        <div class="page" data-page="media" role="tabpanel" aria-labelledby="t-media">
+          <div class="m-wrap">
+            <div class="art" aria-hidden="true"></div>
+            <div class="m-info">
+              <div class="m-title" id="mTitle">Late Night Compile</div>
+              <div class="m-sub" id="mSub">The Demo Band</div>
+              <div class="m-ctrl">
+                <button class="btn-i" id="mPrev" aria-label="Previous track"><svg class="icon"><use href="#i-prev"/></svg></button>
+                <button class="btn-i big" id="mPlay" aria-label="Play"><svg class="icon"><use href="#i-play"/></svg></button>
+                <button class="btn-i" id="mNext" aria-label="Next track"><svg class="icon"><use href="#i-next"/></svg></button>
+              </div>
+              <div class="seek" id="seek" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><b id="seekFill"></b></div>
+              <div class="m-time"><span id="mCur">0:00</span><span id="mDur">3:12</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="page" data-page="controls" role="tabpanel" aria-labelledby="t-controls" hidden>
+          <div class="grid2">
+            <button class="row" data-toast="Screenshot: snips a region on your real PC"><svg class="icon"><use href="#i-cam"/></svg><span><b>Screenshot</b><small>Snip a region</small></span></button>
+            <button class="row" data-toast="Display: resolution, scale and night light"><svg class="icon"><use href="#i-disp"/></svg><span><b>Display</b><small>Resolution, scale, night light</small></span></button>
+            <button class="row" data-toast="Sound: output, devices and the volume mixer"><svg class="icon"><use href="#i-vol"/></svg><span><b>Sound</b><small>Output, devices, volume mixer</small></span></button>
+            <button class="row" data-toast="Network: Wi-Fi, Ethernet and VPN"><svg class="icon"><use href="#i-wifi"/></svg><span><b>Network</b><small>Wi-Fi, Ethernet, VPN</small></span></button>
+            <button class="row" data-toast="Power and battery: sleep, plan, battery saver"><svg class="icon"><use href="#i-bat"/></svg><span><b>Power &amp; battery</b><small>Sleep, plan, battery saver</small></span></button>
+            <button class="row" data-toast="All settings: opens Windows Settings"><svg class="icon"><use href="#i-gear"/></svg><span><b>All settings</b><small>Open Windows Settings</small></span></button>
+          </div>
+        </div>
+
+        <div class="page" data-page="today" role="tabpanel" aria-labelledby="t-today" hidden>
+          <div class="t-wrap">
+            <div class="t-date"><b id="tDay">Mon 1</b><span id="tMonth">January</span><em>Standup 10:30</em></div>
+            <div>
+              <div class="t-list" id="tList"></div>
+              <form class="add" id="addForm" autocomplete="off">
+                <input id="addInput" type="text" maxlength="48" placeholder="Add a task, press Enter" aria-label="New task">
+                <button class="btn-i" type="submit" aria-label="Add task"><svg class="icon"><use href="#i-plus"/></svg></button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <div class="page" data-page="stats" role="tabpanel" aria-labelledby="t-stats" hidden>
+          <div class="s-wrap">
+            <div class="ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="tr" cx="60" cy="60" r="50"/><circle class="fg" id="ringCpu" cx="60" cy="60" r="50" stroke-dasharray="314" stroke-dashoffset="290"/></svg><div><b id="cpuV">4%</b><span>CPU</span></div></div>
+            <div class="ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="tr" cx="60" cy="60" r="50"/><circle class="fg" id="ringMem" cx="60" cy="60" r="50" stroke-dasharray="314" stroke-dashoffset="190" style="stroke:var(--amber)"/></svg><div><b id="memV">39%</b><span>Memory</span></div></div>
+            <div class="s-side">
+              <div class="s-card"><small>Battery</small><b>82%, charging</b><div class="bat"><i></i></div></div>
+              <div class="s-card"><small>Uptime</small><b id="upV">2h 14m</b></div>
+            </div>
+          </div>
+          <span class="demo-note">demo values</span>
+        </div>
+
+        <div class="page" data-page="clip" role="tabpanel" aria-labelledby="t-clip" hidden>
+          <div class="c-wrap">
+            <div class="c-search"><svg class="icon"><use href="#i-search"/></svg><input id="cSearch" type="search" placeholder="Search your clipboard" aria-label="Search clipboard"></div>
+            <div class="c-list" id="cList"></div>
+          </div>
+        </div>
+
+        <div class="page" data-page="apps" role="tabpanel" aria-labelledby="t-apps" hidden>
+          <div class="apps">
+            <button class="app" data-toast="Pinned apps launch from here on your real PC"><svg class="icon"><use href="#i-term"/></svg>Terminal</button>
+            <button class="app" data-toast="Pin anything: apps, folders, links"><svg class="icon"><use href="#i-note"/></svg>Notes</button>
+            <button class="app" data-toast="Your own shortcuts, one click away"><svg class="icon"><use href="#i-globe"/></svg>Browser</button>
+            <a class="app get" href="https://github.com/Akhilesh-Varute/Nock/releases/latest" data-dl="setup"><svg class="icon"><use href="#i-dl"/></svg>Get Nock</a>
+          </div>
+        </div>
+
+        <div class="page" data-page="games" role="tabpanel" aria-labelledby="t-games" hidden>
+          <div class="g-menu" id="gMenu">
+            <button class="row" data-game="brick"><svg class="icon"><use href="#i-pad"/></svg><span><b>Brick Breaker</b><small>Playable here. Move your mouse.</small></span></button>
+            <button class="row" data-toast="Super Flight is in the real app"><svg class="icon"><use href="#i-pad"/></svg><span><b>Super Flight</b><small>In the real app</small></span></button>
+            <button class="row" data-toast="Slicer is in the real app"><svg class="icon"><use href="#i-pad"/></svg><span><b>Slicer</b><small>In the real app</small></span></button>
+            <button class="row" data-toast="Viking Run is in the real app"><svg class="icon"><use href="#i-pad"/></svg><span><b>Viking Run</b><small>In the real app</small></span></button>
+          </div>
+          <div class="g-canvas" id="gBox"><canvas id="gCv" width="568" height="156" aria-label="Brick Breaker. Move the pointer to steer."></canvas><div class="g-hud" id="gHud"></div><button class="g-back" id="gBack">Esc: back</button></div>
+        </div>
+
+        <div class="page" data-page="power" role="tabpanel" aria-labelledby="t-power" hidden>
+          <div class="p-grid">
+            <button class="row" data-toast="Lock: not in the demo. Your real PC is safe."><svg class="icon"><use href="#i-lock"/></svg><b>Lock</b></button>
+            <button class="row" data-toast="Sleep: not in the demo. Your real PC is safe."><svg class="icon"><use href="#i-moon"/></svg><b>Sleep</b></button>
+            <button class="row" data-toast="Restart: not in the demo. Your real PC is safe."><svg class="icon"><use href="#i-redo"/></svg><b>Restart</b></button>
+            <button class="row" data-toast="Shut down: not in the demo. Your real PC is safe."><svg class="icon"><use href="#i-power"/></svg><b>Shut down</b></button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<main>
+<section class="hero" id="top">
+  <div class="poke" aria-hidden="true">
+    <svg viewBox="0 0 70 56"><path d="M62 52C40 50 22 38 14 8M14 8l-8 12M14 8l12 8"/></svg>
+    <span>poke it</span>
+  </div>
+  <div class="wrap">
+    <div class="eyebrow"><b>Nock</b><span>Free</span><span>/</span><span>Windows 10/11</span><span>/</span><span>about 1 MB</span></div>
+    <h1 aria-label="The top of your screen is doing nothing.">
+      <span class="w"><span style="--i:0">The</span></span> <span class="w"><span style="--i:1">top</span></span> <span class="w"><span style="--i:2">of</span></span> <span class="w"><span style="--i:3">your</span></span><br>
+      <span class="w"><span style="--i:4">screen</span></span> <span class="w"><span style="--i:5">is</span></span> <span class="w"><span style="--i:6">doing</span></span><br>
+      <span class="w hl"><span style="--i:7">nothing.</span></span>
+    </h1>
+    <p class="lede">Nock hangs a notch off it. Tasks, a focus timer, music, clipboard history. <b>The one at the top of this page is live.</b> Click it.</p>
+    <div class="ctas">
+      <a class="btn" id="dlMain" href="https://github.com/Akhilesh-Varute/Nock/releases/latest" data-dl="setup"><svg class="icon"><use href="#i-dl"/></svg>Download for Windows</a>
+      <a class="btn alt" href="https://github.com/Akhilesh-Varute/Nock">Read the source<svg class="icon"><use href="#i-up"/></svg></a>
+    </div>
+    <div class="ver" id="verLine">Free. MIT licensed. Installer or one portable .exe.</div>
+    <div class="note-os" id="osNote">Heads up: Nock is Windows 10/11 only for now. A Linux port is in progress. You can still poke the demo.</div>
+    <div class="chips" role="group" aria-label="Trigger a hint on the notch">
+      <span>Make it react</span>
+      <button class="chip" data-hint="battery">Low battery</button>
+      <button class="chip" data-hint="meeting">Meeting soon</button>
+      <button class="chip" data-hint="copy">Copy a link</button>
+      <button class="chip" data-hint="quick">Quick add</button>
+    </div>
+
+    <div class="quests" id="quests" aria-label="Speedrun the demo">
+      <div class="q-head"><b>Speedrun it</b><span id="qCount">0 / 5</span></div>
+      <div class="quest" data-q="open"><i></i>Open the notch</div>
+      <div class="quest" data-q="task"><i></i>Add a task</div>
+      <div class="quest" data-q="focus"><i></i>Start a focus timer</div>
+      <div class="quest" data-q="copy"><i></i>Copy a link</div>
+      <div class="quest" data-q="brick"><i></i>Break a brick</div>
+    </div>
+    <div class="unlock" id="unlock" role="status">That's the whole app. It's free and about 1 MB. Download it above, it keeps going on your real top edge.</div>
+  </div>
+  <div class="stickers" aria-hidden="true">
+    <div class="sticker o" style="top:2%; right:22%; --r:-6deg; --d:0s">No Electron</div>
+    <div class="sticker k" style="top:20%; right:2%; --r:5deg; --d:-1.4s">MIT licensed</div>
+    <div class="sticker b" style="top:40%; right:30%; --r:-3deg; --d:-2.6s">About 1 MB</div>
+    <div class="sticker" style="top:60%; right:4%; --r:6deg; --d:-.8s">0.0% CPU idle</div>
+  </div>
+</section>
+
+<div class="marq" aria-hidden="true"><div class="marq-t">
+  <span>No Electron</span><span>About 1 MB</span><span>Written in Rust</span><span>0.0% CPU idle</span><span>MIT licensed</span><span>No webview</span>
+  <span>No Electron</span><span>About 1 MB</span><span>Written in Rust</span><span>0.0% CPU idle</span><span>MIT licensed</span><span>No webview</span>
+</div></div>
+
+<section class="blk dark" id="weight">
+  <div class="wrap">
+    <span class="k reveal">Weight</span>
+    <h2 class="reveal">Heavy? Not here.</h2>
+    <p class="p reveal">Most desktop widgets ship a whole browser to draw a few pixels. Nock is plain Rust. Direct2D draws it, and it only redraws when something changes.</p>
+    <div class="vs reveal" id="vs">
+      <div class="vs-row vs-nock"><small>Nock</small><div class="vs-bar"><i>1 MB</i></div></div>
+      <div class="vs-row vs-el"><small>A typical Electron app</small><div class="vs-bar"><i>Hundreds of MB</i></div></div>
+    </div>
+    <div class="nums reveal">
+      <div class="num"><b data-count="1" data-suffix=" MB">1 MB</b><span>the download</span></div>
+      <div class="num"><b data-count="0" data-suffix=".0%" data-fixed="1">0.0%</b><span>CPU while idle</span></div>
+      <div class="num"><b data-count="32" data-suffix=" MB">32 MB</b><span>memory while idle</span></div>
+      <div class="num"><b data-count="0" data-suffix="">0</b><span>webviews</span></div>
+    </div>
+    <p class="fine reveal">Figures are from the project README, measured on one PC. Typical Electron apps use hundreds of MB, but this isn't a benchmark against any specific app. Check yours in Task Manager, Details, nock.exe.</p>
+  </div>
+</section>
+
+<section class="blk hot" id="keys">
+  <div class="wrap keys">
+    <div class="reveal">
+      <span class="k">Keyboard goblins</span>
+      <h2>Capture it before you forget it.</h2>
+      <div class="kb" aria-label="Press Control, Alt and T">
+        <span class="kc" style="--d:0s">Ctrl</span><span class="kc" style="--d:.25s">Alt</span><span class="kc" style="--d:.5s">T</span>
+      </div>
+      <p class="p">From any app. Type the task, hit Enter, and the notch closes again. Two seconds. Try it on this page with the same keys.</p>
+      <div class="ctas" style="margin-top:18px"><button class="chip" data-hint="quick" style="background:var(--bone)">Or tap here</button></div>
+    </div>
+    <div class="stage reveal" aria-hidden="true">
+      <div class="stage-bg"><i></i><i></i><i></i><i></i></div>
+      <div class="mini"><div class="mini-in"><svg class="icon" style="width:18px;height:18px;color:var(--blue)"><use href="#i-plus"/></svg><span class="type">buy oat milk</span></div><div class="mini-ok">SAVED</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="blk" id="life">
+  <div class="wrap">
+    <span class="k reveal">Pointless, on purpose</span>
+    <h2 class="reveal">It has a little life.</h2>
+    <p class="p reveal">A buddy lives on your top bar. Every few minutes the cast acts out a short scene, a Friday deploy gone wrong, a meeting stuck on mute, a cricket six. Between scenes nothing runs. You can turn all of it off.</p>
+    <div class="life">
+      <figure class="cardg reveal" style="--r:-2.5deg"><img loading="lazy" src="scenes/friday-deploy.gif" alt="Scene: a developer ships on a Friday and an angry bug appears" width="1280" height="720"><figcaption>Friday deploy</figcaption></figure>
+      <figure class="cardg reveal" style="--r:2deg"><img loading="lazy" src="scenes/on-mute.gif" alt="Scene: a meeting where everyone says you are on mute" width="1280" height="720"><figcaption>You're on mute</figcaption></figure>
+      <figure class="cardg reveal" style="--r:-1.5deg"><img loading="lazy" src="scenes/cricket-six.gif" alt="Scene: a cricket six hit straight out of the taskbar" width="1280" height="720"><figcaption>Cricket six</figcaption></figure>
+      <figure class="cardg reveal" style="--r:3deg"><img loading="lazy" src="scenes/heist.gif" alt="Scene: a heist across the top bar" width="1280" height="720"><figcaption>The heist</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section class="blk dark" id="honest">
+  <div class="wrap">
+    <span class="k reveal">Straight talk</span>
+    <h2 class="reveal">Windows will side-eye it.</h2>
+    <p class="p reveal">Nock isn't code-signed yet, so Windows doesn't know me. That's all the warning means. The source is public, so you can read it before you run anything.</p>
+    <div class="steps">
+      <div class="step reveal"><b>"Windows protected your PC"</b><p>Click <b style="display:inline;font-size:inherit">More info</b>, then <b style="display:inline;font-size:inherit">Run anyway</b>. That's the usual SmartScreen note.</p></div>
+      <div class="step reveal"><b>Smart App Control on?</b><p>It blocks unsigned apps outright. <a href="https://github.com/Akhilesh-Varute/Nock#windows-says-smart-app-control-blocked-an-app">The README has the fix.</a></p></div>
+      <div class="step reveal"><b>Don't trust it? Good.</b><p>It's MIT licensed and small enough to read. <a href="https://github.com/Akhilesh-Varute/Nock">Go look.</a></p></div>
+    </div>
+  </div>
+</section>
+
+<section class="blk hot final" id="get">
+  <div class="wrap">
+    <h2 class="reveal">Go on. It's 1&nbsp;MB.</h2>
+    <div class="ctas reveal">
+      <a class="btn" href="https://github.com/Akhilesh-Varute/Nock/releases/latest" data-dl="setup"><svg class="icon"><use href="#i-dl"/></svg>Installer</a>
+      <a class="btn alt" href="https://github.com/Akhilesh-Varute/Nock/releases/latest" data-dl="portable"><svg class="icon"><use href="#i-dl"/></svg>Portable .exe</a>
+    </div>
+    <div class="ver" id="verLine2">Free. Windows 10/11. The installer adds a Start menu entry; the portable file is just the app.</div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Made by Akhilesh Varute. MIT licensed.</span>
+    <span><a href="https://github.com/Akhilesh-Varute/Nock">Source</a> / <a href="https://github.com/Akhilesh-Varute/Nock/issues">Report a bug or idea</a> / <a href="https://github.com/Akhilesh-Varute/Nock/releases">All releases</a></span>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<canvas class="confetti" id="confetti" aria-hidden="true"></canvas>
+<script src="site.js"></script>
 </body>
 </html>
