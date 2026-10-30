@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The press-conference scene no longer uses a photo. Its speaker is now a drawn character like every other actor, and `assets/face.png` is gone from the repo.
+
 ## 0.12.1
 
 - Auto-hide: new tray option that keeps the notch and bar out of sight until the pointer touches the top-center edge of the screen. Saved as `auto_hide=` in `config.ini`, off by default.

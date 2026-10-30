@@ -13,17 +13,6 @@ use crate::app::*;
 use crate::bar::theme;
 use crate::cast::{self, Act, Draw, Who};
 use crate::gfx::*;
-use windows::Win32::Graphics::Direct2D::ID2D1Bitmap;
-
-/// The photo head used by the press conference scene.
-const FACE_PNG: &[u8] = include_bytes!("../assets/face.png");
-
-/// The head standing on `ground` at `x`, lifted by `-bob` and rotated `tilt` degrees.
-fn draw_face_at(g: &Gfx, face: &ID2D1Bitmap, x: f32, ground: f32, bob: f32, tilt: f32) {
-    let (h, w) = (26.0, 26.0 * 112.0 / 140.0);
-    g.fill_rrect(Rect::new(x - 7.0, ground, 14.0, 2.0), 1.0, Color(0.0, 0.0, 0.0, 0.3));
-    g.draw_bitmap_tilted(face, Rect::new(x - w / 2.0, ground - h + bob, w, h), tilt);
-}
 
 pub const T_SCENE: usize = 16;
 pub const T_SCENEANIM: usize = 17;
@@ -707,7 +696,7 @@ fn sample(tk: &Track, t: f32) -> Option<(f32, Act, f32, f32, f32)> {
 
 /// One frame of a scene at time `t` (seconds) on a stage `w` logical px wide.
 #[allow(clippy::too_many_arguments)]
-fn draw_frame(g: &Gfx, sc: &Script, w: f32, face: &Option<ID2D1Bitmap>, t: f32, tick: u32, th: &crate::bar::Theme, light: bool) {
+fn draw_frame(g: &Gfx, sc: &Script, w: f32, t: f32, tick: u32, th: &crate::bar::Theme, light: bool) {
     let mut draws: Vec<Option<Draw>> = Vec::new();
     for tk in &sc.tracks {
         draws.push(sample(tk, t).map(|(fx, act, dir, u, _since)| {
@@ -743,12 +732,7 @@ fn draw_frame(g: &Gfx, sc: &Script, w: f32, face: &Option<ID2D1Bitmap>, t: f32, 
     for i in order {
         let Some(d) = &draws[i] else { continue };
         match d.who {
-            Who::Face => {
-                if let Some(f) = &face {
-                    let (bob, tilt) = face_motion(d.act, d.t);
-                    draw_face_at(g, f, d.x, d.y, bob, tilt);
-                }
-            }
+            Who::Face => draw_speaker(g, d),
             Who::Press(v) => draw_reporter(g, d, v),
             Who::Owl => draw_owl(g, d),
             Who::Snitch => draw_snitch(g, d),
@@ -782,7 +766,7 @@ pub fn demo_len(id: usize) -> f32 {
 pub fn demo_frame(g: &Gfx, id: usize, t: f32, w: f32, light: bool) {
     let th = theme(light);
     let sc = script(id);
-    draw_frame(g, &sc, w, &None, t, (t * 30.0) as u32, &th, light);
+    draw_frame(g, &sc, w, t, (t * 30.0) as u32, &th, light);
 }
 
 // -------------------------------------------------------------------- stage --
@@ -797,8 +781,6 @@ pub struct Stage {
     w: f32,
     left: f32,
     rng: u32,
-    /// the photo head for the press-conference scene, decoded on first use
-    face: Option<ID2D1Bitmap>,
 }
 
 impl Stage {
@@ -822,7 +804,6 @@ impl Stage {
             w: MAX_W,
             left: 0.0,
             rng: nanos | 1,
-            face: None,
         })
     }
 
@@ -1160,7 +1141,26 @@ fn draw_reporter(g: &Gfx, d: &Draw, v: u8) {
     g.fill_circle(hand.0 + dr * 3.4, hand.1 - 1.3, 0.7, cloth);
 }
 
-/// Bob and tilt (degrees) of the photo head for an action.
+/// The press-conference speaker: a drawn big-headed character (no photo), bobbing and swaying like a bobblehead.
+fn draw_speaker(g: &Gfx, d: &Draw) {
+    let (bob, tilt) = face_motion(d.act, d.t);
+    let (x, y) = (d.x, d.y);
+    let skin = Color(0.9, 0.7, 0.55, 1.0);
+    let hair = Color(0.14, 0.12, 0.16, 1.0);
+    let suit = Color(0.28, 0.3, 0.42, 1.0);
+    g.fill_rrect(Rect::new(x - 7.0, y, 14.0, 2.0), 1.0, Color(0.0, 0.0, 0.0, 0.3));
+    g.line((x - 1.5, y - 7.0), (x - 1.5, y), 2.2, hair);
+    g.line((x + 1.5, y - 7.0), (x + 1.5, y), 2.2, hair);
+    g.fill_rrect(Rect::new(x - 3.5, y - 15.0 + bob * 0.4, 7.0, 9.0), 2.0, suit);
+    let (hx, hy) = (x + tilt * 0.12, y - 19.5 + bob);
+    g.fill_circle(hx, hy - 1.0, 5.8, hair);
+    g.fill_circle(hx, hy + 0.7, 4.9, skin);
+    g.fill_circle(hx - 1.9, hy + 0.2, 0.7, hair);
+    g.fill_circle(hx + 1.9, hy + 0.2, 0.7, hair);
+    g.line((hx - 1.5, hy + 2.8), (hx + 1.5, hy + 2.8), 0.9, hair);
+}
+
+/// Bob and tilt (degrees) of the speaker's head for an action.
 fn face_motion(act: Act, t: f32) -> (f32, f32) {
     match act {
         Act::Walk | Act::Run => ((t * 14.0).sin().abs() * -2.5, (t * 7.0).sin() * 5.0),
@@ -1483,14 +1483,11 @@ impl App {
         let t = s.start.elapsed().as_secs_f32();
         let tick = (t * 30.0) as u32;
         let (pw, ph) = ((s.w * scale).round() as i32, (SH * scale).round() as i32);
-        if s.id == 6 && s.face.is_none() {
-            s.face = s.gfx.decode_image(FACE_PNG).ok().map(|f| f.0);
-        }
         let g = &s.gfx;
         if g.begin(pw, ph).is_err() {
             return;
         }
-        draw_frame(g, &sc, s.w, &s.face, t, tick, &th, light);
+        draw_frame(g, &sc, s.w, t, tick, &th, light);
         let _ = g.end();
         let _ = g.present(s.hwnd, (mon.left as f32 + s.left * scale).round() as i32, mon.top, pw, ph);
     }

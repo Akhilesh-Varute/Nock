@@ -189,7 +189,7 @@ The first scene plays a minute or two after Nock starts, then one every few minu
 
 ### Fan art and images
 
-The wizard-school scenes and the Thor, caped-flyer and other characters in the arcade are **unofficial fan art** drawn from simple shapes, not affiliated with or endorsed by their owners; all names and trademarks belong to their respective rights holders. The press conference scene uses a small photo cut-out bundled in `assets/face.png`. If you hold rights to anything in this repository and would like it changed or removed, please [open an issue](../../issues).
+The wizard-school scenes and the Thor, caped-flyer and other characters in the arcade are **unofficial fan art** drawn from simple shapes, not affiliated with or endorsed by their owners; all names and trademarks belong to their respective rights holders. If you hold rights to anything in this repository and would like it changed or removed, please [open an issue](../../issues).
 
 ## Icon
 
