@@ -230,6 +230,16 @@ impl Spring {
     }
 }
 
+/// A Previous / Next press that has not shown up as a new track yet. The panel keeps
+/// showing the old track (with a spinner) instead of dropping to "Nothing playing"
+/// while the player loads the next one.
+pub struct Skip {
+    pub t0: Instant,
+    pub next: bool,
+    pub snap: MediaState,
+    pub art: Option<ID2D1Bitmap>,
+}
+
 // --------------------------------------------------------------------- app
 
 pub struct App {
@@ -259,6 +269,8 @@ pub struct App {
     /// page being faded out, and how far the cross-fade has got (1.0 = finished)
     pub prev_page: Page,
     pub page_t: f32,
+    /// waiting for the player to load the track a Previous / Next press asked for
+    pub skip: Option<Skip>,
     /// a window covers the notch (only tracked with the smart-hide option)
     smart_hit: bool,
     /// opacity of the notch and bar while they fade in or out, and where that is heading
@@ -453,6 +465,7 @@ impl App {
             last_tick: Instant::now(),
             prev_page: Page::Media,
             page_t: 1.0,
+            skip: None,
             smart_hit: false,
             fade: 1.0,
             fade_to: 1.0,
@@ -860,7 +873,13 @@ impl App {
             self.sh.step(th, h);
             dt -= h;
         }
-        let ui_busy = self.step_ui(dt0);
+        if self.skip.is_some() {
+            self.spin_t += dt0;
+            if self.skip_done() {
+                self.skip = None;
+            }
+        }
+        let ui_busy = self.step_ui(dt0) || self.skip.is_some();
         let moving = !(self.sw.settled(tw) && self.sh.settled(th)) || self.page_t < 1.0 || ui_busy;
         if !moving {
             self.sw = Spring::new(tw);
@@ -1523,12 +1542,14 @@ impl App {
             Act::Pin => self.pinned = !self.pinned,
             Act::Tab(p) => self.select_page(p),
             Act::Prev => {
+                self.begin_skip(false);
                 let _ = self.media.tx.send(Cmd::Prev);
             }
             Act::PlayPause => {
                 let _ = self.media.tx.send(Cmd::PlayPause);
             }
             Act::Next => {
+                self.begin_skip(true);
                 let _ = self.media.tx.send(Cmd::Next);
             }
             Act::Seek => {
@@ -1995,6 +2016,29 @@ impl App {
 
     // ------------------------------------------------------------- events ---
 
+    /// Previous / Next was pressed: remember the current track so the panel can show
+    /// "loading" over it until the new one arrives.
+    fn begin_skip(&mut self, next: bool) {
+        if self.mstate.has_track() {
+            self.skip = Some(Skip { t0: Instant::now(), next, snap: self.mstate.clone(), art: self.art.clone() });
+            self.spin_t = 0.0;
+            self.retarget();
+        }
+    }
+
+    /// The press has been answered (a different track, or the same one restarted) or took too long.
+    fn skip_done(&self) -> bool {
+        let Some(s) = &self.skip else { return false };
+        let m = &self.mstate;
+        let moved = m.has_track() && (m.title != s.snap.title || m.pos_ticks + 20_000_000 < s.snap.pos_ticks);
+        moved || s.t0.elapsed().as_secs_f32() > 4.0
+    }
+
+    /// The track change that is still loading, if any.
+    pub fn skip_loading(&self) -> Option<&Skip> {
+        self.skip.as_ref().filter(|s| s.t0.elapsed().as_secs_f32() <= 4.0)
+    }
+
     pub fn on_media(&mut self) {
         let st = self.media.state.lock().unwrap().clone();
         if st.art_gen != self.art_gen {
@@ -2004,6 +2048,9 @@ impl App {
         }
         let started = st.playing && !self.mstate.playing;
         self.mstate = st;
+        if self.skip_done() {
+            self.skip = None;
+        }
         if started {
             self.buddy_event(crate::buddy::BuddyEv::MusicStarted);
         }
@@ -2721,6 +2768,13 @@ mod preview {
             (a.stat_cpu, a.stat_mem, a.bar_cpu, a.bar_mem) = (23, 61, 0.23, 0.61);
             render(&a, &name);
         }
+        // Next pressed: the old track stays up with a spinner while the player loads
+        a.page = Page::Media;
+        a.snap_tab();
+        a.skip = Some(Skip { t0: Instant::now(), next: true, snap: a.mstate.clone(), art: None });
+        a.spin_t = 0.3;
+        render(&a, "media_loading");
+        a.skip = None;
         // the shelf with files on it, and while a file is dragged over
         a.page = Page::Shelf;
         a.shelf = ["Cargo.toml", "README.md", "docs", "src\\main.rs", "LICENSE"]

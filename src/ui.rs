@@ -395,7 +395,10 @@ fn draw_expanded(a: &App, ca: f32, hits: &mut Vec<Hit>) {
 fn page_media(a: &App, ca: f32, hits: &mut Vec<Hit>) {
     let g = &a.gfx;
     let f = &g.fonts;
-    let m = &a.mstate;
+    // a Previous / Next press that is still loading: keep showing the old track
+    let loading = a.skip_loading();
+    let m = loading.map_or(&a.mstate, |s| &s.snap);
+    let art = loading.map_or(&a.art, |s| &s.art);
 
     if !m.has_track() {
         g.icon(
@@ -423,12 +426,16 @@ fn page_media(a: &App, ca: f32, hits: &mut Vec<Hit>) {
 
     // artwork
     let ar = Rect::new(28.0, 22.0, 132.0, 132.0);
-    match &a.art {
+    match art {
         Some(bmp) => g.draw_bitmap(bmp, ar, 16.0, ca),
         None => {
             g.fill_rrect(ar, 16.0, Color::white(0.10 * ca));
             g.text("\u{266A}", ar, &f.big, T3.fade(ca), Align::Center);
         }
+    }
+    if loading.is_some() {
+        g.fill_rrect(ar, 16.0, Color(0.0, 0.0, 0.0, 0.5 * ca));
+        spinner(g, ar.cx(), ar.cy(), 18.0, a.spin_t, a.accent, ca);
     }
 
     let tx = 182.0;
@@ -445,16 +452,17 @@ fn page_media(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         T1.fade(ca),
         Align::Left,
     );
-    let sub = if m.artist.is_empty() {
-        &m.album
-    } else {
-        &m.artist
+    let sub = match loading {
+        Some(s) if s.next => "Loading next track\u{2026}",
+        Some(_) => "Loading previous track\u{2026}",
+        None if m.artist.is_empty() => &m.album,
+        None => &m.artist,
     };
     g.text(
         sub,
         Rect::new(tx, 49.0, tw, 22.0),
         &f.body,
-        T2.fade(ca),
+        (if loading.is_some() { a.accent } else { T2 }).fade(ca),
         Align::Left,
     );
     if !m.app.is_empty() {
@@ -468,7 +476,7 @@ fn page_media(a: &App, ca: f32, hits: &mut Vec<Hit>) {
     }
 
     // progress
-    let (pos, dur) = m.progress(sys::filetime_now());
+    let (pos, dur) = if loading.is_some() { (0.0, 0.0) } else { m.progress(sys::filetime_now()) };
     let frac = match a.seek_frac {
         Some(fr) => fr,
         None if dur > 0.0 => (pos / dur) as f32,
