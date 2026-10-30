@@ -310,6 +310,17 @@ h2 { font: 400 clamp(44px, 9vw, 120px)/.92 var(--display); text-transform: upper
 .num b { font: 400 clamp(46px, 6vw, 72px)/1 var(--display); display: block; color: var(--hot); } .num span { font-size: 14px; color: #b9b4a6; }
 .fine { font-size: 13px; color: #b9b4a6; max-width: 640px; margin-top: 22px; }
 
+/* compare */
+.cmp-wrap { margin-top: 36px; overflow-x: auto; border: 2px solid var(--ink); border-radius: 16px; }
+.cmp { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 16px; }
+.cmp th, .cmp td { text-align: left; padding: 14px 18px; border-bottom: 1px solid rgba(10, 10, 11, .15); }
+.cmp thead th { font: 400 22px var(--display); text-transform: uppercase; background: var(--ink); color: var(--bone); border-bottom: 0; }
+.cmp tbody th { font-weight: 600; }
+.cmp tbody tr:last-child th, .cmp tbody tr:last-child td { border-bottom: 0; }
+.cmp .us { background: var(--hot); color: #000; font-weight: 700; }
+.cmp thead th.us { background: var(--hot); color: #000; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
 /* keys */
 .keys { display: grid; grid-template-columns: 1fr; gap: 40px; align-items: center; }
 @media (min-width: 900px) { .keys { grid-template-columns: 1fr 1fr; } }

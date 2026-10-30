@@ -422,6 +422,8 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             5,
             if a.tucked { w!("Show notch  (Ctrl+Alt+H)") } else { w!("Hide notch  (Ctrl+Alt+H)") },
         );
+        let c24 = if a.cfg.clock_24h { MF_CHECKED } else { MF_UNCHECKED };
+        let _ = AppendMenuW(menu, MF_STRING | c24, 11, w!("24-hour clock"));
         let tb = if a.cfg.top_bar { MF_CHECKED } else { MF_UNCHECKED };
         let _ = AppendMenuW(menu, MF_STRING | tb, 7, w!("Top bar"));
         let st = if a.cfg.stats { MF_CHECKED } else { MF_UNCHECKED };
@@ -549,6 +551,7 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             6 => a.toggle_reserve(),
             7 => a.toggle_top_bar(),
             10 => a.toggle_stats(),
+            11 => a.toggle_clock24(),
             13 => a.toggle_auto_break(),
             16 => a.toggle_fs_hide(),
             17 => a.toggle_auto_close(),
