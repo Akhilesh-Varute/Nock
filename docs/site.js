@@ -12,9 +12,9 @@
   var st = { open: false, pinned: false, tab: 'media', hint: null, hintTimer: 0, playing: false, track: 0, pos: 0,
              timer: null, mins: 25, game: null, quests: {}, done: false, focusDone: 0, focusMin: 0 };
   var tracks = [
-    ['Late Night Compile', 'The Demo Band', 192],
-    ['Ship It Friday', 'The Demo Band', 224],
-    ['Green Build', 'The Demo Band', 171]
+    ['Late Night Compile', 'Synthwave · 112 bpm', 192],
+    ['Ship It Friday', 'House · 124 bpm', 224],
+    ['Green Build', 'Chiptune · 132 bpm', 171]
   ];
   var todos = [
     { t: 'Review the pull request', d: false },
