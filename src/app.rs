@@ -1055,6 +1055,14 @@ impl App {
         }
     }
 
+    /// Tray: show 13:05 instead of 1:05 PM (on the bar, the pill and the clock pop-up).
+    pub fn toggle_clock24(&mut self) {
+        self.cfg.clock_24h = !self.cfg.clock_24h;
+        store::save_config(&self.cfg);
+        self.render_bar();
+        self.render();
+    }
+
     pub fn set_clock_style(&mut self, n: u8) {
         self.cfg.clock_style = n.min(3);
         store::save_config(&self.cfg);
@@ -1930,6 +1938,11 @@ impl App {
                     buf.pop();
                     Do::Redraw
                 }
+                // Ctrl+Backspace arrives as DEL: delete the word before the cursor
+                0x7F => {
+                    delete_word(buf);
+                    Do::Redraw
+                }
                 c if self.entry_timer && !(0x30..=0x39).contains(&c) && c >= 0x20 => Do::Redraw,
                 c if c >= 0x20 && buf.len() < if self.entry_timer { 3 } else { 80 } => {
                     buf.push(c);
@@ -2512,9 +2525,32 @@ fn alarm_sound() {
 
 /// Renders the open panel's pages to raw files for eyeballing (run with --ignored and
 /// PREVIEW_DIR set). Test-only: it builds the real app state without a window.
+/// Ctrl+Backspace in a text box: drop trailing spaces, then the word before them.
+fn delete_word(buf: &mut Vec<u16>) {
+    while buf.last() == Some(&0x20) {
+        buf.pop();
+    }
+    while buf.last().is_some_and(|c| *c != 0x20) {
+        buf.pop();
+    }
+}
+
 #[cfg(test)]
 mod smart_tests {
     use super::*;
+
+    #[test]
+    fn ctrl_backspace_deletes_a_word() {
+        let run = |s: &str| {
+            let mut b: Vec<u16> = s.encode_utf16().collect();
+            delete_word(&mut b);
+            String::from_utf16_lossy(&b)
+        };
+        assert_eq!(run("Terminal"), "");
+        assert_eq!(run("open the Terminal"), "open the ");
+        assert_eq!(run("open the  "), "open ");
+        assert_eq!(run(""), "");
+    }
 
     fn msg(t: &str) -> Option<&'static str> {
         clip_hint(t).map(|h| h.msg)
