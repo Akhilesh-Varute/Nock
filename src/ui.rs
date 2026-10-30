@@ -281,12 +281,12 @@ fn draw_expanded(a: &App, ca: f32, hits: &mut Vec<Hit>) {
     hits.push(Hit { r: chev, act: Act::Collapse });
     g.icon('\u{E70E}', chev, &f.icon14, (if hot(a, Act::Collapse) { T1 } else { T3 }).fade(ca));
 
-    let labels = ["Media", "Controls", "Today", "Stats", "Clipboard", "Apps", "Games", "Power"];
+    let labels = ["Media", "Controls", "Today", "Stats", "Clipboard", "Shelf", "Apps", "Games", "Power"];
     // rough text width: narrow letters count less, so the gaps between tabs look even
     let text_w = |s: &str| -> f32 {
         s.chars().map(|c| match c { 'i' | 'l' | 't' | 'f' | 'j' | 'r' | 'I' => 3.4, 'm' | 'w' | 'M' | 'W' => 9.6, _ => 6.7 }).sum()
     };
-    let widths: Vec<f32> = labels.iter().map(|l| text_w(l) + 24.0).collect();
+    let widths: Vec<f32> = labels.iter().map(|l| text_w(l) + 16.0).collect();
     let total: f32 = widths.iter().sum();
     let (left, right) = (46.0, EXP_W - 46.0);
     let gap = ((right - left - total) / (labels.len() as f32 - 1.0)).clamp(2.0, 12.0);
@@ -314,6 +314,7 @@ fn draw_expanded(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         Page::Controls => page_controls(a, ca, hits),
         Page::Clipboard => page_clipboard(a, ca, hits),
         Page::Apps => page_apps(a, ca, hits),
+        Page::Shelf => page_shelf(a, ca, hits),
         Page::Tasks => page_tasks(a, ca, hits),
         Page::Stats => page_stats(a, ca),
         Page::Power => page_power(a, ca, hits),
@@ -805,6 +806,53 @@ fn page_apps(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         g.icon('\u{E710}', Rect::new(rect.cx() - 18.0, rect.y + 10.0, 36.0, 36.0), &f.icon14, a.accent.fade(ca));
         g.text("Add app", Rect::new(rect.x + 4.0, rect.y + 52.0, rect.w - 8.0, 24.0), &f.tiny, T2.fade(ca), Align::Center);
     }
+}
+
+fn page_shelf(a: &App, ca: f32, hits: &mut Vec<Hit>) {
+    let g = &a.gfx;
+    let f = &g.fonts;
+    let area = Rect::new(20.0, 2.0, EXP_W - 40.0, 202.0);
+    if a.shelf_hover {
+        // a file is being dragged over the notch
+        g.fill_rrect(area, 18.0, a.accent.fade(0.14 * ca));
+        g.stroke_rrect(area, 18.0, a.accent.fade(0.9 * ca), 2.0);
+        g.text("Drop to add to the shelf", area, &f.body, T1.fade(ca), Align::Center);
+        return;
+    }
+    if a.shelf.is_empty() {
+        g.stroke_rrect(area, 18.0, Color::white(0.14 * ca), 1.0);
+        g.icon('\u{E896}', Rect::new(area.cx() - 20.0, 62.0, 40.0, 40.0), &f.icon22, a.accent.fade(ca));
+        g.text("Drop files here to keep them handy", Rect::new(area.x, 108.0, area.w, 24.0), &f.body, T1.fade(ca), Align::Center);
+        g.text("Drag them back out into any app. Click one to open it.", Rect::new(area.x, 132.0, area.w, 22.0), &f.small, T3.fade(ca), Align::Center);
+        return;
+    }
+    let (cols, tw, th) = (6usize, 88.0, 86.0);
+    let gap = (EXP_W - 56.0 - cols as f32 * tw) / (cols as f32 - 1.0);
+    for (i, path) in a.shelf.iter().enumerate() {
+        let (c, r) = (i % cols, i / cols);
+        let rect = Rect::new(28.0 + c as f32 * (tw + gap), 4.0 + r as f32 * (th + 6.0), tw, th);
+        let act = Act::ShelfItem(i);
+        hits.push(Hit { r: rect, act });
+        let x = Rect::new(rect.x + rect.w - 22.0, rect.y + 3.0, 19.0, 19.0);
+        let xact = Act::ShelfDel(i);
+        hits.push(Hit { r: x, act: xact });
+        let over = hot(a, act) || hot(a, xact);
+        g.fill_rrect(rect, 16.0, Color::white((if over { 0.12 } else { 0.05 }) * ca));
+        let ic = Rect::new(rect.cx() - 18.0, rect.y + 10.0, 36.0, 36.0);
+        let name = std::path::Path::new(path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
+        match a.shelf_icons.get(i).and_then(|b| b.as_ref()) {
+            Some(bmp) => g.draw_bitmap(bmp, ic, 0.0, ca),
+            None => g.icon('\u{E8A5}', ic, &f.icon22, T2.fade(ca)),
+        }
+        g.text(&name, Rect::new(rect.x + 4.0, rect.y + 52.0, rect.w - 8.0, 24.0), &f.tiny, T2.fade(ca), Align::Center);
+        if over {
+            g.fill_circle(x.cx(), x.cy(), 8.5, Color(0.0, 0.0, 0.0, 0.75 * ca));
+            g.icon('\u{E711}', x, &f.icon14, (if hot(a, xact) { Color(1.0, 0.5, 0.5, 1.0) } else { T1 }).fade(ca));
+        }
+    }
+    let clear = Rect::new(EXP_W - 24.0 - 78.0, 190.0, 78.0, 18.0);
+    hits.push(Hit { r: clear, act: Act::ShelfClear });
+    g.text("Clear all", clear, &f.tiny, (if hot(a, Act::ShelfClear) { T1 } else { T3 }).fade(ca), Align::Right);
 }
 
 fn page_app_picker(a: &App, ca: f32, hits: &mut Vec<Hit>) {

@@ -29,6 +29,8 @@ pub const COL_MEDIA_W: f32 = 296.0;
 pub const COL_TIMER_W: f32 = 132.0;
 pub const MARGIN: f32 = 24.0; // room for spring overshoot
 pub const MAX_TODO: usize = 5;
+/// Files the Shelf tab holds.
+pub const SHELF_MAX: usize = 12;
 
 /// Rows the app picker shows at once.
 pub const PICK_ROWS: usize = 5;
@@ -117,6 +119,7 @@ pub enum Page {
     Media,
     Controls,
     Clipboard,
+    Shelf,
     Apps,
     Tasks,
     Game,
@@ -124,12 +127,13 @@ pub enum Page {
     Power,
 }
 
-pub const PAGES: [Page; 8] = [
+pub const PAGES: [Page; 9] = [
     Page::Media,
     Page::Controls,
     Page::Tasks,
     Page::Stats,
     Page::Clipboard,
+    Page::Shelf,
     Page::Apps,
     Page::Game,
     Page::Power,
@@ -184,6 +188,10 @@ pub enum Act {
     TodoToggle(usize),
     TodoDel(usize),
     TodoAdd,
+    /// Shelf tab: press on the n-th file (click opens it, dragging takes it out) / remove it / remove all
+    ShelfItem(usize),
+    ShelfDel(usize),
+    ShelfClear,
 }
 
 #[derive(Clone, Copy)]
@@ -285,6 +293,17 @@ pub struct App {
     pub clips: Vec<String>,
     /// pinned items: kept first, never cleared, saved between runs (also works as snippets)
     pub pins: Vec<String>,
+    /// files parked on the Shelf tab (full paths) and their icons
+    pub shelf: Vec<String>,
+    pub shelf_icons: Vec<Option<ID2D1Bitmap>>,
+    /// a file is being dragged over the notch
+    pub shelf_hover: bool,
+    /// the drag itself opened the panel, so closing it again if nothing is dropped
+    shelf_auto_open: bool,
+    /// pressed a shelf file: (index, x, y); becomes a drag once the pointer moves
+    shelf_press: Option<(usize, f32, f32)>,
+    /// our own drag-out is running (no auto-close meanwhile)
+    shelf_out: bool,
     pub clip_filter: String,
     pub entry_search: bool,
     pub clip_scroll: usize,
@@ -443,6 +462,12 @@ impl App {
             bri_asked: false,
             clips: Vec::new(),
             pins: store::load_pins(),
+            shelf: store::load_shelf(),
+            shelf_icons: Vec::new(),
+            shelf_hover: false,
+            shelf_auto_open: false,
+            shelf_press: None,
+            shelf_out: false,
             clip_filter: String::new(),
             entry_search: false,
             clip_scroll: 0,
@@ -513,6 +538,7 @@ impl App {
         sys::watch_mic(hwnd.0 as isize);
         sys::watch_mic_sessions(hwnd.0 as isize);
         a.load_app_icons();
+        a.load_shelf_icons();
         let (w, h) = a.target_size();
         a.sw = Spring::new(w);
         a.sh = Spring::new(h);
@@ -560,6 +586,7 @@ impl App {
             self.scale = scale;
             self.load_art();
             self.load_app_icons();
+            self.load_shelf_icons();
         }
         self.update_reserve();
     }
@@ -859,7 +886,7 @@ impl App {
             }
             T_LEAVE => {
                 self.kill_timer(T_LEAVE);
-                if self.expanded && !self.pinned && self.entering.is_none() && self.drag.is_none() && self.cfg.auto_close {
+                if self.expanded && !self.pinned && self.entering.is_none() && self.drag.is_none() && !self.shelf_out && self.cfg.auto_close {
                     self.set_expanded(false);
                 }
             }
@@ -1250,6 +1277,15 @@ impl App {
             }
             return;
         }
+        if let Some((i, x0, y0)) = self.shelf_press {
+            if unsafe { GetAsyncKeyState(VK_LBUTTON.0 as i32) } >= 0 {
+                self.shelf_press = None; // released somewhere we did not see
+            } else if (x - x0).hypot(y - y0) > 6.0 {
+                self.shelf_press = None;
+                self.shelf_drag_out(i);
+                return;
+            }
+        }
         if self.drag.is_some() {
             self.apply_drag(x);
             self.render();
@@ -1274,7 +1310,7 @@ impl App {
                 self.render();
             }
         }
-        if self.expanded && !self.pinned && self.entering.is_none() && self.drag.is_none() && self.cfg.auto_close {
+        if self.expanded && !self.pinned && self.entering.is_none() && self.drag.is_none() && !self.shelf_out && self.cfg.auto_close {
             self.set_timer(T_LEAVE, 450);
         }
     }
@@ -1314,7 +1350,12 @@ impl App {
             return;
         }
         if let Some(act) = self.hit_at(x, y) {
-            self.do_act(act, x);
+            if let Act::ShelfItem(i) = act {
+                // a click opens the file, a drag takes it out: decided on release or move
+                self.shelf_press = Some((i, x, y));
+            } else {
+                self.do_act(act, x);
+            }
         } else if self.entering.is_some() {
             // clicking elsewhere inside the notch keeps the text box open
         }
@@ -1325,6 +1366,10 @@ impl App {
 
     pub fn on_lbutton_up(&mut self) {
         self.mouse_down = false;
+        if let Some((i, ..)) = self.shelf_press.take() {
+            self.shelf_open(i);
+            return;
+        }
         let Some(d) = self.drag.take() else { return };
         unsafe {
             let _ = ReleaseCapture();
@@ -1629,6 +1674,17 @@ impl App {
                     self.load_app_icons();
                 }
             }
+            Act::ShelfItem(i) => self.shelf_open(i),
+            Act::ShelfDel(i) => {
+                if i < self.shelf.len() {
+                    self.shelf.remove(i);
+                    self.shelf_changed();
+                }
+            }
+            Act::ShelfClear => {
+                self.shelf.clear();
+                self.shelf_changed();
+            }
             Act::OpenSettings(k) => sys::open(SETTINGS_PAGES[k.min(SETTINGS_PAGES.len() - 1)], ""),
             Act::PowerRestart => self.power_press(1),
             Act::PowerShutdown => self.power_press(2),
@@ -1928,6 +1984,103 @@ impl App {
                 bmp
             })
             .collect();
+    }
+
+    // ------------------------------------------------------------- shelf --
+
+    fn load_shelf_icons(&mut self) {
+        self.shelf_icons = self
+            .shelf
+            .iter()
+            .map(|p| {
+                let icon = sys::file_icon(std::path::Path::new(p))?;
+                let bmp = self.gfx.bitmap_from_hicon(icon).ok();
+                unsafe {
+                    let _ = DestroyIcon(icon);
+                }
+                bmp
+            })
+            .collect();
+    }
+
+    fn shelf_changed(&mut self) {
+        store::save_shelf(&self.shelf);
+        self.load_shelf_icons();
+    }
+
+    pub fn shelf_dragging(&self) -> bool {
+        self.shelf_out
+    }
+
+    /// A file drag from another program reached the notch: open the Shelf tab.
+    pub fn on_shelf_enter(&mut self) {
+        self.shelf_hover = true;
+        if !self.expanded {
+            self.shelf_auto_open = true;
+            self.tucked = false;
+            self.set_expanded(true);
+        }
+        self.select_page(Page::Shelf);
+        if self.anim_ms == 0 {
+            self.render();
+        }
+    }
+
+    /// The drag left without dropping: fold the panel again if the drag opened it.
+    pub fn on_shelf_leave(&mut self) {
+        self.shelf_hover = false;
+        if std::mem::take(&mut self.shelf_auto_open) && !self.pinned {
+            self.set_expanded(false);
+        } else if self.anim_ms == 0 {
+            self.render();
+        }
+    }
+
+    pub fn on_shelf_drop(&mut self, paths: Vec<String>) {
+        self.shelf_hover = false;
+        self.shelf_auto_open = false;
+        for p in paths {
+            if self.shelf.len() < SHELF_MAX && !self.shelf.contains(&p) {
+                self.shelf.push(p);
+            }
+        }
+        self.shelf_changed();
+        self.render();
+    }
+
+    fn shelf_open(&mut self, i: usize) {
+        let Some(p) = self.shelf.get(i).cloned() else { return };
+        if !std::path::Path::new(&p).exists() {
+            self.shelf.remove(i);
+            self.shelf_changed();
+            return;
+        }
+        sys::open(&p, "");
+        self.pinned = false;
+        self.set_expanded(false);
+    }
+
+    /// Drag the i-th shelf file out into another program.
+    fn shelf_drag_out(&mut self, i: usize) {
+        let Some(p) = self.shelf.get(i).cloned() else { return };
+        self.shelf_out = true;
+        crate::shelf::drag_out(self.hwnd, &p);
+        self.shelf_out = false;
+        self.mouse_down = false;
+        // the target may have moved the file away
+        if !std::path::Path::new(&p).exists() {
+            self.shelf.retain(|s| *s != p);
+            self.shelf_changed();
+        }
+        unsafe {
+            let (mut pt, mut r) = (POINT::default(), RECT::default());
+            let _ = GetCursorPos(&mut pt);
+            let _ = GetWindowRect(self.hwnd, &mut r);
+            if !(pt.x >= r.left && pt.x < r.right && pt.y >= r.top && pt.y < r.bottom) {
+                self.on_mouse_leave();
+            }
+        }
+        self.render();
     }
 
     /// The installed apps matching the search text.
@@ -2343,6 +2496,18 @@ mod preview {
             a.page = page;
             render(&a, &name);
         }
+        // the shelf with files on it, and while a file is dragged over
+        a.page = Page::Shelf;
+        a.shelf = ["Cargo.toml", "README.md", "docs", "src\\main.rs", "LICENSE"]
+            .iter()
+            .map(|f| std::env::current_dir().unwrap().join(f).to_string_lossy().into_owned())
+            .collect();
+        a.load_shelf_icons();
+        render(&a, "shelf_full");
+        a.shelf_hover = true;
+        render(&a, "shelf_drop");
+        a.shelf_hover = false;
+        a.shelf.clear();
         // each game while it is running
         a.page = Page::Game;
         for k in 0..4 {

@@ -10,6 +10,7 @@ mod games;
 mod skins;
 mod pixdata;
 mod scene;
+mod shelf;
 mod gfx;
 mod pop;
 mod media;
@@ -23,7 +24,6 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use windows::core::*;
 use windows::Win32::Foundation::*;
 use windows::Win32::Graphics::Gdi::*;
-use windows::Win32::System::Com::*;
 use windows::Win32::System::DataExchange::{
     AddClipboardFormatListener, RemoveClipboardFormatListener,
 };
@@ -73,7 +73,8 @@ fn main() -> Result<()> {
         // 1 ms timer resolution: the default 15.6 ms makes every timer fire late and uneven
         windows::Win32::Media::timeBeginPeriod(1);
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-        CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
+        // OLE (not just COM): needed to accept dropped files and to drag them back out
+        windows::Win32::System::Ole::OleInitialize(None)?;
 
         let hinst: HINSTANCE = GetModuleHandleW(None)?.into();
         let class = w!("NockWindow");
@@ -103,6 +104,7 @@ fn main() -> Result<()> {
 
         let boxed = Box::new(App::new(hwnd, sys::scale_of(sys::pick_monitor(store::load_config().monitor)))?);
         APP.store(Box::into_raw(boxed), Ordering::SeqCst);
+        shelf::register(hwnd);
 
         // top bar window (same class; messages are routed by handle in wndproc)
         let bar_hwnd = CreateWindowExW(
