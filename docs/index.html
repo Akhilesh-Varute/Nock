@@ -99,6 +99,7 @@
         <button class="tab" role="tab" id="t-today" data-tab="today" aria-selected="false">Today</button>
         <button class="tab" role="tab" id="t-stats" data-tab="stats" aria-selected="false">Stats</button>
         <button class="tab" role="tab" id="t-clip" data-tab="clip" aria-selected="false">Clipboard</button>
+        <button class="tab" role="tab" id="t-shelf" data-tab="shelf" aria-selected="false">Shelf</button>
         <button class="tab" role="tab" id="t-apps" data-tab="apps" aria-selected="false">Apps</button>
         <button class="tab" role="tab" id="t-games" data-tab="games" aria-selected="false">Games</button>
         <button class="tab" role="tab" id="t-power" data-tab="power" aria-selected="false">Power</button>
@@ -171,6 +172,15 @@
           <div class="c-wrap">
             <div class="c-head"><span id="cCount">Clipboard · 5</span><span class="sp"></span><svg class="icon"><use href="#i-search"/></svg><input id="cSearch" type="search" placeholder="Search" aria-label="Search clipboard"><button class="c-clear" id="cClear" type="button">Clear</button></div>
             <div class="c-list" id="cList"></div>
+          </div>
+        </div>
+
+        <div class="page" data-page="shelf" role="tabpanel" aria-labelledby="t-shelf" hidden>
+          <div class="apps">
+            <button class="app" data-toast="Drop any file on the notch to keep it here" style="--c:#7fd1ff"><i><svg class="icon"><use href="#i-clip"/></svg></i>design-v3.png</button>
+            <button class="app" data-toast="Click a file to open it" style="--c:#f2c14e"><i><svg class="icon"><use href="#i-folder"/></svg></i>Invoices</button>
+            <button class="app" data-toast="Drag a file out into any app: mail, chat, the browser" style="--c:#9be37a"><i><svg class="icon"><use href="#i-note"/></svg></i>notes.txt</button>
+            <button class="app" data-toast="Up to 12 files, and they stay after a restart" style="--c:#ff8fa3"><i><svg class="icon"><use href="#i-cam"/></svg></i>photo.jpg</button>
           </div>
         </div>
 

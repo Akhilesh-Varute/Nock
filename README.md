@@ -20,7 +20,7 @@ Written in Rust. No webview, no framework, no runtime. One small <code>.exe</cod
 
 ## Features
 
-- **Notch** at the top centre. Click it and a panel opens with tabs: **Media**, **Controls**, **Today** (focus timer, to-dos, calendar), **Stats**, **Clipboard**, **Apps**, **Games** and **Power**.
+- **Notch** at the top centre. Click it and a panel opens with tabs: **Media**, **Controls**, **Today** (focus timer, to-dos, calendar), **Stats**, **Clipboard**, **Shelf** (drop files on it), **Apps**, **Games** and **Power**.
 - **Top bar** along the top of the screen: active app name, Wi-Fi, Bluetooth, sound, brightness, battery and clock, each with a dropdown (join Wi-Fi networks, connect Bluetooth devices, sliders, calendar). Optional clock styles and a CPU / memory read-out.
 - **A little life**: a buddy character on the bar, scripted scenes, an arcade with four mouse-only games, and small reactions on the pill (squish on click, glow with the music, confetti when the timer ends).
 - **Smart pill**: the notch tells you things without a click. Amber "Battery low" with time left, "Mic on" with the time and a click-to-mute mic icon, "Link / Path / Colour / Code copied" (click a link or path to open it), a break nudge after 90 minutes of steady use, and meeting countdowns from your calendar. Tray → *Smart hints* turns it off. See [Smart pill](#smart-pill).
@@ -86,6 +86,7 @@ The pill itself reacts: it squishes when you click it, jiggles when the pointer 
   - *Calendar*: the current month.
 - **Stats**: CPU and memory ring gauges (with a CPU history), battery with charging state, and uptime. It samples once a second, only while this tab is open.
 - **Clipboard**: the last 20 things you copied. Click one to paste it into the app you were using. **Star** an item to pin it: pinned items stay at the top, survive "Clear" and restarts, and work as saved snippets. **Search** filters the list as you type (Enter keeps the filter, Esc clears it). Recent history lives in memory only, and copies from password managers are skipped; only the items you pin are written to disk.
+- **Shelf**: a place to park files. Drag any file or folder onto the notch (it opens by itself) and drop it; it stays on the shelf, even after a restart. Click a tile to open it, drag it out into any program (mail, chat, a folder) to copy or move it there, and use the small **×** to remove it, or **Clear all**. Up to 12 items. Nothing is copied: the shelf only remembers where the files are.
 - **Apps**: pinned launcher tiles with the real app icons. Click **+ Add app** to pick from every installed app (Start menu apps, Store apps, game launchers) with a search box; click an app to pin it, and use the small **×** on a tile to unpin. The list refreshes each time you open the picker, and has a refresh button. Up to 12 tiles.
 - **Games**: pick one on the arcade screen; all are mouse only and each keeps a best score.
   - *Super Flight*: click to flap through the pipes.
@@ -202,6 +203,7 @@ Everything is in `%APPDATA%\Nock\` (tray → *Open settings folder*). Most setti
 - `apps.txt`: pinned launcher entries, one per line: `Name|target|optional arguments`. The Apps tab edits it for you (+ and ×), but you can edit it by hand too: the target can be an exe, folder, URL or `ms-settings:` link. After editing, use tray → *Reload pinned apps*.
 - `todos.txt`: the to-do list.
 - `pinned_clips.txt`: the clipboard items you starred.
+- `shelf.txt`: the files on the Shelf tab, one full path per line.
 - `focus_today.txt`: today's focus minutes and finished tasks (resets each day).
 - `games_best.txt`: best scores of the four games.
 - `brightness.log` and `scene.log`: only written if a brightness change or a scene fails to start, with the reason.

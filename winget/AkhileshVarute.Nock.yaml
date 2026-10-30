@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.singleton.1.6.0.schema.json
 # Singleton manifest for winget-pkgs. See winget/README.md for how to submit it.
 PackageIdentifier: AkhileshVarute.Nock
-PackageVersion: 0.12.2
+PackageVersion: 0.12.3
 PackageLocale: en-US
 Publisher: Akhilesh Varute
 PublisherUrl: https://github.com/Akhilesh-Varute
@@ -24,7 +24,7 @@ Scope: user
 InstallerLocale: en-US
 Installers:
 - Architecture: x64
-  InstallerUrl: https://github.com/Akhilesh-Varute/Nock/releases/download/v0.12.2/NockSetup-0.12.2.exe
-  InstallerSha256: A5CF4B132EB710212778DFDED5B34C88D69A03BCD937DA15AE95F41A42435071
+  InstallerUrl: https://github.com/Akhilesh-Varute/Nock/releases/download/v0.12.3/NockSetup-0.12.3.exe
+  InstallerSha256: 343F4E406F56321C40B63FF09EED5DFA881888438E7AFDB87AE772404D77CBEE
 ManifestType: singleton
 ManifestVersion: 1.6.0
