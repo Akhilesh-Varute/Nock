@@ -26,8 +26,7 @@ pub fn draw(a: &App, w: f32, h: f32, hits: &mut Vec<Hit>) {
     // Click squish, heartbeat and hover jiggle nudge it by a pixel or two.
     let beat = a.beat_factor();
     let inset = (a.squish * a.squish * 3.0).max(beat * 2.0);
-    let jig = a.jiggle * (a.fx_phase).sin() * 1.5;
-    let body = Rect::new(inset + jig, -rad, w - 2.0 * inset, h + rad - inset);
+    let body = Rect::new(inset, -rad, w - 2.0 * inset, h + rad - inset);
     g.fill_rrect(body, rad, BLACK);
     g.stroke_rrect(
         Rect::new(body.x + 0.5, -rad, body.w - 1.0, body.h - 0.5),
@@ -267,6 +266,55 @@ fn hot(a: &App, act: Act) -> bool {
     a.hot == Some(act)
 }
 
+/// How hovered a control is, 0..1 (eases in and out instead of snapping).
+fn hot_k(a: &App, act: Act) -> f32 {
+    a.hover.iter().find(|(x, _)| *x == act).map_or(0.0, |(_, v)| *v)
+}
+
+fn mix(a: Color, b: Color, t: f32) -> Color {
+    let t = t.clamp(0.0, 1.0);
+    Color(a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t, a.2 + (b.2 - a.2) * t, a.3 + (b.3 - a.3) * t)
+}
+
+/// The hover squash of the collapsed pill, same keyframes as the website's notch:
+/// wide and short, then narrow and tall, then back. `jiggle` runs 1 -> 0.
+pub fn squash(jiggle: f32) -> (f32, f32) {
+    let p = 1.0 - jiggle.clamp(0.0, 1.0);
+    let (a, b, t) = if p < 0.3 {
+        ((1.0, 1.0), (1.05, 0.92), p / 0.3)
+    } else if p < 0.6 {
+        ((1.05, 0.92), (0.98, 1.04), (p - 0.3) / 0.3)
+    } else {
+        ((0.98, 1.04), (1.0, 1.0), (p - 0.6) / 0.4)
+    };
+    let k = t * t * (3.0 - 2.0 * t);
+    (a.0 + (b.0 - a.0) * k, a.1 + (b.1 - a.1) * k)
+}
+
+const TAB_LABELS: [&str; 9] = ["Media", "Controls", "Today", "Stats", "Clipboard", "Shelf", "Apps", "Games", "Power"];
+
+/// Where each tab sits in the top row, in the same order as `PAGES`.
+pub fn tab_rects() -> Vec<Rect> {
+    // rough text width: narrow letters count less, so the gaps between tabs look even
+    let text_w = |s: &str| -> f32 {
+        s.chars().map(|c| match c { 'i' | 'l' | 't' | 'f' | 'j' | 'r' | 'I' => 3.4, 'm' | 'w' | 'M' | 'W' => 9.6, _ => 6.7 }).sum()
+    };
+    let widths: Vec<f32> = TAB_LABELS.iter().map(|l| text_w(l) + 16.0).collect();
+    let total: f32 = widths.iter().sum();
+    let (left, right) = (46.0, EXP_W - 46.0);
+    let gap = ((right - left - total) / (TAB_LABELS.len() as f32 - 1.0)).clamp(2.0, 12.0);
+    let used = total + gap * (TAB_LABELS.len() as f32 - 1.0);
+    let mut x = left + (right - left - used) / 2.0;
+    widths
+        .iter()
+        .map(|w| {
+            let r = Rect::new(x, 8.0, *w, 28.0);
+            x += w + gap;
+            r
+        })
+        .collect()
+}
+
 fn draw_expanded(a: &App, ca: f32, hits: &mut Vec<Hit>) {
     let g = &a.gfx;
     let f = &g.fonts;
@@ -281,30 +329,22 @@ fn draw_expanded(a: &App, ca: f32, hits: &mut Vec<Hit>) {
     hits.push(Hit { r: chev, act: Act::Collapse });
     g.icon('\u{E70E}', chev, &f.icon14, (if hot(a, Act::Collapse) { T1 } else { T3 }).fade(ca));
 
-    let labels = ["Media", "Controls", "Today", "Stats", "Clipboard", "Shelf", "Apps", "Games", "Power"];
-    // rough text width: narrow letters count less, so the gaps between tabs look even
-    let text_w = |s: &str| -> f32 {
-        s.chars().map(|c| match c { 'i' | 'l' | 't' | 'f' | 'j' | 'r' | 'I' => 3.4, 'm' | 'w' | 'M' | 'W' => 9.6, _ => 6.7 }).sum()
-    };
-    let widths: Vec<f32> = labels.iter().map(|l| text_w(l) + 16.0).collect();
-    let total: f32 = widths.iter().sum();
-    let (left, right) = (46.0, EXP_W - 46.0);
-    let gap = ((right - left - total) / (labels.len() as f32 - 1.0)).clamp(2.0, 12.0);
-    let used = total + gap * (labels.len() as f32 - 1.0);
-    let mut x = left + (right - left - used) / 2.0;
+    // the active-tab highlight slides from tab to tab; each label takes the accent
+    // colour in proportion to how much of the highlight is behind it
+    let rects = tab_rects();
+    let pill = Rect::new(a.tab_x, 8.0, a.tab_w, 28.0);
+    g.fill_rrect(pill, 14.0, a.accent.fade(0.20 * ca));
     for (i, p) in PAGES.iter().enumerate() {
-        let r = Rect::new(x, 8.0, widths[i], 28.0);
-        x += widths[i] + gap;
+        let r = rects[i];
         let act = Act::Tab(*p);
         hits.push(Hit { r, act });
-        let active = a.page == *p;
-        if active {
-            g.fill_rrect(r, 14.0, a.accent.fade(0.20 * ca));
-        } else if hot(a, act) {
-            g.fill_rrect(r, 14.0, Color::white(0.07 * ca));
+        let k = hot_k(a, act);
+        if a.page != *p {
+            g.fill_rrect(r, 14.0, Color::white(0.07 * k * ca));
         }
-        let col = if active { a.accent } else if hot(a, act) { T2 } else { T3 };
-        g.text(labels[i], r, &f.small, col.fade(ca), Align::Center);
+        let covered = ((pill.x + pill.w).min(r.x + r.w) - pill.x.max(r.x)).max(0.0) / r.w;
+        let col = mix(mix(T3, T2, k), a.accent, covered);
+        g.text(TAB_LABELS[i], r, &f.small, col.fade(ca), Align::Center);
     }
 
     // the page itself, moved below the tab row; its hit boxes move with it
@@ -596,8 +636,8 @@ fn page_stats(a: &App, ca: f32) {
     let g = &a.gfx;
     let (w, h, gap) = (280.0, 92.0, 12.0);
     let at = |c: f32, r: f32| Rect::new(14.0 + c * (w + gap), 6.0 + r * (h + gap), w, h);
-    stat_tile(g, at(0.0, 0.0), '\u{E9D9}', "CPU", &format!("{}%", a.stat_cpu), "", Some(a.stat_cpu as f32 / 100.0), C_CPU, ca);
-    stat_tile(g, at(1.0, 0.0), '\u{E964}', "Memory", &format!("{}%", a.stat_mem), "", Some(a.stat_mem as f32 / 100.0), C_MEM, ca);
+    stat_tile(g, at(0.0, 0.0), '\u{E9D9}', "CPU", &format!("{}%", a.stat_cpu), "", Some(a.bar_cpu), C_CPU, ca);
+    stat_tile(g, at(1.0, 0.0), '\u{E964}', "Memory", &format!("{}%", a.stat_mem), "", Some(a.bar_mem), C_MEM, ca);
     // CPU history beside the value
     let r = at(0.0, 0.0);
     let n = a.stat_hist.len();
@@ -778,7 +818,8 @@ fn page_apps(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         let xact = Act::AppUnpin(i);
         hits.push(Hit { r: x, act: xact });
         let over = hot(a, act) || hot(a, xact);
-        g.fill_rrect(rect, 16.0, Color::white((if over { 0.12 } else { 0.05 }) * ca));
+        let k = hot_k(a, act).max(hot_k(a, xact));
+        g.fill_rrect(rect, 16.0, Color::white((0.05 + 0.07 * k) * ca));
         let ic = Rect::new(rect.cx() - 18.0, rect.y + 10.0, 36.0, 36.0);
         match a.app_icons.get(i).and_then(|b| b.as_ref()) {
             Some(bmp) => g.draw_bitmap(bmp, ic, 0.0, ca),
@@ -837,7 +878,8 @@ fn page_shelf(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         let xact = Act::ShelfDel(i);
         hits.push(Hit { r: x, act: xact });
         let over = hot(a, act) || hot(a, xact);
-        g.fill_rrect(rect, 16.0, Color::white((if over { 0.12 } else { 0.05 }) * ca));
+        let k = hot_k(a, act).max(hot_k(a, xact));
+        g.fill_rrect(rect, 16.0, Color::white((0.05 + 0.07 * k) * ca));
         let ic = Rect::new(rect.cx() - 18.0, rect.y + 10.0, 36.0, 36.0);
         let name = std::path::Path::new(path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
         match a.shelf_icons.get(i).and_then(|b| b.as_ref()) {
