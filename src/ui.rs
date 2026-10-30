@@ -309,7 +309,7 @@ fn draw_expanded(a: &App, ca: f32, hits: &mut Vec<Hit>) {
 
     // the page itself, moved below the tab row; its hit boxes move with it
     let start = hits.len();
-    g.shifted(0.0, CONTENT_Y, || match a.page {
+    let draw_page = |p: Page, ca: f32, hits: &mut Vec<Hit>| match p {
         Page::Media => page_media(a, ca, hits),
         Page::Controls => page_controls(a, ca, hits),
         Page::Clipboard => page_clipboard(a, ca, hits),
@@ -334,7 +334,16 @@ fn draw_expanded(a: &App, ca: f32, hits: &mut Vec<Hit>) {
                 }
             }
         }
-    });
+    };
+    if a.page_t < 1.0 {
+        // cross-fade: the old page drifts up and fades out (not clickable), the new one rises in
+        let k = 1.0 - (1.0 - a.page_t).powi(3);
+        let mut gone = Vec::new();
+        g.shifted(0.0, CONTENT_Y - 6.0 * k, || draw_page(a.prev_page, ca * (1.0 - k), &mut gone));
+        g.shifted(0.0, CONTENT_Y + 8.0 * (1.0 - k), || draw_page(a.page, ca * k, hits));
+    } else {
+        g.shifted(0.0, CONTENT_Y, || draw_page(a.page, ca, hits));
+    }
     for h in &mut hits[start..] {
         h.r.y += CONTENT_Y;
     }
