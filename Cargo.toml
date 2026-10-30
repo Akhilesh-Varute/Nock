@@ -1,6 +1,6 @@
 [package]
 name = "nock"
-version = "0.12.2"
+version = "0.12.3"
 edition = "2021"
 description = "A tiny native notch and top bar for Windows, written in Rust"
 
@@ -41,6 +41,7 @@ windows = { version = "0.62.2", features = [
   "Win32_System_Memory",
   "Win32_System_Ole",
   "Win32_System_Registry",
+  "Win32_System_SystemServices",
   "Win32_System_Shutdown",
   "Win32_System_SystemInformation",
   "Win32_System_Threading",

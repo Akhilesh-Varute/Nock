@@ -363,6 +363,21 @@ pub fn save_pins(pins: &[String]) {
     let _ = fs::write(data_dir().join("pinned_clips.txt"), text.join("\n"));
 }
 
+/// Files parked on the Shelf tab, one full path per line. Files that have since
+/// been moved or deleted are dropped when the list is read.
+pub fn load_shelf() -> Vec<String> {
+    fs::read_to_string(data_dir().join("shelf.txt"))
+        .unwrap_or_default()
+        .lines()
+        .filter(|p| std::path::Path::new(p).exists())
+        .map(String::from)
+        .collect()
+}
+
+pub fn save_shelf(items: &[String]) {
+    let _ = fs::write(data_dir().join("shelf.txt"), items.join("\n"));
+}
+
 /// Best scores of the four notch games (flight, bricks, slicer, run). The flying
 /// game's old single-score file is read once if the new one is missing.
 pub fn load_bests() -> [u32; 4] {
