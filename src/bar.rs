@@ -99,6 +99,13 @@ impl App {
         self.bar.as_ref().map(|b| b.hwnd == h).unwrap_or(false)
     }
 
+    /// Fade the top bar window (0..1).
+    pub fn set_bar_alpha(&self, a: f32) {
+        if let Some(b) = &self.bar {
+            b.gfx.set_alpha(b.hwnd, a);
+        }
+    }
+
     pub fn bar_visible(&self) -> bool {
         self.cfg.top_bar && !self.hidden
     }

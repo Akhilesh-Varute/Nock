@@ -259,6 +259,13 @@ pub struct App {
     /// page being faded out, and how far the cross-fade has got (1.0 = finished)
     pub prev_page: Page,
     pub page_t: f32,
+    /// a window covers the notch (only tracked with the smart-hide option)
+    smart_hit: bool,
+    /// opacity of the notch and bar while they fade in or out, and where that is heading
+    fade: f32,
+    fade_to: f32,
+    /// the fade-out has finished: now really hide
+    fade_out_done: bool,
     /// the sliding highlight behind the active tab (x and width, in points)
     pub tab_x: f32,
     pub tab_w: f32,
@@ -446,6 +453,10 @@ impl App {
             last_tick: Instant::now(),
             prev_page: Page::Media,
             page_t: 1.0,
+            smart_hit: false,
+            fade: 1.0,
+            fade_to: 1.0,
+            fade_out_done: false,
             tab_x: 0.0,
             tab_w: 0.0,
             hover: Vec::new(),
@@ -2047,8 +2058,9 @@ impl App {
     /// Ease the tab highlight, the stat bars and the hover fades toward where they
     /// belong. Returns true while any of them is still moving.
     fn step_ui(&mut self, dt: f32) -> bool {
+        let fading = self.step_fade(dt);
         if !self.expanded {
-            return false;
+            return fading;
         }
         let mut busy = false;
         if let Some(i) = PAGES.iter().position(|p| *p == self.page) {
@@ -2087,7 +2099,66 @@ impl App {
             *v += (target - *v) * k;
         }
         self.hover.retain(|(a, v)| Some(*a) == hot || *v > 0.02);
-        busy || self.hover.iter().any(|(a, v)| if Some(*a) == hot { *v < 0.98 } else { true })
+        busy || fading || self.hover.iter().any(|(a, v)| if Some(*a) == hot { *v < 0.98 } else { true })
+    }
+
+    fn apply_fade(&self) {
+        self.gfx.set_alpha(self.hwnd, self.fade);
+        self.set_bar_alpha(self.fade);
+    }
+
+    /// Fade the notch and bar in or out (0.18 s). When a fade-out ends, the hide
+    /// that was waiting for it goes ahead.
+    fn step_fade(&mut self, dt: f32) -> bool {
+        if self.fade == self.fade_to {
+            return false;
+        }
+        let step = dt / 0.18;
+        self.fade = if self.fade_to > self.fade { (self.fade + step).min(self.fade_to) } else { (self.fade - step).max(self.fade_to) };
+        self.apply_fade();
+        if self.fade == 0.0 && self.fade_to == 0.0 {
+            self.fade_out_done = true;
+            self.on_foreground();
+            self.fade_out_done = false;
+            return false;
+        }
+        self.fade != self.fade_to
+    }
+
+    /// Does `w` cover the notch? Only with the smart-hide option, and never while the
+    /// panel is open or for our own and shell windows.
+    fn overlaps_notch(&self, w: HWND) -> bool {
+        use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
+        if !self.cfg.smart_hide || self.expanded || w.is_invalid() || w == self.hwnd {
+            return false;
+        }
+        if self.is_bar(w) || self.is_pop(w) || self.is_buddy(w) || self.is_stage(w) {
+            return false;
+        }
+        unsafe {
+            if !IsWindowVisible(w).as_bool() || IsIconic(w).as_bool() {
+                return false;
+            }
+            if matches!(sys::class_of(w).as_str(), "Progman" | "WorkerW" | "Shell_TrayWnd" | "Shell_SecondaryTrayWnd") {
+                return false;
+            }
+            let mut r = RECT::default();
+            // the visible frame, without the invisible resize border
+            if DwmGetWindowAttribute(w, DWMWA_EXTENDED_FRAME_BOUNDS, &mut r as *mut _ as *mut _, std::mem::size_of::<RECT>() as u32).is_err() {
+                let _ = GetWindowRect(w, &mut r);
+            }
+            let cx = (self.mon.left + self.mon.right) / 2;
+            let half = ((self.sw.x * self.scale) / 2.0) as i32;
+            let bottom = self.mon.top + (self.col_h() * self.scale) as i32;
+            r.top < bottom && r.bottom > self.mon.top && r.left < cx + half && r.right > cx - half
+        }
+    }
+
+    /// Tray: hide while a window covers the notch, show again when it moves away.
+    pub fn toggle_smart_hide(&mut self) {
+        self.cfg.smart_hide = !self.cfg.smart_hide;
+        store::save_config(&self.cfg);
+        self.on_foreground();
     }
 
     // ------------------------------------------------------------- shelf --
@@ -2303,6 +2374,10 @@ impl App {
 
     /// The pointer touched the top edge while a full-screen app is running.
     pub fn on_edge(&mut self) {
+        // dragging a window up to the top edge must not peek the notch back
+        if self.smart_hit && unsafe { GetAsyncKeyState(VK_LBUTTON.0 as i32) } < 0 {
+            return;
+        }
         if self.fs_peekable && !self.peek {
             // short dwell so a stray flick does nothing; shorter when the notch is
             // meant to live behind the edge
@@ -2330,6 +2405,14 @@ impl App {
 
     /// The foreground window moved/resized: re-check full screen shortly (debounced).
     pub fn on_fullscreen_check(&mut self) {
+        // smart-hide reacts at once (a cheap rectangle test), not after the 150 ms debounce
+        if self.cfg.smart_hide {
+            let hit = self.overlaps_notch(unsafe { GetForegroundWindow() });
+            if hit != self.smart_hit {
+                self.on_foreground();
+                return;
+            }
+        }
         self.set_timer(T_FSCHK, 150);
     }
 
@@ -2339,9 +2422,10 @@ impl App {
         // foreground window), and never hide while a task is being typed.
         let fgw = unsafe { GetForegroundWindow() };
         let ours = fgw == self.hwnd || self.pop.as_ref().map(|p| p.hwnd) == Some(fgw);
+        self.smart_hit = self.overlaps_notch(fgw);
         let kind = if self.tucked || ours || self.entering.is_some() {
             0
-        } else if self.cfg.auto_hide {
+        } else if self.cfg.auto_hide || self.smart_hit {
             1 // hidden, but the top edge peeks it back (same as a full-screen app)
         } else if !self.cfg.fs_hide {
             0
@@ -2355,6 +2439,12 @@ impl App {
             self.kill_timer(T_PEEK);
         }
         let fs = fs_all && !(self.peek && self.fs_peekable);
+        if fs && !self.hidden && !self.fade_out_done {
+            // fade out first; this runs again once the fade has finished
+            self.fade_to = 0.0;
+            self.retarget();
+            return;
+        }
         let fs_changed = fs_all != self.fs_hidden;
         self.fs_hidden = fs_all;
         sys::edge_watch(self.fs_peekable, self.hwnd, self.edge_zone());
@@ -2373,10 +2463,16 @@ impl App {
                 let _ = ShowWindow(self.hwnd, if fs { SW_HIDE } else { SW_SHOWNOACTIVATE });
             }
             if !fs {
+                self.fade = 0.0; // fades in from nothing
+                self.apply_fade();
                 self.render();
             }
             self.sync_timers();
             self.sync_bar();
+        }
+        if !fs && self.fade_to < 1.0 {
+            self.fade_to = 1.0;
+            self.retarget();
         }
         if fs_changed {
             self.update_reserve();
