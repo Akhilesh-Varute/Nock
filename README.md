@@ -184,7 +184,6 @@ The first scene plays a minute or two after Nock starts, then one every few minu
 
 - **Original characters**: *Showdown* (Cinder the ember knight vs Krag the obsidian brute), *Heist* (Veil the shadow thief vs Sparkplug the young inventor), *Team-up*, *Duel at dusk* (Ronin vs Courier), *Rise* (Necromancer vs Ronin) and *Alley fight*.
 - **Everyday jokes**, with their own everyday cast (a hoodie-wearing developer, a manager, support and intern colleagues, a very angry bug, cricketers and a fan): *Friday deploy* (the dev ships anyway, the bug shows up), *You're on mute* (the manager presents to nobody), *Low battery* ("1%... I can make it") and *Cricket six* (the bowler bowls, the batter hits it out of the bar).
-- **Press conference**: a bobblehead answers a crowd of reporters with mics and a camera (needs about 420 px of free bar).
 - **Wizard-school fan art**: *Harry vs Voldemort*, *Owl post*, *Harry and friends vs Voldemort*, *Quidditch* and *Dementor*.
 
 ### Fan art and images

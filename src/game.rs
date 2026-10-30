@@ -1,5 +1,5 @@
 //! A tiny Flappy-style game for the notch panel: click to flap, dodge the pipes.
-//! The "bird" is the photo buddy's face. Plain physics, stepped from a 60 Hz
+//! The "bird" is a drawn buddy. Plain physics, stepped from a 60 Hz
 //! timer that only runs while the Game tab is open.
 
 use crate::gfx::*;

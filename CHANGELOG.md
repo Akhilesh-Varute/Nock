@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- The press-conference scene no longer uses a photo. Its speaker is now a drawn character like every other actor, and `assets/face.png` is gone from the repo.
+- Removed the press-conference scene and its photo cut-out (`assets/face.png`). The other scenes are unchanged, and the tray menu keeps the same order.
 
 ## 0.12.1
 
@@ -126,7 +126,7 @@
 
 ## 0.3.0
 
-- New buddy: a photo bobblehead (Ravi Kishan) that bobs and tilts along the bar and speaks its own lines.
+- New buddy: a photo bobblehead that bobs and tilts along the bar and speaks its own lines.
 - New scene: Press conference. Reporters with mics and a camera crowd round the bobblehead while it answers.
 - Fight scenes: stay clear of the notch pill at its widest, start right after the app name on the left, and pick whichever side has more room.
 

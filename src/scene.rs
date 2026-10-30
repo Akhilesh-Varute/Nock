@@ -24,9 +24,7 @@ const GROUND: f32 = 28.0;
 const MAX_W: f32 = 460.0;
 const MIN_W: f32 = 160.0;
 /// Number of scripted scenes (0..SCENES).
-const SCENES: usize = 16;
-/// The press conference needs room for its long speech bubbles.
-const PRESS_W: f32 = 420.0;
+const SCENES: usize = 15;
 
 
 // ------------------------------------------------------------------ scripts --
@@ -296,46 +294,6 @@ fn script(id: usize) -> Script {
             ],
             len: 10.6,
         },
-        // Press conference: reporters (1..=3) and a camera (4) crowd the right end,
-        // the photo head (0) stands just left of them, so its long speech bubble
-        // opens to the left over empty bar and never covers anyone.
-        6 => Script {
-            tracks: vec![
-                tr(Who::Face, &[
-                    (0.0, -0.1, Walk, 1.0), (1.4, 0.70, Stand, 1.0), (2.0, 0.70, Cheer, 1.0),
-                    (5.0, 0.70, Stand, 1.0), (5.2, 0.70, Cheer, 1.0), (7.7, 0.70, Stand, 1.0),
-                    (7.9, 0.70, Cheer, 1.0), (9.9, 0.70, Stand, 1.0), (10.0, 0.70, Cheer, 1.0),
-                    (12.0, 0.70, Stand, 1.0), (12.2, 0.70, Cheer, 1.0), (15.8, 0.70, Stand, 1.0),
-                    (16.4, 0.70, Walk, -1.0), (17.8, -0.1, Stand, -1.0),
-                ]),
-                tr(Who::Press(0), &[
-                    (0.2, 1.1, Run, -1.0), (1.3, 0.826, Stand, -1.0), (16.0, 0.826, Stand, -1.0),
-                    (16.2, 0.826, Walk, 1.0), (17.8, 1.1, Stand, 1.0),
-                ]),
-                tr(Who::Press(1), &[
-                    (0.0, 1.1, Run, -1.0), (1.4, 0.88, Stand, -1.0), (16.0, 0.88, Stand, -1.0),
-                    (16.2, 0.88, Walk, 1.0), (17.8, 1.1, Stand, 1.0),
-                ]),
-                tr(Who::Press(2), &[
-                    (0.4, 1.1, Run, -1.0), (1.6, 0.935, Stand, -1.0), (16.0, 0.935, Stand, -1.0),
-                    (16.2, 0.935, Walk, 1.0), (17.8, 1.1, Stand, 1.0),
-                ]),
-                tr(Who::Press(3), &[
-                    (0.1, 1.1, Run, -1.0), (1.8, 0.98, Stand, -1.0), (16.0, 0.98, Stand, -1.0),
-                    (16.2, 0.98, Walk, 1.0), (17.8, 1.1, Stand, 1.0),
-                ]),
-            ],
-            evs: vec![],
-            says: vec![
-                say(1.3, 0.8, 1, "Sir! Sir!"),
-                say(2.0, 3.0, 0, "Zindagi jhand ba, phir bhi ghamand ba!"),
-                say(5.2, 2.5, 0, "Money follows, my brotha!"),
-                say(7.9, 2.0, 0, "Jaldi the late"),
-                say(10.0, 2.0, 0, "Home from work"),
-                say(12.2, 3.6, 0, "Pehchaan! Daam toh daud kar aayega, my brother!"),
-            ],
-            len: 17.8,
-        },
         // Duel: Harry (0) vs Voldemort (1)
         7 => Script {
             tracks: vec![
@@ -596,7 +554,7 @@ fn script(id: usize) -> Script {
             len: 9.9,
         },
         // Cricket: Courier (0) bowls, Ronin (1) hits it for six, Cinder (2) goes wild
-        15 => Script {
+        6 => Script {
             tracks: vec![
                 tr(Who::Bowler, &[
                     (0.0, 1.1, Walk, -1.0), (1.3, 0.78, Stand, -1.0), (2.2, 0.78, Throw, -1.0),
@@ -732,8 +690,6 @@ fn draw_frame(g: &Gfx, sc: &Script, w: f32, t: f32, tick: u32, th: &crate::bar::
     for i in order {
         let Some(d) = &draws[i] else { continue };
         match d.who {
-            Who::Face => draw_speaker(g, d),
-            Who::Press(v) => draw_reporter(g, d, v),
             Who::Owl => draw_owl(g, d),
             Who::Snitch => draw_snitch(g, d),
             Who::Dementor => draw_dementor(g, d),
@@ -1108,67 +1064,6 @@ fn draw_bug(g: &Gfx, d: &Draw) {
     }
 }
 
-/// A reporter holding a mic out toward the speaker (variant 3 is the camera
-/// operator). Rear reporters reach over the front ones, so their arms rise.
-fn draw_reporter(g: &Gfx, d: &Draw, v: u8) {
-    let (x, y, dr) = (d.x, d.y, d.dir);
-    let moving = matches!(d.act, Act::Walk | Act::Run);
-    let sw = if moving { (d.t * 14.0).sin() * 3.0 } else { 0.0 };
-    let cloth = [Color(0.85, 0.25, 0.3, 1.0), Color(0.25, 0.55, 0.85, 1.0), Color(0.95, 0.75, 0.2, 1.0), Color(0.3, 0.3, 0.36, 1.0)][(v % 4) as usize];
-    let skin = [Color(0.95, 0.76, 0.6, 1.0), Color(0.72, 0.5, 0.36, 1.0), Color(0.86, 0.64, 0.48, 1.0), Color(0.62, 0.42, 0.3, 1.0)][((v + 1) % 4) as usize];
-    let dark = Color(0.12, 0.12, 0.16, 1.0);
-    g.fill_rrect(Rect::new(x - 6.0, y - 1.0, 12.0, 2.2), 1.1, Color(0.0, 0.0, 0.0, 0.28));
-    g.line((x - 1.5, y - 8.0), (x - 1.5 + sw, y), 2.2, dark);
-    g.line((x + 1.5, y - 8.0), (x + 1.5 - sw, y), 2.2, dark);
-    g.fill_rrect(Rect::new(x - 3.5, y - 16.0, 7.0, 9.0), 2.0, cloth);
-    g.fill_circle(x + dr * 0.5, y - 19.5, 3.4, skin);
-    g.fill_circle(x - dr * 0.3, y - 21.0, 3.0, dark);
-    if v == 3 {
-        let (cx, cy) = (x + dr * 4.0, y - 17.0);
-        g.fill_rrect(Rect::new(cx - 4.5, cy - 3.0, 9.0, 6.0), 1.0, dark);
-        g.fill_circle(cx + dr * 5.0, cy, 2.2, Color(0.35, 0.4, 0.5, 1.0));
-        if (d.t * 3.0).fract() < 0.12 {
-            g.fill_circle(cx + dr * 6.5, cy, 4.0, Color(1.0, 1.0, 0.9, 0.9));
-        }
-        return;
-    }
-    let reach = if moving { 4.0 } else { 14.0 };
-    let lift = 1.0 + v as f32 * 2.0 + (d.t * 5.0 + v as f32).sin() * 0.8;
-    let hand = (x + dr * reach, y - 14.5 - lift);
-    g.line((x + dr * 1.5, y - 14.0), hand, 2.0, cloth);
-    g.line(hand, (hand.0 + dr * 2.5, hand.1 - 1.0), 1.2, dark);
-    g.fill_circle(hand.0 + dr * 3.4, hand.1 - 1.3, 1.7, dark);
-    g.fill_circle(hand.0 + dr * 3.4, hand.1 - 1.3, 0.7, cloth);
-}
-
-/// The press-conference speaker: a drawn big-headed character (no photo), bobbing and swaying like a bobblehead.
-fn draw_speaker(g: &Gfx, d: &Draw) {
-    let (bob, tilt) = face_motion(d.act, d.t);
-    let (x, y) = (d.x, d.y);
-    let skin = Color(0.9, 0.7, 0.55, 1.0);
-    let hair = Color(0.14, 0.12, 0.16, 1.0);
-    let suit = Color(0.28, 0.3, 0.42, 1.0);
-    g.fill_rrect(Rect::new(x - 7.0, y, 14.0, 2.0), 1.0, Color(0.0, 0.0, 0.0, 0.3));
-    g.line((x - 1.5, y - 7.0), (x - 1.5, y), 2.2, hair);
-    g.line((x + 1.5, y - 7.0), (x + 1.5, y), 2.2, hair);
-    g.fill_rrect(Rect::new(x - 3.5, y - 15.0 + bob * 0.4, 7.0, 9.0), 2.0, suit);
-    let (hx, hy) = (x + tilt * 0.12, y - 19.5 + bob);
-    g.fill_circle(hx, hy - 1.0, 5.8, hair);
-    g.fill_circle(hx, hy + 0.7, 4.9, skin);
-    g.fill_circle(hx - 1.9, hy + 0.2, 0.7, hair);
-    g.fill_circle(hx + 1.9, hy + 0.2, 0.7, hair);
-    g.line((hx - 1.5, hy + 2.8), (hx + 1.5, hy + 2.8), 0.9, hair);
-}
-
-/// Bob and tilt (degrees) of the speaker's head for an action.
-fn face_motion(act: Act, t: f32) -> (f32, f32) {
-    match act {
-        Act::Walk | Act::Run => ((t * 14.0).sin().abs() * -2.5, (t * 7.0).sin() * 5.0),
-        Act::Cheer => ((t * 12.0).sin().abs() * -3.0, (t * 9.0).sin() * 8.0),
-        _ => ((t * 3.0).sin() * 0.8, (t * 2.0).sin() * 2.0),
-    }
-}
-
 /// Hedwig: a snowy owl flapping at roof height; while `Throw` it drops a letter.
 fn draw_owl(g: &Gfx, d: &Draw) {
     let dr = d.dir;
@@ -1371,11 +1266,10 @@ impl App {
             self.set_timer(T_SCENE, 60_000);
             return;
         }
-        // random scene, never the same one twice in a row, and only ones that fit
-        let room = self.stage_area().map(|(_, w)| w).unwrap_or(0.0);
+        // random scene, never the same one twice in a row
         let id = match self.stage.as_mut() {
             Some(s) => {
-                let ok: Vec<usize> = (0..SCENES).filter(|&i| i != s.id && (i != 6 || room >= PRESS_W)).collect();
+                let ok: Vec<usize> = (0..SCENES).filter(|&i| i != s.id).collect();
                 ok[s.rnd() as usize % ok.len()]
             }
             None => return,
@@ -1410,12 +1304,8 @@ impl App {
             self.buddy_say("No room on the bar for a scene", 3500);
             return;
         };
-        if id == 6 && w < PRESS_W {
-            self.buddy_say("Not enough room for the press conference", 3500);
-            return;
-        }
-        // the fight scenes were staged for 380 px; only the press conference uses more
-        let (left, w) = if id == 6 || w <= 380.0 { (left, w) } else { (left + w - 380.0, 380.0) };
+        // the scenes were staged for 380 px
+        let (left, w) = if w <= 380.0 { (left, w) } else { (left + w - 380.0, 380.0) };
         let mon = self.mon;
         let scale = self.scale;
         let Some(s) = self.stage.as_mut() else { return };

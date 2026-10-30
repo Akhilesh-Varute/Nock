@@ -30,9 +30,6 @@ pub enum Who {
     Ron,
     Dumbledore,
     Voldemort,
-    // press-conference scene (drawn in scene.rs): the photo head and reporters
-    Face,
-    Press(u8),
     Owl,
     Snitch,
     Dementor,
