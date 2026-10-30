@@ -43,6 +43,61 @@ pub const SETTINGS_PAGES: [&str; 5] = [
 ];
 pub const CLIP_ROWS: usize = 5;
 
+/// Posted once per display refresh while something animates (see `pump`).
+pub const WM_FRAME: u32 = 0x8000 + 12; // WM_APP + 12
+
+/// Seconds a page cross-fade takes.
+const PAGE_FADE_S: f32 = 0.20;
+
+/// Display-synced frame source. WM_TIMER is the lowest-priority message and ticks at
+/// the ~15.6 ms system clock, so animation driven by it stutters. This thread sleeps
+/// in `DwmFlush` (returns at each vblank) and posts WM_FRAME, which beats WM_TIMER in
+/// the queue. It parks when nothing animates, so idle cost stays zero.
+mod pump {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::OnceLock;
+    use std::thread::{self, Thread};
+    use std::time::Duration;
+
+    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+    use windows::Win32::Graphics::Dwm::DwmFlush;
+    use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
+
+    static ON: AtomicBool = AtomicBool::new(false);
+    /// A WM_FRAME is queued and not yet handled; never queue a second one.
+    static PENDING: AtomicBool = AtomicBool::new(false);
+    static THREAD: OnceLock<Thread> = OnceLock::new();
+
+    pub fn set(hwnd: isize, on: bool) {
+        ON.store(on, Ordering::Release);
+        if !on {
+            return;
+        }
+        let t = THREAD.get_or_init(|| {
+            thread::spawn(move || loop {
+                while !ON.load(Ordering::Acquire) {
+                    thread::park();
+                }
+                if unsafe { DwmFlush() }.is_err() {
+                    thread::sleep(Duration::from_millis(16));
+                }
+                if ON.load(Ordering::Acquire) && !PENDING.swap(true, Ordering::AcqRel) {
+                    unsafe {
+                        let _ = PostMessageW(Some(HWND(hwnd as *mut _)), super::WM_FRAME, WPARAM(0), LPARAM(0));
+                    }
+                }
+            })
+            .thread()
+            .clone()
+        });
+        t.unpark();
+    }
+
+    pub fn handled() {
+        PENDING.store(false, Ordering::Release);
+    }
+}
+
 const T_ANIM: usize = 1;
 const T_SEC: usize = 2;
 const T_MIN: usize = 3;
@@ -193,6 +248,9 @@ pub struct App {
     pub page: Page,
     pub eq_phase: f32,
     last_tick: Instant,
+    /// page being faded out, and how far the cross-fade has got (1.0 = finished)
+    pub prev_page: Page,
+    pub page_t: f32,
     anim_ms: u32,
     sec_on: bool,
 
@@ -359,6 +417,8 @@ impl App {
             page: Page::Media,
             eq_phase: 0.0,
             last_tick: Instant::now(),
+            prev_page: Page::Media,
+            page_t: 1.0,
             anim_ms: 0,
             sec_on: false,
             hits: Vec::new(),
@@ -613,12 +673,22 @@ impl App {
         if self.anim_ms == ms {
             return;
         }
-        if ms == 0 {
+        // 16 means "every frame": use the display-synced pump instead of WM_TIMER
+        pump::set(self.hwnd.0 as isize, ms == 16);
+        if ms == 0 || ms == 16 {
             self.kill_timer(T_ANIM);
         } else {
             self.set_timer(T_ANIM, ms);
         }
         self.anim_ms = ms;
+    }
+
+    /// One display refresh while animating (posted by the pump).
+    pub fn on_frame(&mut self) {
+        pump::handled();
+        if self.anim_ms == 16 {
+            self.on_anim_tick();
+        }
     }
 
     /// Start/stop the 1 Hz timer that is only needed for a moving progress bar,
@@ -714,6 +784,9 @@ impl App {
         } else {
             self.level = (self.level - dt * 4.0).max(0.0);
         }
+        if self.page_t < 1.0 {
+            self.page_t = (self.page_t + dt / PAGE_FADE_S).min(1.0);
+        }
         let (tw, th) = self.target_size();
         while dt > 0.0 {
             let h = dt.min(1.0 / 240.0);
@@ -721,7 +794,7 @@ impl App {
             self.sh.step(th, h);
             dt -= h;
         }
-        let moving = !(self.sw.settled(tw) && self.sh.settled(th));
+        let moving = !(self.sw.settled(tw) && self.sh.settled(th)) || self.page_t < 1.0;
         if !moving {
             self.sw = Spring::new(tw);
             self.sh = Spring::new(th);
@@ -834,6 +907,7 @@ impl App {
                 self.refresh_controls();
             }
         } else {
+            self.page_t = 1.0;
             self.finish_entry(false, false);
             self.drag = None;
             self.seek_frac = None;
@@ -1172,7 +1246,7 @@ impl App {
         }
         if !self.expanded {
             if self.cfg.hover_expand {
-                self.set_timer(T_HOVER, 220);
+                self.set_timer(T_HOVER, 120);
             }
             return;
         }
@@ -1323,7 +1397,9 @@ impl App {
             return;
         }
         self.finish_entry(false, false);
+        self.prev_page = self.page;
         self.page = p;
+        self.page_t = if self.expanded { 0.0 } else { 1.0 };
         if p == Page::Controls {
             self.refresh_controls();
         }
@@ -1332,7 +1408,11 @@ impl App {
             self.app_filter.clear();
         }
         self.sync_timers();
-        self.render();
+        if self.page_t < 1.0 {
+            self.retarget(); // runs the cross-fade, and renders the first frame
+        } else {
+            self.render();
+        }
     }
 
     // ------------------------------------------------------------- actions --

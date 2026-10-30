@@ -70,6 +70,8 @@ fn main() -> Result<()> {
             return Ok(());
         }
 
+        // 1 ms timer resolution: the default 15.6 ms makes every timer fire late and uneven
+        windows::Win32::Media::timeBeginPeriod(1);
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
 
@@ -338,6 +340,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             sys::reserve_top(hwnd, &RECT::default(), 0);
             PostQuitMessage(0)
         }
+        m if m == app::WM_FRAME => a.on_frame(),
         m if m == media::WM_MEDIA => a.on_media(),
         m if m == radio::WM_RADIO => a.on_radio(),
         m if m == radio::WM_BTDONE => a.on_bt_done(wp.0 != 0),
@@ -593,6 +596,7 @@ mod tests {
             ("app list", sys::WM_APPLIST),
             ("update", sys::WM_UPDATE),
             ("mic", sys::WM_MIC),
+            ("frame", app::WM_FRAME),
         ];
         for (i, (na, a)) in all.iter().enumerate() {
             for (nb, b) in &all[i + 1..] {
