@@ -102,6 +102,8 @@ pub struct Gfx {
     dib: HBITMAP,
     old: HGDIOBJ,
     pub fonts: Fonts,
+    /// whole-window opacity used by `present` (255 = solid); lets a window fade
+    alpha: std::cell::Cell<u8>,
     /// backing bitmap size; only the test snapshot helper reads it
     #[allow(dead_code)]
     dims: (i32, i32),
@@ -154,6 +156,7 @@ impl Gfx {
                 dib,
                 old,
                 fonts,
+                alpha: std::cell::Cell::new(255),
                 dims: (max_w, max_h),
             })
         }
@@ -211,7 +214,7 @@ impl Gfx {
             let blend = BLENDFUNCTION {
                 BlendOp: AC_SRC_OVER as u8,
                 BlendFlags: 0,
-                SourceConstantAlpha: 255,
+                SourceConstantAlpha: self.alpha.get(),
                 AlphaFormat: AC_SRC_ALPHA as u8,
             };
             UpdateLayeredWindow(
@@ -225,6 +228,22 @@ impl Gfx {
                 Some(&blend),
                 ULW_ALPHA,
             )
+        }
+    }
+
+    /// Set the window's opacity (0..1) right away, without redrawing it, and keep
+    /// it for the next `present`.
+    pub fn set_alpha(&self, hwnd: HWND, a: f32) {
+        let v = (a.clamp(0.0, 1.0) * 255.0).round() as u8;
+        self.alpha.set(v);
+        let blend = BLENDFUNCTION {
+            BlendOp: AC_SRC_OVER as u8,
+            BlendFlags: 0,
+            SourceConstantAlpha: v,
+            AlphaFormat: AC_SRC_ALPHA as u8,
+        };
+        unsafe {
+            let _ = UpdateLayeredWindow(hwnd, None, None, None, None, None, COLORREF(0), Some(&blend), ULW_ALPHA);
         }
     }
 
