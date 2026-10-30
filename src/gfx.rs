@@ -395,6 +395,14 @@ impl Gfx {
         self.with_transform(Matrix3x2 { M11: 1.0, M12: 0.0, M21: 0.0, M22: 1.0, M31: dx, M32: dy }, f);
     }
 
+    /// Run `f` with everything it draws scaled by (sx, sy) about (cx, cy).
+    pub fn scaled(&self, cx: f32, cy: f32, sx: f32, sy: f32, f: impl FnOnce()) {
+        self.with_transform(
+            Matrix3x2 { M11: sx, M12: 0.0, M21: 0.0, M22: sy, M31: cx - cx * sx, M32: cy - cy * sy },
+            f,
+        );
+    }
+
     /// Run `f` with everything it draws rotated `deg` degrees about (cx, cy).
     pub fn rotated(&self, cx: f32, cy: f32, deg: f32, f: impl FnOnce()) {
         let (sn, cs) = deg.to_radians().sin_cos();

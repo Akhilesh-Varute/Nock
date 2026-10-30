@@ -259,6 +259,14 @@ pub struct App {
     /// page being faded out, and how far the cross-fade has got (1.0 = finished)
     pub prev_page: Page,
     pub page_t: f32,
+    /// the sliding highlight behind the active tab (x and width, in points)
+    pub tab_x: f32,
+    pub tab_w: f32,
+    /// hover fade per control: (control, 0..1), so highlights ease in and out
+    pub hover: Vec<(Act, f32)>,
+    /// CPU / memory bars as drawn (they glide to the real value)
+    pub bar_cpu: f32,
+    pub bar_mem: f32,
     anim_ms: u32,
     sec_on: bool,
 
@@ -438,6 +446,11 @@ impl App {
             last_tick: Instant::now(),
             prev_page: Page::Media,
             page_t: 1.0,
+            tab_x: 0.0,
+            tab_w: 0.0,
+            hover: Vec::new(),
+            bar_cpu: 0.0,
+            bar_mem: 0.0,
             anim_ms: 0,
             sec_on: false,
             hits: Vec::new(),
@@ -539,6 +552,7 @@ impl App {
         sys::watch_mic_sessions(hwnd.0 as isize);
         a.load_app_icons();
         a.load_shelf_icons();
+        a.snap_tab();
         let (w, h) = a.target_size();
         a.sw = Spring::new(w);
         a.sh = Spring::new(h);
@@ -773,14 +787,27 @@ impl App {
         }
         let w = self.sw.x.clamp(60.0, EXP_W + MARGIN);
         let h = self.sh.x.clamp(20.0, EXP_H + MARGIN);
-        let pw = (w * self.scale).round() as i32;
-        let ph = (h * self.scale).round() as i32;
+        // The hover squash grows the pill a few points past its resting size, so the
+        // window gets a little spare room (sides and bottom) while it plays.
+        let squash = !self.expanded && self.jiggle > 0.0;
+        let pad = if squash { (6.0 * self.scale).round() as i32 } else { 0 };
+        let padb = if squash { (3.0 * self.scale).round() as i32 } else { 0 };
+        let pw = (w * self.scale).round() as i32 + 2 * pad;
+        let ph = (h * self.scale).round() as i32 + padb;
         if self.gfx.begin(pw, ph).is_err() {
             return;
         }
         let mut hits = std::mem::take(&mut self.hits);
         hits.clear();
-        crate::ui::draw(self, w, h, &mut hits);
+        if squash {
+            let (sx, sy) = crate::ui::squash(self.jiggle);
+            let g = &self.gfx;
+            g.shifted(pad as f32 / self.scale, 0.0, || {
+                g.scaled(w / 2.0, 0.0, sx, sy, || crate::ui::draw(self, w, h, &mut hits))
+            });
+        } else {
+            crate::ui::draw(self, w, h, &mut hits);
+        }
         self.hits = hits;
         let _ = self.gfx.end();
         let mon_w = self.mon.right - self.mon.left;
@@ -803,7 +830,7 @@ impl App {
         }
         self.fx_phase += dt * 45.0;
         self.squish = (self.squish - dt * 4.5).max(0.0);
-        self.jiggle = (self.jiggle - dt * 2.0).max(0.0);
+        self.jiggle = (self.jiggle - dt * 2.5).max(0.0); // the 0.4 s hover squash
         if self.eq_active() {
             // music glow follows the real output level (with a slow release)
             let peak = sys::audio_peak().unwrap_or(0.5 + 0.4 * self.eq_phase.sin());
@@ -815,13 +842,15 @@ impl App {
             self.page_t = (self.page_t + dt / PAGE_FADE_S).min(1.0);
         }
         let (tw, th) = self.target_size();
+        let dt0 = dt;
         while dt > 0.0 {
             let h = dt.min(1.0 / 240.0);
             self.sw.step(tw, h);
             self.sh.step(th, h);
             dt -= h;
         }
-        let moving = !(self.sw.settled(tw) && self.sh.settled(th)) || self.page_t < 1.0;
+        let ui_busy = self.step_ui(dt0);
+        let moving = !(self.sw.settled(tw) && self.sh.settled(th)) || self.page_t < 1.0 || ui_busy;
         if !moving {
             self.sw = Spring::new(tw);
             self.sh = Spring::new(th);
@@ -939,6 +968,10 @@ impl App {
             self.drag = None;
             self.seek_frac = None;
             self.hot = None;
+            self.hover.clear();
+        }
+        if on {
+            self.snap_tab();
         }
         self.retarget();
         self.sync_timers();
@@ -1294,9 +1327,9 @@ impl App {
         let hot = self.hit_at(x, y);
         if hot != self.hot {
             self.hot = hot;
-            // Only repaint directly when no animation is already doing it.
-            if self.anim_ms == 0 {
-                self.render();
+            // the hover fade runs on the frame clock
+            if self.anim_ms != 16 {
+                self.retarget();
             }
         }
     }
@@ -1306,8 +1339,8 @@ impl App {
         self.kill_timer(T_HOVER);
         if self.hot.is_some() {
             self.hot = None;
-            if self.expanded && self.anim_ms == 0 {
-                self.render();
+            if self.expanded && self.anim_ms != 16 {
+                self.retarget();
             }
         }
         if self.expanded && !self.pinned && self.entering.is_none() && self.drag.is_none() && !self.shelf_out && self.cfg.auto_close {
@@ -1731,6 +1764,7 @@ impl App {
                 if self.stat_hist.len() > 40 {
                     self.stat_hist.remove(0);
                 }
+                self.retarget(); // the bars glide to the new values
             }
             _ => {}
         }
@@ -1984,6 +2018,63 @@ impl App {
                 bmp
             })
             .collect();
+    }
+
+    // ------------------------------------------------------ motion polish --
+
+    /// Put the tab highlight straight under the current page (no slide).
+    pub(crate) fn snap_tab(&mut self) {
+        if let Some(i) = PAGES.iter().position(|p| *p == self.page) {
+            let r = crate::ui::tab_rects()[i];
+            self.tab_x = r.x;
+            self.tab_w = r.w;
+        }
+    }
+
+    /// Ease the tab highlight, the stat bars and the hover fades toward where they
+    /// belong. Returns true while any of them is still moving.
+    fn step_ui(&mut self, dt: f32) -> bool {
+        if !self.expanded {
+            return false;
+        }
+        let mut busy = false;
+        if let Some(i) = PAGES.iter().position(|p| *p == self.page) {
+            let r = crate::ui::tab_rects()[i];
+            let k = (dt * 20.0).min(1.0);
+            self.tab_x += (r.x - self.tab_x) * k;
+            self.tab_w += (r.w - self.tab_w) * k;
+            if (r.x - self.tab_x).abs() > 0.2 || (r.w - self.tab_w).abs() > 0.2 {
+                busy = true;
+            } else {
+                self.tab_x = r.x;
+                self.tab_w = r.w;
+            }
+        }
+        if self.page == Page::Stats {
+            let k = (dt * 8.0).min(1.0);
+            for (shown, real) in [(&mut self.bar_cpu, self.stat_cpu), (&mut self.bar_mem, self.stat_mem)] {
+                let want = real as f32 / 100.0;
+                *shown += (want - *shown) * k;
+                if (want - *shown).abs() > 0.003 {
+                    busy = true;
+                } else {
+                    *shown = want;
+                }
+            }
+        }
+        let hot = self.hot;
+        if let Some(h) = hot {
+            if !self.hover.iter().any(|(a, _)| *a == h) {
+                self.hover.push((h, 0.0));
+            }
+        }
+        let k = (dt * 14.0).min(1.0);
+        for (a, v) in self.hover.iter_mut() {
+            let target = if Some(*a) == hot { 1.0 } else { 0.0 };
+            *v += (target - *v) * k;
+        }
+        self.hover.retain(|(a, v)| Some(*a) == hot || *v > 0.02);
+        busy || self.hover.iter().any(|(a, v)| if Some(*a) == hot { *v < 0.98 } else { true })
     }
 
     // ------------------------------------------------------------- shelf --
@@ -2494,6 +2585,8 @@ mod preview {
         let pages: Vec<(String, Page)> = PAGES.iter().map(|p| (format!("{p:?}").to_lowercase(), *p)).collect();
         for (name, page) in pages {
             a.page = page;
+            a.snap_tab();
+            (a.stat_cpu, a.stat_mem, a.bar_cpu, a.bar_mem) = (23, 61, 0.23, 0.61);
             render(&a, &name);
         }
         // the shelf with files on it, and while a file is dragged over
@@ -2598,6 +2691,7 @@ mod preview {
         a.pins = vec!["C:\\Projects\\notes.txt".into()];
         a.stat_cpu = 23;
         a.stat_mem = 61;
+        (a.bar_cpu, a.bar_mem) = (0.23, 0.61);
         a.stat_hist = (0..40).map(|i| 0.15 + 0.12 * ((i as f32) * 0.5).sin().abs() + (i as f32 % 7.0) * 0.02).collect();
         a.radios.wifi = Some(true);
         a.radios.bluetooth = Some(false);
@@ -2625,6 +2719,7 @@ mod preview {
         let ch = a.col_h();
         let full = |a: &mut App, page: Page| {
             a.page = page;
+            a.snap_tab();
             a.expanded = true;
             a.sh = Spring::new(EXP_H);
             a.sw = Spring::new(EXP_W);
@@ -2772,6 +2867,7 @@ mod preview {
         a.mstate.can_next = true;
         a.stat_cpu = 23;
         a.stat_mem = 61;
+        (a.bar_cpu, a.bar_mem) = (0.23, 0.61);
         a.stat_hist = (0..40).map(|i| 0.15 + 0.12 * ((i as f32) * 0.5).sin().abs() + (i as f32 % 7.0) * 0.02).collect();
         a.stats = None;
 
