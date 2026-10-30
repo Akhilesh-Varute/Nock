@@ -152,6 +152,7 @@ mod imp {
                 }
                 Cmd::Next => {
                     let _ = s.TrySkipNextAsync().and_then(|o| o.join());
+                    recheck_after_skip(&ctx);
                 }
                 Cmd::Prev => {
                     // some apps (Apple Music) ignore the session request: press the media key instead
@@ -159,6 +160,7 @@ mod imp {
                     if !ok {
                         crate::sys::media_key(0xB1); // VK_MEDIA_PREV_TRACK
                     }
+                    recheck_after_skip(&ctx);
                 }
                 Cmd::SeekSecs(secs) => {
                     let start = ctx.st.lock().map(|m| m.start_ticks).unwrap_or(0);
@@ -171,6 +173,43 @@ mod imp {
                 }
             }
         }
+    }
+
+    /// Read the title and artist again and do a full refresh if they differ from what
+    /// we show. Right after a track change Windows can still hand out the OLD
+    /// properties, and the event that carries the new ones may come seconds later.
+    fn recheck_props(ctx: &Arc<Ctx>) {
+        let Ok(session) = ctx.mgr.GetCurrentSession() else {
+            return;
+        };
+        let Some(p) = session.TryGetMediaPropertiesAsync().and_then(|o| o.join()).ok() else {
+            return;
+        };
+        let title = p.Title().map(|s| s.to_string()).unwrap_or_default();
+        let artist = p.Artist().map(|s| s.to_string()).unwrap_or_default();
+        let same = {
+            let st = ctx.st.lock().unwrap();
+            st.title == title && st.artist == artist
+        };
+        if !same {
+            refresh_all(ctx);
+        }
+    }
+
+    /// After Previous / Next, keep asking for the new title for a few seconds until it
+    /// changes, instead of waiting for the player to announce it.
+    fn recheck_after_skip(ctx: &Arc<Ctx>) {
+        let before = ctx.st.lock().unwrap().title.clone();
+        let c = ctx.clone();
+        std::thread::spawn(move || {
+            for ms in [200u64, 300, 500, 700, 1000, 1300] {
+                std::thread::sleep(std::time::Duration::from_millis(ms));
+                recheck_props(&c);
+                if c.st.lock().unwrap().title != before {
+                    break;
+                }
+            }
+        });
     }
 
     /// Subscribe to change events on every session we have not seen yet.
@@ -301,6 +340,7 @@ mod imp {
             std::thread::spawn(move || {
                 for ms in [700u64, 1500, 2500, 4000] {
                     std::thread::sleep(std::time::Duration::from_millis(ms));
+                    recheck_props(&c); // the title itself can lag too
                     refresh_art(&c, &title);
                 }
             });
