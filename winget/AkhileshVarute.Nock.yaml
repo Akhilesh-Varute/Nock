@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.singleton.1.6.0.schema.json
+# Singleton manifest for winget-pkgs. See winget/README.md for how to submit it.
+PackageIdentifier: AkhileshVarute.Nock
+PackageVersion: 0.12.2
+PackageLocale: en-US
+Publisher: Akhilesh Varute
+PublisherUrl: https://github.com/Akhilesh-Varute
+PackageName: Nock
+PackageUrl: https://nock.akhileshvarute.me
+License: MIT
+LicenseUrl: https://github.com/Akhilesh-Varute/Nock/blob/main/LICENSE
+ShortDescription: A tiny native notch and top bar for Windows 10/11. About 1 MB, no Electron.
+Moniker: nock
+Tags:
+- notch
+- top-bar
+- widget
+- productivity
+- rust
+- windows-11
+MinimumOSVersion: 10.0.0.0
+InstallerType: inno
+Scope: user
+InstallerLocale: en-US
+Installers:
+- Architecture: x64
+  InstallerUrl: https://github.com/Akhilesh-Varute/Nock/releases/download/v0.12.2/NockSetup-0.12.2.exe
+  InstallerSha256: A5CF4B132EB710212778DFDED5B34C88D69A03BCD937DA15AE95F41A42435071
+ManifestType: singleton
+ManifestVersion: 1.6.0
