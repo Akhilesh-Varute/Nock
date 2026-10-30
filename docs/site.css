@@ -265,7 +265,7 @@ h1 .hl::after { content: ""; position: absolute; left: 0; right: 0; bottom: -.04
 .sticker.o { background: var(--hot); } .sticker.b { background: var(--blue); } .sticker.k { background: var(--ink); color: var(--bone); }
 @keyframes bob { 50% { transform: translateY(-10px); } }
 .hero:hover .sticker, .hero:focus-within .sticker { animation-play-state: paused; }
-.poke { position: absolute; top: 58px; left: calc(50% + 120px); color: var(--ink); font: 700 13px var(--mono); transition: opacity .3s; pointer-events: none; z-index: 5; }
+.poke { position: absolute; top: 38px; left: calc(50% + 120px); display: flex; align-items: flex-end; gap: 4px; color: var(--ink); font: 700 13px var(--mono); transition: opacity .3s; pointer-events: none; z-index: 5; }
 .poke svg { width: 70px; height: 56px; stroke: currentColor; fill: none; stroke-width: 2.4; stroke-linecap: round; display: block; margin-left: -48px; }
 .poke span { display: inline-block; rotate: -5deg; background: var(--bone); padding: 2px 6px; border: 2px solid var(--ink); border-radius: 8px; animation: bob 2.4s ease-in-out infinite; }
 body.touched .poke { opacity: 0; }
