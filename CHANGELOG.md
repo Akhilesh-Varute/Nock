@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Removed the press-conference scene and its photo cut-out (`assets/face.png`). The other scenes are unchanged, and the tray menu keeps the same order.
+
 ## 0.12.1
 
 - Auto-hide: new tray option that keeps the notch and bar out of sight until the pointer touches the top-center edge of the screen. Saved as `auto_hide=` in `config.ini`, off by default.
@@ -122,7 +126,7 @@
 
 ## 0.3.0
 
-- New buddy: a photo bobblehead (Ravi Kishan) that bobs and tilts along the bar and speaks its own lines.
+- New buddy: a photo bobblehead that bobs and tilts along the bar and speaks its own lines.
 - New scene: Press conference. Reporters with mics and a camera crowd round the bobblehead while it answers.
 - Fight scenes: stay clear of the notch pill at its widest, start right after the app name on the left, and pick whichever side has more room.
 

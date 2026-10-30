@@ -411,11 +411,6 @@ impl Gfx {
         );
     }
 
-    /// `draw_bitmap` rotated about the rect's centre (degrees).
-    pub fn draw_bitmap_tilted(&self, bmp: &ID2D1Bitmap, r: Rect, deg: f32) {
-        self.rotated(r.cx(), r.cy(), deg, || self.draw_bitmap(bmp, r, 0.0, 1.0));
-    }
-
     // ------------------------------------------------------------ images ----
 
     /// Decode encoded image bytes (jpeg/png/...) into a GPU-less D2D bitmap and

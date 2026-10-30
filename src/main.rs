@@ -460,7 +460,6 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             let _ = AppendMenuW(sub, MF_STRING, 34, w!("Play: Duel at dusk"));
             let _ = AppendMenuW(sub, MF_STRING, 35, w!("Play: Rise"));
             let _ = AppendMenuW(sub, MF_STRING, 36, w!("Play: Alley fight"));
-            let _ = AppendMenuW(sub, MF_STRING, 37, w!("Play: Press conference"));
             let _ = AppendMenuW(sub, MF_STRING, 38, w!("Play: Harry vs Voldemort"));
             let _ = AppendMenuW(sub, MF_STRING, 39, w!("Play: Owl post"));
             let _ = AppendMenuW(sub, MF_STRING, 40, w!("Play: Harry and friends vs Voldemort"));
@@ -469,7 +468,7 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             let _ = AppendMenuW(sub, MF_STRING, 43, w!("Play: Friday deploy"));
             let _ = AppendMenuW(sub, MF_STRING, 44, w!("Play: You're on mute"));
             let _ = AppendMenuW(sub, MF_STRING, 45, w!("Play: Low battery"));
-            let _ = AppendMenuW(sub, MF_STRING, 46, w!("Play: Cricket six"));
+            let _ = AppendMenuW(sub, MF_STRING, 37, w!("Play: Cricket six")); // scene 6
             let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Scenes"));
         }
         if let Ok(sub) = CreatePopupMenu() {
@@ -564,7 +563,7 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             80..=83 => a.set_eye_min([0u16, 20, 30, 45][(cmd.0 - 80) as usize]),
             70..=74 => a.set_water_min([0u16, 30, 45, 60, 90][(cmd.0 - 70) as usize]),
             100..=116 => a.set_monitor((cmd.0 - 100) as u8),
-            31..=46 => a.play_scene((cmd.0 - 31) as usize),
+            31..=45 => a.play_scene((cmd.0 - 31) as usize),
             9 => {
                 // Clean up, then end the process outright so no helper thread,
                 // hook or COM apartment can keep notch.exe alive.
