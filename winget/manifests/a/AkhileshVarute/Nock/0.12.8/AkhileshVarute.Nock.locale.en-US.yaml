@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
 PackageIdentifier: AkhileshVarute.Nock
-PackageVersion: 0.12.7
+PackageVersion: 0.12.8
 PackageLocale: en-US
 Publisher: Akhilesh Varute
 PublisherUrl: https://github.com/Akhilesh-Varute
@@ -19,6 +19,7 @@ Tags:
 - windows-11
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0
+
 
 
 
