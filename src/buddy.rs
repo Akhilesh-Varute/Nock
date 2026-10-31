@@ -26,7 +26,7 @@ const SPR_X: f32 = 342.0;
 pub const T_BUDDY: usize = 14;
 pub const T_BWAKE: usize = 15;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BuddyKind {
     Blob,
     Cat,
@@ -37,6 +37,8 @@ pub enum BuddyKind {
     Ronin,
     Courier,
     Necro,
+    Clippy,
+    Merlin,
 }
 
 impl BuddyKind {
@@ -55,6 +57,22 @@ impl BuddyKind {
             BuddyKind::Ronin => &["Patience.", "The blade is quiet.", "One cut.", "Rain will come.", "Breathe.", "Hm."],
             BuddyKind::Courier => &["Delivery's late. Again.", "Not my problem.", "Neon never sleeps.", "Fast lane.", "Tip me.", "Zero ping."],
             BuddyKind::Necro => &["Rise.", "Death is a pause.", "Mind the bones.", "Souls. So many.", "Hush...", "Not dead yet?"],
+            BuddyKind::Clippy => &[
+                "It looks like you're writing code.",
+                "Need assistance with that function?",
+                "Don't forget to commit!",
+                "Just checking in on you!",
+                "Would you like help with that?",
+                "Remember to save your work!",
+            ],
+            BuddyKind::Merlin => &[
+                "By the ancient stars!",
+                "A wizard's code is never late.",
+                "Ponder the orb of knowledge.",
+                "Behold, an enchantment!",
+                "Focus turns spells into reality.",
+                "Hocus Pocus!",
+            ],
             _ => return None,
         };
         Some(list[(r as usize) % list.len()])
@@ -71,6 +89,8 @@ impl BuddyKind {
             6 => Some(BuddyKind::Ronin),
             7 => Some(BuddyKind::Courier),
             8 => Some(BuddyKind::Necro),
+            9 => Some(BuddyKind::Clippy),
+            10 => Some(BuddyKind::Merlin),
             _ => None,
         }
     }
@@ -695,11 +715,243 @@ fn palette(kind: BuddyKind) -> (Color, Color) {
         BuddyKind::Hero => (Color(0.18, 0.70, 0.76, 1.0), Color(0.1, 0.5, 0.58, 1.0)),
         BuddyKind::Robot => (Color(0.74, 0.8, 0.9, 1.0), Color(0.5, 0.57, 0.7, 1.0)),
         BuddyKind::Ronin | BuddyKind::Courier | BuddyKind::Necro => (Color(0.5, 0.5, 0.5, 1.0), Color(0.3, 0.3, 0.3, 1.0)),
+        BuddyKind::Clippy => (Color(0.82, 0.85, 0.90, 1.0), Color(0.48, 0.52, 0.58, 1.0)),
+        BuddyKind::Merlin => (Color(0.24, 0.35, 0.72, 1.0), Color(0.96, 0.80, 0.25, 1.0)),
+    }
+}
+
+fn draw_merlin(g: &Gfx, cx: f32, bob: f32, p: &Pose, mode: Mode, tick: u32, body: Color, dark: Color, ink: Color) {
+    let t = tick as f32;
+    let wand_dir = p.dir;
+
+    // Ground shadow
+    g.fill_rrect(
+        Rect::new(cx - 7.5, 27.0, 15.0, 2.4),
+        1.2,
+        Color(0.0, 0.0, 0.0, (0.24 - bob.max(0.0) * 0.03).max(0.08)),
+    );
+
+    // Wizard Robe (flowing blue gown)
+    g.fill_poly(
+        &[
+            (cx - 5.5, 16.5 - bob),
+            (cx + 5.5, 16.5 - bob),
+            (cx + 7.5, 26.5 - bob),
+            (cx - 7.5, 26.5 - bob),
+        ],
+        body,
+    );
+    // Gold trim at hem
+    g.fill_rrect(Rect::new(cx - 7.5, 25.5 - bob, 15.0, 1.4), 0.7, dark);
+
+    // Wand in hand
+    let arm_raise = p.arms * 4.0;
+    let hand = (cx + wand_dir * 5.8, 18.0 - bob - arm_raise);
+    let wand_tip = (cx + wand_dir * (11.0 + arm_raise * 0.5), 11.0 - bob - arm_raise * 1.5);
+    g.line(hand, wand_tip, 1.6, Color(0.55, 0.35, 0.18, 1.0));
+
+    // Wand glowing star tip
+    let star_pulse = 1.0 + 0.3 * (t * 0.25).sin();
+    g.fill_circle(wand_tip.0, wand_tip.1, 1.8 * star_pulse, dark);
+    if mode != Mode::Sleep {
+        g.line(
+            (wand_tip.0 - 3.0 * star_pulse, wand_tip.1),
+            (wand_tip.0 + 3.0 * star_pulse, wand_tip.1),
+            0.8,
+            Color::white(0.9),
+        );
+        g.line(
+            (wand_tip.0, wand_tip.1 - 3.0 * star_pulse),
+            (wand_tip.0, wand_tip.1 + 3.0 * star_pulse),
+            0.8,
+            Color::white(0.9),
+        );
+    }
+
+    // Head (face)
+    let skin = Color(1.0, 0.86, 0.74, 1.0);
+    g.fill_circle(cx, 13.0 - bob, 4.8, skin);
+
+    // Eyes
+    let lx = p.look.0 * 1.0;
+    let ly = p.look.1 * 0.8;
+    for sx in [-2.0f32, 2.0f32] {
+        let ex = cx + sx;
+        let ey = 12.0 - bob;
+        match p.eyes {
+            Eyes::Closed => {
+                g.line((ex - 1.2, ey), (ex + 1.2, ey), 1.0, ink);
+            }
+            Eyes::Happy => {
+                g.line((ex - 1.2, ey + 0.6), (ex, ey - 0.7), 1.0, ink);
+                g.line((ex, ey - 0.7), (ex + 1.2, ey + 0.6), 1.0, ink);
+            }
+            Eyes::Open => {
+                g.fill_circle(ex + lx, ey + ly, 1.1, ink);
+            }
+        }
+    }
+
+    // Fluffy White Beard & Moustache
+    let beard_col = Color::white(0.96);
+    g.fill_circle(cx - 2.6, 16.0 - bob, 2.4, beard_col);
+    g.fill_circle(cx + 2.6, 16.0 - bob, 2.4, beard_col);
+    g.fill_circle(cx, 17.5 - bob, 3.0, beard_col);
+    g.fill_poly(
+        &[
+            (cx - 4.5, 14.5 - bob),
+            (cx + 4.5, 14.5 - bob),
+            (cx, 21.0 - bob),
+        ],
+        beard_col,
+    );
+
+    // Wizard Conical Hat
+    let hat_tip_x = cx + 1.0 + p.wag * 0.8;
+    let hat_tip_y = 1.0 - bob;
+    // Brim
+    g.fill_rrect(Rect::new(cx - 8.2, 10.0 - bob, 16.4, 2.4), 1.2, body);
+    // Gold band
+    g.fill_rrect(Rect::new(cx - 6.2, 9.0 - bob, 12.4, 1.4), 0.7, dark);
+    // Cone
+    g.fill_poly(
+        &[
+            (cx - 5.8, 10.0 - bob),
+            (cx + 5.5, 10.0 - bob),
+            (hat_tip_x, hat_tip_y),
+        ],
+        body,
+    );
+    // Star ornament on hat
+    g.fill_circle(cx + 0.2, 6.0 - bob, 1.3, dark);
+
+    // Mode-specific extras
+    match mode {
+        Mode::Sleep => {
+            let c = Color(0.6, 0.65, 0.8, 0.9);
+            g.text("z", Rect::new(cx + 7.0, 6.0, 9.0, 9.0), &g.fonts.tiny, c, Align::Left);
+            g.text("Z", Rect::new(cx + 11.0, 0.5, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+        }
+        Mode::Dance => {
+            let c = Color(0.95, 0.55, 0.95, 0.95);
+            let side = if (tick / 5) % 2 == 0 { 12.0 } else { -20.0 };
+            g.text("\u{266A}", Rect::new(cx + side, 3.0, 12.0, 12.0), &g.fonts.small, c, Align::Left);
+        }
+        Mode::Cheer => {
+            let c = Color(1.0, 0.82, 0.2, 0.95);
+            let a = if (tick / 4) % 2 == 0 { 0.0 } else { 3.0 };
+            g.text("\u{2728}", Rect::new(cx - 20.0, 2.0 + a, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+            g.text("\u{2728}", Rect::new(cx + 12.0, 5.0 - a, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+        }
+        _ => {}
+    }
+}
+
+fn draw_clippy(g: &Gfx, cx: f32, bob: f32, p: &Pose, mode: Mode, tick: u32, body: Color, dark: Color, ink: Color) {
+    let flex = p.wag * 1.5;
+
+    // Ground shadow
+    g.fill_rrect(
+        Rect::new(cx - 7.0, 27.0, 14.0, 2.2),
+        1.1,
+        Color(0.0, 0.0, 0.0, (0.22 - bob.max(0.0) * 0.03).max(0.08)),
+    );
+
+    // Wire loops:
+    let r_out = Rect::new(cx - 5.5 + flex * 0.3, 8.0 - bob, 11.0, 18.5);
+    g.stroke_rrect(Rect::new(r_out.x + 0.5, r_out.y + 0.5, r_out.w, r_out.h), 5.5, dark, 1.8);
+    g.stroke_rrect(r_out, 5.5, body, 1.8);
+
+    let r_in = Rect::new(cx - 3.0 + flex * 0.15, 12.0 - bob, 6.0, 12.5);
+    g.stroke_rrect(Rect::new(r_in.x + 0.5, r_in.y + 0.5, r_in.w, r_in.h), 3.0, dark, 1.5);
+    g.stroke_rrect(r_in, 3.0, body, 1.5);
+
+    g.line((cx + 3.0 + flex * 0.15, 14.5 - bob), (cx + 3.0 + flex * 0.15, 23.5 - bob), 1.5, body);
+
+    // Googly Eyes
+    let eye_y = 13.5 - bob;
+    let lx = p.look.0 * 1.4;
+    let ly = p.look.1 * 1.2;
+
+    for (sx, look_offset) in [(-3.0f32, -0.2f32), (3.0f32, 0.2f32)] {
+        let ex = cx + sx + flex * 0.2;
+        g.fill_circle(ex, eye_y, 3.3, Color::white(1.0));
+        g.fill_circle(ex, eye_y, 3.3, Color(0.0, 0.0, 0.0, 0.2));
+        g.fill_circle(ex, eye_y, 3.0, Color::white(1.0));
+
+        match p.eyes {
+            Eyes::Closed => {
+                g.line((ex - 2.0, eye_y), (ex + 2.0, eye_y), 1.2, ink);
+            }
+            Eyes::Happy => {
+                g.line((ex - 1.8, eye_y + 0.8), (ex, eye_y - 1.0), 1.3, ink);
+                g.line((ex, eye_y - 1.0), (ex + 1.8, eye_y + 0.8), 1.3, ink);
+            }
+            Eyes::Open => {
+                let px = (ex + lx + look_offset).clamp(ex - 1.6, ex + 1.6);
+                let py = (eye_y + ly).clamp(eye_y - 1.5, eye_y + 1.5);
+                g.fill_circle(px, py, 1.5, ink);
+                g.fill_circle(px - 0.5, py - 0.5, 0.5, Color::white(1.0));
+            }
+        }
+    }
+
+    // Eyebrows
+    let brow_wag = if mode == Mode::Dance || mode == Mode::Cheer {
+        ((tick as f32) * 0.4).sin() * 1.0
+    } else {
+        0.0
+    };
+    match p.eyes {
+        Eyes::Happy => {
+            g.line((cx - 5.5, 8.8 - bob - brow_wag), (cx - 1.2, 7.8 - bob - brow_wag), 1.3, ink);
+            g.line((cx + 1.2, 7.8 - bob - brow_wag), (cx + 5.5, 8.8 - bob - brow_wag), 1.3, ink);
+        }
+        Eyes::Closed => {
+            g.line((cx - 5.0, 10.0 - bob), (cx - 1.2, 10.0 - bob), 1.1, dark);
+            g.line((cx + 1.2, 10.0 - bob), (cx + 5.0, 10.0 - bob), 1.1, dark);
+        }
+        Eyes::Open => {
+            g.line((cx - 5.6, 9.8 - bob - brow_wag), (cx - 1.0, 8.6 - bob - brow_wag), 1.3, ink);
+            g.line((cx + 1.0, 9.2 - bob - brow_wag), (cx + 5.6, 10.2 - bob - brow_wag), 1.3, ink);
+        }
+    }
+
+    match mode {
+        Mode::Sleep => {
+            let c = Color(0.6, 0.65, 0.8, 0.9);
+            g.text("z", Rect::new(cx + 7.0, 6.0, 9.0, 9.0), &g.fonts.tiny, c, Align::Left);
+            g.text("Z", Rect::new(cx + 11.0, 0.5, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+        }
+        Mode::Dance => {
+            let c = Color(0.95, 0.55, 0.95, 0.95);
+            let side = if (tick / 5) % 2 == 0 { 12.0 } else { -20.0 };
+            g.text("\u{266A}", Rect::new(cx + side, 3.0, 12.0, 12.0), &g.fonts.small, c, Align::Left);
+        }
+        Mode::Cheer => {
+            let c = Color(1.0, 0.82, 0.2, 0.95);
+            let a = if (tick / 4) % 2 == 0 { 0.0 } else { 3.0 };
+            g.text("\u{2726}", Rect::new(cx - 20.0, 2.0 + a, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+            g.text("\u{2726}", Rect::new(cx + 12.0, 5.0 - a, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+        }
+        _ => {}
     }
 }
 
 fn draw_sprite(g: &Gfx, kind: BuddyKind, p: &Pose, mode: Mode, tick: u32) {
     let cx = SPR_X;
+    let bob = p.bob;
+    let (body, dark) = palette(kind);
+    let ink = Color(0.13, 0.12, 0.17, 1.0);
+
+    if kind == BuddyKind::Clippy {
+        draw_clippy(g, cx, bob, p, mode, tick, body, dark, ink);
+        return;
+    }
+    if kind == BuddyKind::Merlin {
+        draw_merlin(g, cx, bob, p, mode, tick, body, dark, ink);
+        return;
+    }
     let d = p.dir;
     let s = -d; // "behind" the character
     let bob = p.bob;
@@ -827,7 +1079,7 @@ fn draw_sprite(g: &Gfx, kind: BuddyKind, p: &Pose, mode: Mode, tick: u32) {
             g.line((cx, hy - 7.5), (cx + 1.0, hy - 9.0), 1.1, Color(0.35, 0.7, 0.4, 1.0));
             g.fill_circle(cx + 2.2, hy - 9.3, 1.5, Color(0.45, 0.82, 0.5, 1.0));
         }
-        BuddyKind::Hero | BuddyKind::Ronin | BuddyKind::Courier | BuddyKind::Necro => {}
+        _ => {}
     }
 
     // head
@@ -946,5 +1198,26 @@ fn draw_sprite(g: &Gfx, kind: BuddyKind, p: &Pose, mode: Mode, tick: u32) {
             g.text("\u{2726}", Rect::new(cx + 12.0, 5.0 - a, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod clippy_tests {
+    use super::*;
+
+    #[test]
+    fn clippy_id_and_quotes() {
+        assert_eq!(BuddyKind::from_id(9), Some(BuddyKind::Clippy));
+        let q = BuddyKind::Clippy.quote(0).expect("clippy quote");
+        assert!(q.contains("code"));
+        assert!(BuddyKind::Clippy.quote(1).is_some());
+    }
+
+    #[test]
+    fn merlin_id_and_quotes() {
+        assert_eq!(BuddyKind::from_id(10), Some(BuddyKind::Merlin));
+        let q = BuddyKind::Merlin.quote(0).expect("merlin quote");
+        assert!(q.contains("stars"));
+        assert!(BuddyKind::Merlin.quote(1).is_some());
     }
 }
