@@ -3205,6 +3205,12 @@ mod preview {
         for k in 0..8u32 {
             buddy_shot(&format!("buddy_cat_walk{k}"), 2, 2, k * 3, 1.0, None);
         }
+        for k in 0..8u32 {
+            buddy_shot(&format!("buddy_robot_walk{k}"), 5, 2, k * 3, 1.0, None);
+        }
+        buddy_shot("buddy_robot_sleep", 5, 0, 5, 1.0, None);
+        buddy_shot("buddy_robot_dance", 5, 3, 6, 1.0, None);
+        buddy_shot("buddy_robot_cheer", 5, 4, 6, 1.0, Some("Nice one."));
         buddy_shot("buddy_cat_sleep", 2, 0, 5, 1.0, None);
         buddy_shot("buddy_cat_cheer", 2, 4, 6, 1.0, Some("\u{2665}"));
         for k in 0..8u32 {

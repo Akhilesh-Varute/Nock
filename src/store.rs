@@ -85,7 +85,7 @@ eq_animation=1
 clock_24h=0
 reserve_space=0
 top_bar=1
-# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer
+# buddy: 0 = off, 2 = cat, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer (1, 3 and 4 were retired and now give the robot)
 buddy=5
 # fight scenes now and then (needs a buddy): 1 = on
 scenes=1
@@ -183,7 +183,12 @@ pub fn load_config() -> Config {
                 "water_min" => cfg.water_min = v.trim().parse::<u16>().unwrap_or(0).min(600),
                 "scene_min" => cfg.scene_min = v.trim().parse::<u8>().unwrap_or(5).clamp(1, 60),
                 "monitor" => cfg.monitor = v.trim().parse::<u8>().unwrap_or(0).min(16),
-                "buddy" => cfg.buddy = v.trim().parse::<u8>().ok().filter(|b| *b <= 8).unwrap_or(5),
+                "buddy" => cfg.buddy = match v.trim().parse::<u8>() {
+                    // retired blob, bunny and hero fall back to the robot
+                    Ok(1 | 3 | 4) => 5,
+                    Ok(b) if b <= 8 => b,
+                    _ => 5,
+                },
                 _ => {}
             }
         }

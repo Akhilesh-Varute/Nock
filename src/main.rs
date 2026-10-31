@@ -448,11 +448,8 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             let cur = a.cfg.buddy;
             let mark = |id: u8| if cur == id { MF_CHECKED } else { MF_UNCHECKED };
             let _ = AppendMenuW(sub, MF_STRING | mark(0), 20, w!("Off"));
-            let _ = AppendMenuW(sub, MF_STRING | mark(1), 21, w!("Blob"));
+            let _ = AppendMenuW(sub, MF_STRING | mark(5), 25, w!("Robot (default)"));
             let _ = AppendMenuW(sub, MF_STRING | mark(2), 22, w!("Kitty"));
-            let _ = AppendMenuW(sub, MF_STRING | mark(3), 23, w!("Bunny"));
-            let _ = AppendMenuW(sub, MF_STRING | mark(4), 24, w!("Hero"));
-            let _ = AppendMenuW(sub, MF_STRING | mark(5), 25, w!("Robot"));
             let _ = AppendMenuW(sub, MF_SEPARATOR, 0, PCWSTR::null());
             let _ = AppendMenuW(sub, MF_STRING | mark(6), 26, w!("Ronin (pixel, talks)"));
             let _ = AppendMenuW(sub, MF_STRING | mark(7), 27, w!("Courier (pixel, talks)"));

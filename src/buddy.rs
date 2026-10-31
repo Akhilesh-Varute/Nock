@@ -28,10 +28,7 @@ pub const T_BWAKE: usize = 15;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum BuddyKind {
-    Blob,
     Cat,
-    Bunny,
-    Hero,
     Robot,
     // pixel-art characters that also talk (see cast.rs / pixdata.rs)
     Ronin,
@@ -63,11 +60,9 @@ impl BuddyKind {
     /// 1..=5 as stored in config.ini (0 means off).
     pub fn from_id(id: u8) -> Option<BuddyKind> {
         match id {
-            1 => Some(BuddyKind::Blob),
             2 => Some(BuddyKind::Cat),
-            3 => Some(BuddyKind::Bunny),
-            4 => Some(BuddyKind::Hero),
-            5 => Some(BuddyKind::Robot),
+            // 1 (blob), 3 (bunny) and 4 (hero) were retired: old settings get the Robot
+            1 | 3 | 4 | 5 => Some(BuddyKind::Robot),
             6 => Some(BuddyKind::Ronin),
             7 => Some(BuddyKind::Courier),
             8 => Some(BuddyKind::Necro),
@@ -687,13 +682,16 @@ fn pose_for(mode: Mode, tick: u32, dir: f32, look: (f32, f32)) -> Pose {
     p
 }
 
+// The Robot: bone body, graphite shade, a dark screen, one blue status light.
+const ROBOT_BONE: Color = Color(0.93, 0.905, 0.855, 1.0);
+const ROBOT_SHADE: Color = Color(0.55, 0.53, 0.49, 1.0);
+const ROBOT_SCREEN: Color = Color(0.04, 0.04, 0.045, 1.0);
+const ROBOT_BLUE: Color = Color(0.40, 0.62, 1.0, 1.0);
+
 fn palette(kind: BuddyKind) -> (Color, Color) {
     match kind {
-        BuddyKind::Blob => (Color(0.55, 0.78, 1.0, 1.0), Color(0.38, 0.6, 0.9, 1.0)),
         BuddyKind::Cat => (Color(0.99, 0.80, 0.62, 1.0), Color(0.9, 0.6, 0.4, 1.0)),
-        BuddyKind::Bunny => (Color(0.97, 0.94, 0.97, 1.0), Color(0.82, 0.76, 0.84, 1.0)),
-        BuddyKind::Hero => (Color(0.18, 0.70, 0.76, 1.0), Color(0.1, 0.5, 0.58, 1.0)),
-        BuddyKind::Robot => (Color(0.74, 0.8, 0.9, 1.0), Color(0.5, 0.57, 0.7, 1.0)),
+        BuddyKind::Robot => (ROBOT_BONE, ROBOT_SHADE),
         BuddyKind::Ronin | BuddyKind::Courier | BuddyKind::Necro => (Color(0.5, 0.5, 0.5, 1.0), Color(0.3, 0.3, 0.3, 1.0)),
     }
 }
@@ -715,36 +713,14 @@ fn draw_sprite(g: &Gfx, kind: BuddyKind, p: &Pose, mode: Mode, tick: u32) {
     );
 
     // things behind the body
-    let hy = match kind {
-        BuddyKind::Bunny => 15.2,
-        _ => 12.5,
-    } - bob;
-    let hr = match kind {
-        BuddyKind::Bunny => 7.0,
-        _ => 8.0,
-    };
+    let hy = 12.5 - bob;
+    let hr = 8.0;
     match kind {
-        BuddyKind::Hero => {
-            let flap = p.wag * 2.0;
-            let y0 = 19.0 - bob;
-            g.fill_poly(
-                &[
-                    (cx, y0),
-                    (cx + s * 5.0, y0 + 0.5),
-                    (cx + s * (10.0 + flap), 26.0 - bob * 0.3),
-                    (cx + s * 2.0, 25.5 - bob * 0.3),
-                ],
-                Color(0.95, 0.5, 0.22, 1.0),
-            );
-        }
         BuddyKind::Cat => {
             let y0 = 24.0 - bob;
             let tip = (cx + s * 11.0, 17.5 - bob - p.wag * 2.0);
             g.line((cx + s * 5.0, y0), tip, 2.6, body);
             g.fill_circle(tip.0, tip.1, 1.7, dark);
-        }
-        BuddyKind::Bunny => {
-            g.fill_circle(cx + s * 6.5, 23.5 - bob, 2.6, Color::white(1.0));
         }
         _ => {}
     }
@@ -762,17 +738,19 @@ fn draw_sprite(g: &Gfx, kind: BuddyKind, p: &Pose, mode: Mode, tick: u32) {
     let body_rect = Rect::new(cx - 6.0, 18.5 - bob, 12.0, 8.4);
     g.fill_rrect(body_rect, 4.0, body);
     match kind {
-        BuddyKind::Hero => {
-            g.fill_rrect(Rect::new(cx - 6.0, 23.2 - bob, 12.0, 1.6), 0.8, Color(0.98, 0.8, 0.25, 1.0));
-            g.fill_circle(cx, 21.0 - bob, 1.8, Color(0.98, 0.8, 0.25, 1.0));
-        }
-        BuddyKind::Cat | BuddyKind::Bunny => {
+        BuddyKind::Cat => {
             g.fill_rrect(Rect::new(cx - 3.2, 20.5 - bob, 6.4, 5.0), 2.5, Color(1.0, 1.0, 1.0, 0.55));
         }
         BuddyKind::Robot => {
-            g.fill_rrect(Rect::new(cx - 3.0, 21.0 - bob, 6.0, 3.0), 1.0, ink);
-            g.fill_circle(cx - 1.4, 22.5 - bob, 0.7, Color(0.4, 0.95, 1.0, 1.0));
-            g.fill_circle(cx + 1.4, 22.5 - bob, 0.7, Color(1.0, 0.5, 0.5, 1.0));
+            // three little equaliser bars on the chest, like the logo; they dance with the music
+            for (i, bx) in [-2.6f32, 0.0, 2.6].iter().enumerate() {
+                let h = if matches!(mode, Mode::Dance | Mode::Cheer) {
+                    1.4 + 2.2 * (tick as f32 * 0.45 + i as f32 * 1.9).sin().abs()
+                } else {
+                    [1.6f32, 2.6, 2.0][i]
+                };
+                g.fill_rrect(Rect::new(cx + bx - 0.7, 24.4 - bob - h, 1.4, h), 0.7, ROBOT_BLUE);
+            }
         }
         _ => {}
     }
@@ -810,39 +788,22 @@ fn draw_sprite(g: &Gfx, kind: BuddyKind, p: &Pose, mode: Mode, tick: u32) {
                 );
             }
         }
-        BuddyKind::Bunny => {
-            let tilt = p.wag * 0.8;
-            for (sx, extra) in [(-1.0f32, tilt), (1.0, -tilt)] {
-                let x = cx + sx * 3.4 - 1.8 + extra * 0.4;
-                g.fill_rrect(Rect::new(x, hy - 12.6, 3.6, 9.0), 1.8, body);
-                g.fill_rrect(Rect::new(x + 0.8, hy - 11.2, 2.0, 6.2), 1.0, pink);
-            }
-        }
         BuddyKind::Robot => {
             g.line((cx, hy - 6.4), (cx, hy - 8.4), 1.2, dark);
-            g.fill_circle(cx, hy - 9.0, 1.4, Color(1.0, 0.4, 0.4, 1.0));
+            if mode != Mode::Sleep {
+                g.fill_circle(cx, hy - 9.0, 2.8, Color(0.40, 0.62, 1.0, 0.28));
+            }
+            g.fill_circle(cx, hy - 9.0, 1.5, ROBOT_BLUE);
         }
-        BuddyKind::Blob => {
-            // a little sprout
-            g.line((cx, hy - 7.5), (cx + 1.0, hy - 9.0), 1.1, Color(0.35, 0.7, 0.4, 1.0));
-            g.fill_circle(cx + 2.2, hy - 9.3, 1.5, Color(0.45, 0.82, 0.5, 1.0));
-        }
-        BuddyKind::Hero | BuddyKind::Ronin | BuddyKind::Courier | BuddyKind::Necro => {}
+        BuddyKind::Ronin | BuddyKind::Courier | BuddyKind::Necro => {}
     }
 
     // head
     if kind == BuddyKind::Robot {
         g.fill_rrect(Rect::new(cx - 8.0, hy - 6.4, 16.0, 13.0), 3.4, body);
-        g.fill_rrect(Rect::new(cx - 6.4, hy - 4.6, 12.8, 9.0), 2.6, ink);
+        g.fill_rrect(Rect::new(cx - 6.4, hy - 4.6, 12.8, 9.0), 2.6, ROBOT_SCREEN);
     } else {
-        let head = if kind == BuddyKind::Hero { Color(1.0, 0.85, 0.72, 1.0) } else { body };
-        g.fill_circle(cx, hy, hr, head);
-    }
-    if kind == BuddyKind::Hero {
-        // hair
-        g.fill_rrect(Rect::new(cx - 7.4, hy - 8.0, 14.8, 5.0), 2.6, Color(0.25, 0.18, 0.2, 1.0));
-        // mask
-        g.fill_rrect(Rect::new(cx - 7.4, hy - 2.6, 14.8, 5.2), 2.4, Color(0.12, 0.12, 0.2, 1.0));
+        g.fill_circle(cx, hy, hr, body);
     }
 
     // face
@@ -853,25 +814,15 @@ fn draw_sprite(g: &Gfx, kind: BuddyKind, p: &Pose, mode: Mode, tick: u32) {
         let ex = cx + sx * 3.3 + lx;
         match (kind, p.eyes) {
             (BuddyKind::Robot, Eyes::Open) => {
-                g.fill_rrect(Rect::new(ex - 1.3, ey - 1.8, 2.6, 3.4), 1.0, Color(0.4, 0.95, 1.0, 1.0));
+                g.fill_circle(ex, ey, 1.9, ROBOT_BONE);
+                g.fill_circle(ex + lx * 0.45, ey + ly * 0.4, 0.95, ROBOT_SCREEN);
             }
             (BuddyKind::Robot, Eyes::Closed) => {
-                g.line((ex - 1.5, ey), (ex + 1.5, ey), 1.0, Color(0.4, 0.95, 1.0, 1.0));
+                g.line((ex - 1.6, ey + 0.4), (ex + 1.6, ey + 0.4), 1.0, ROBOT_BONE);
             }
             (BuddyKind::Robot, Eyes::Happy) => {
-                g.line((ex - 1.5, ey + 0.8), (ex, ey - 0.8), 1.0, Color(0.4, 0.95, 1.0, 1.0));
-                g.line((ex, ey - 0.8), (ex + 1.5, ey + 0.8), 1.0, Color(0.4, 0.95, 1.0, 1.0));
-            }
-            (BuddyKind::Hero, Eyes::Open) => {
-                g.fill_rrect(Rect::new(ex - 1.7, ey - 1.0, 3.4, 2.2), 1.0, Color::white(1.0));
-                g.fill_circle(ex + lx * 0.5, ey, 0.7, ink);
-            }
-            (BuddyKind::Hero, Eyes::Closed) => {
-                g.line((ex - 1.5, ey), (ex + 1.5, ey), 1.0, Color::white(0.9));
-            }
-            (BuddyKind::Hero, Eyes::Happy) => {
-                g.line((ex - 1.5, ey + 0.6), (ex, ey - 0.8), 1.0, Color::white(1.0));
-                g.line((ex, ey - 0.8), (ex + 1.5, ey + 0.6), 1.0, Color::white(1.0));
+                g.line((ex - 1.6, ey + 0.8), (ex, ey - 0.8), 1.1, ROBOT_BLUE);
+                g.line((ex, ey - 0.8), (ex + 1.6, ey + 0.8), 1.1, ROBOT_BLUE);
             }
             (_, Eyes::Open) => {
                 g.fill_circle(ex, ey, 1.45, ink);
@@ -886,21 +837,15 @@ fn draw_sprite(g: &Gfx, kind: BuddyKind, p: &Pose, mode: Mode, tick: u32) {
             }
         }
         // blush
-        if matches!(kind, BuddyKind::Blob | BuddyKind::Cat | BuddyKind::Bunny) {
+        if kind == BuddyKind::Cat {
             g.fill_circle(cx + sx * 5.4 + lx * 0.5, ey + 2.4, 1.5, Color(1.0, 0.5, 0.6, 0.45));
         }
     }
     // nose / mouth
     let mx = cx + lx * 0.7;
     let my = hy + 4.6 + ly * 0.5;
-    let mouth_col = if kind == BuddyKind::Robot { Color(0.4, 0.95, 1.0, 1.0) } else if kind == BuddyKind::Hero { ink } else { ink };
     if kind == BuddyKind::Robot {
-        // the robot's mouth sits on its screen
-        if p.open_mouth {
-            g.fill_rrect(Rect::new(mx - 1.6, hy + 2.4, 3.2, 1.6), 0.8, mouth_col);
-        } else if p.eyes != Eyes::Closed {
-            g.line((mx - 1.4, hy + 3.0), (mx + 1.4, hy + 3.0), 0.9, mouth_col);
-        }
+        // no mouth: the screen is all eyes
     } else if matches!(kind, BuddyKind::Cat) {
         g.fill_circle(mx, hy + 2.6 + ly * 0.3, 0.8, pink);
         if p.open_mouth {
