@@ -792,6 +792,8 @@ impl App {
         self.cfg.idle_cycle = !self.cfg.idle_cycle;
         self.cycle = 0;
         store::save_config(&self.cfg);
+        // the CPU and RAM sampling follows what the slot shows
+        self.sync_stats();
         if !self.hidden && !self.expanded {
             self.retarget();
             self.render();
