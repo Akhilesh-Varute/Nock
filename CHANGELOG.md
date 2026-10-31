@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.10
 
 - Idle notch extras, all optional and event driven (no new polling or always-on timers): an idle glance next to the clock (tasks left, focus today, CPU and RAM, or the next meeting), a focus progress line along the bottom of the notch while a focus session runs (on by default), a workday progress line, and scroll-up cycling through time, date, tasks left and focus today. New tray items: *Idle glance*, *Show focus progress on the notch*, *Workday progress line on the notch*, *Scroll up over the notch cycles time, date, tasks*. New `config.ini` keys: `idle_glance`, `idle_focus_bar`, `idle_meeting_hours`, `day_line`, `day_start`, `day_end`, `idle_cycle`.
 - Optional state dot on the idle and timer notch (steady dot, ring for mic, amber square for low battery, arc for a focus session) and optional buddy peeks over the bottom edge of the notch (robot and kitty, one long one-shot timer). New tray items *State dot on the notch* and *Buddy peeks over the notch now and then*; new `config.ini` keys `state_dot` and `peek`, both off by default.
