@@ -71,20 +71,22 @@ Settings → Personalization → Taskbar → Taskbar behaviors → **Automatical
 | `Ctrl+Alt+T` | **Quick add**: opens the notch straight into the to-do box. Enter saves, Esc cancels, and it closes again |
 | Mouse wheel over the pill | Scroll down opens it |
 | Mouse wheel over the tab row | Switches pages |
+| `Ctrl+Backspace` in a text box | Deletes a whole word (to-do box, app search, clipboard search) |
+| Drag a file onto the notch | Opens the **Shelf** tab and keeps the file there; drag it back out into any program |
 | `Ctrl+Alt+H` / tray → *Hide notch* | Tucks the notch away completely; press again (or `Ctrl+Alt+N`, or click the tray icon) to bring it back |
 | Tray icon | All the settings below |
 
-The pill itself reacts: it squishes when you click it, jiggles when the pointer arrives, glows with the music (following the real output level), gives a heartbeat flash when you copy a link, and bursts into confetti when the focus timer ends.
+The pill itself reacts: it squishes when you click it, does a quick squash-and-stretch when the pointer arrives, the active tab's highlight slides between tabs, hover highlights fade in and out, animation is paced to your screen's refresh rate, glows with the music (following the real output level), gives a heartbeat flash when you copy a link, and bursts into confetti when the focus timer ends.
 
 ### Pages (tab row at the top)
 
-- **Media**: artwork, title, artist, source app, seekable progress bar, previous / play-pause / next. Reads Windows' own media session, so it works with Spotify, YouTube and other browser media, VLC, Apple Music and so on. While music plays, the collapsed pill shows the artwork, track and equaliser bars.
+- **Media**: artwork, title, artist, source app, seekable progress bar, previous / play-pause / next. Reads Windows' own media session, so it works with Spotify, YouTube and other browser media, VLC, Apple Music and so on. While music plays, the collapsed pill shows the artwork, track and equaliser bars. Press previous or next and the old track stays up with a spinner and "Loading next track" until the player has the new one, instead of flashing "Nothing playing".
 - **Controls**: shortcuts to **Screenshot** (Snipping Tool) and the Windows Settings pages people look for: **Display**, **Sound**, **Network**, **Power & battery** and **All settings**. (Wi-Fi, Bluetooth, volume and brightness are in the top bar.)
 - **Today**: three cards.
   - *Focus timer*: 5 / 15 / 25 / 50 minute presets, or the pencil to type any number of minutes. Hover a to-do and click its ▶ to start a session on that task (the timer shows the task's name). A line under the timer shows today's focus minutes and tasks done. With *Auto break after focus* on (tray), a 5 minute break follows each session, then focus again. When a timer finishes you get three beeps, confetti, and the pill pulses "Time's up" for 30 s (or until you click it); the Quidditch scene celebrates if scenes are on.
   - *To-do*: a 5-item list, saved to disk.
   - *Calendar*: the current month.
-- **Stats**: CPU and memory ring gauges (with a CPU history), battery with charging state, and uptime. It samples once a second, only while this tab is open.
+- **Stats**: CPU and memory bars that glide to each new value (with a CPU history), battery with charging state, and uptime. It samples once a second, only while this tab is open.
 - **Clipboard**: the last 20 things you copied. Click one to paste it into the app you were using. **Star** an item to pin it: pinned items stay at the top, survive "Clear" and restarts, and work as saved snippets. **Search** filters the list as you type (Enter keeps the filter, Esc clears it). Recent history lives in memory only, and copies from password managers are skipped; only the items you pin are written to disk.
 - **Shelf**: a place to park files. Drag any file or folder onto the notch (it opens by itself) and drop it; it stays on the shelf, even after a restart. Click a tile to open it, drag it out into any program (mail, chat, a folder) to copy or move it there, and use the small **×** to remove it, or **Clear all**. Up to 12 items. Nothing is copied: the shelf only remembers where the files are.
 - **Apps**: pinned launcher tiles with the real app icons. Click **+ Add app** to pick from every installed app (Start menu apps, Store apps, game launchers) with a search box; click an app to pin it, and use the small **×** on a tile to unpin. The list refreshes each time you open the picker, and has a refresh button. Up to 12 tiles.
@@ -110,7 +112,7 @@ A thin translucent bar runs along the top of the screen and the notch hangs from
 
 **Hover tooltips:** resting the pointer on the Wi-Fi or Bluetooth icon shows what is connected (network name and signal; connected Bluetooth devices) without clicking.
 
-**Clock style** (tray → *Clock style*): digital (default), analog, binary, or "hours until Friday".
+**Clock style** (tray → *Clock style*): digital (default), analog, binary, or "hours until Friday". **24-hour clock** (tray → *24-hour clock*, or `clock_24h=1`) shows 13:05 instead of 1:05 PM on the bar, the pill and the clock pop-up.
 
 **CPU and memory** (tray → *CPU and memory on the bar*): a small `CPU 12%  RAM 63%` read-out, off by default.
 
