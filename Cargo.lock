@@ -26,7 +26,7 @@ dependencies = [
 
 [[package]]
 name = "nock"
-version = "0.12.9"
+version = "0.12.10"
 dependencies = [
  "windows",
  "windows-core",
