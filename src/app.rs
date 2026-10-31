@@ -113,6 +113,8 @@ const T_STATS: usize = 18;
 const T_GAME: usize = 19;
 const T_WATER: usize = 20;
 const T_EYES: usize = 21;
+/// One-shot: hides the cycle page dots 2 s after the last scroll.
+const T_DOTS: usize = 22;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Page {
@@ -344,6 +346,12 @@ pub struct App {
 
     // tasks
     pub timer_total_s: u32,
+    /// Which page the scroll-up cycle is on: 0 time only, 1 date, 2 tasks left, 3 focus today.
+    pub cycle: u8,
+    /// The page dots stay visible until then.
+    pub cycle_until: Option<Instant>,
+    /// Width of the glance last time the minute timer looked (to resize the pill when it changes).
+    glance_last: f32,
     /// the task being focused on, and whether the timer is running a break
     pub timer_task: Option<String>,
     pub break_mode: bool,
@@ -513,6 +521,9 @@ impl App {
             apps: store::load_apps(),
             app_icons: Vec::new(),
             timer_total_s: 25 * 60,
+            cycle: 0,
+            cycle_until: None,
+            glance_last: 0.0,
             timer_task: None,
             break_mode: false,
             cycle_focus_s: 25 * 60,
@@ -726,8 +737,65 @@ impl App {
 
     /// Text and reserved width (fixed, so numbers never jitter) of the idle glance slot.
     pub fn glance(&self) -> Option<(String, f32)> {
+        let kind = self.glance_kind();
         let left = self.todos.iter().filter(|t| !t.done).count();
-        glance_text(self.cfg.idle_glance, !self.todos.is_empty(), left, self.focus_today, self.stats)
+        let (_, mo, day, wday, hh, mm, ..) = sys::local_time();
+        let meeting = if kind == 4 {
+            let (now, _) = crate::cal::now();
+            let hours = self.cfg.idle_meeting_hours as i64;
+            next_meeting(&crate::cal::EVENTS.lock().unwrap(), now, hours).map(|e| meeting_text(&e.title, e.start, self.cfg.clock_24h))
+        } else {
+            None
+        };
+        let _ = (hh, mm);
+        glance_text(&GlanceIn { kind, has_todos: !self.todos.is_empty(), left, focus_min: self.focus_today, stats: self.stats, meeting, date: date_text(mo, day, wday) })
+    }
+
+    /// What the slot shows right now: the cycle page when cycling is on, else the chosen glance.
+    /// Kinds: 0 none, 1 tasks left, 2 focus today, 3 CPU and RAM, 4 next meeting, 5 date.
+    pub fn glance_kind(&self) -> u8 {
+        if self.cfg.idle_cycle {
+            [0, 5, 1, 2][(self.cycle % 4) as usize]
+        } else {
+            self.cfg.idle_glance
+        }
+    }
+
+    /// Page dots are showing (during and just after a scroll).
+    pub fn cycle_dots(&self) -> bool {
+        self.cfg.idle_cycle && self.cycle_until.is_some_and(|t| Instant::now() < t)
+    }
+
+    /// True when the collapsed pill would show only the clock.
+    fn idle_pill(&self) -> bool {
+        !self.alerting() && !(self.call_since.is_some() && !self.timer_running()) && !self.has_media() && !self.timer_running()
+    }
+
+    /// Scroll up over the idle pill: next page. A one-shot timer hides the dots afterwards.
+    fn cycle_next(&mut self) {
+        self.cycle = (self.cycle + 1) % 4;
+        self.cycle_until = Some(Instant::now() + std::time::Duration::from_secs(2));
+        self.set_timer(T_DOTS, 2000);
+        self.retarget();
+        self.render();
+    }
+
+    pub fn toggle_day_line(&mut self) {
+        self.cfg.day_line = !self.cfg.day_line;
+        store::save_config(&self.cfg);
+        if !self.hidden {
+            self.render();
+        }
+    }
+
+    pub fn toggle_idle_cycle(&mut self) {
+        self.cfg.idle_cycle = !self.cfg.idle_cycle;
+        self.cycle = 0;
+        store::save_config(&self.cfg);
+        if !self.hidden && !self.expanded {
+            self.retarget();
+            self.render();
+        }
     }
 
     /// Extra pill width for the glance (separator and padding included).
@@ -736,7 +804,7 @@ impl App {
     }
 
     pub fn set_idle_glance(&mut self, v: u8) {
-        self.cfg.idle_glance = v.min(3);
+        self.cfg.idle_glance = v.min(4);
         store::save_config(&self.cfg);
         self.sync_stats();
         if !self.hidden && !self.expanded {
@@ -940,6 +1008,13 @@ impl App {
             T_GAME => self.on_game_tick(),
             T_WATER => self.water_reminder(),
             T_EYES => self.eye_reminder(),
+            T_DOTS => {
+                self.kill_timer(T_DOTS);
+                self.cycle_until = None;
+                if !self.expanded && !self.hidden {
+                    self.render();
+                }
+            }
             T_STATS => self.on_stats_tick(),
             T_FSCHK => {
                 self.kill_timer(T_FSCHK);
@@ -967,6 +1042,14 @@ impl App {
                 if self.bar_visible() {
                     self.refresh_bar_data();
                     self.render_bar();
+                }
+                // a meeting entering or leaving the window changes the glance width
+                let gx = self.glance_extra_w();
+                if (gx - self.glance_last).abs() > 0.5 {
+                    self.glance_last = gx;
+                    if !self.expanded && !self.hidden {
+                        self.retarget();
+                    }
                 }
                 if !self.expanded && (self.call_since.is_some() || (!self.has_media() && !self.timer_running())) {
                     self.render();
@@ -1105,7 +1188,7 @@ impl App {
 
     /// Start or stop the 3 s CPU/RAM sampling to match the setting.
     pub fn sync_stats(&mut self) {
-        if self.cfg.stats || self.cfg.idle_glance == 3 {
+        if self.cfg.stats || self.glance_kind() == 3 {
             self.cpu_prev = sys::cpu_times();
             self.set_timer(T_STATS, 3000);
         } else {
@@ -1292,7 +1375,7 @@ impl App {
     fn on_stats_tick(&mut self) {
         // sampled for the bar read-out and/or the idle glance, never otherwise
         let on_bar = self.cfg.stats && self.bar_visible();
-        let on_pill = self.cfg.idle_glance == 3 && !self.hidden;
+        let on_pill = self.glance_kind() == 3 && !self.hidden;
         if !on_bar && !on_pill {
             return;
         }
@@ -1525,7 +1608,11 @@ impl App {
         let y = py as f32 / self.scale;
         if !self.expanded {
             if delta < 0 {
+                // scrolling down opens the panel, as always
                 self.set_expanded(true);
+            } else if delta > 0 && self.cfg.idle_cycle && self.idle_pill() {
+                // scrolling up cycles the idle extra
+                self.cycle_next();
             }
             return;
         }
@@ -3246,6 +3333,34 @@ mod preview {
         let _ = a.gfx.end();
         let (bw, _bh, buf) = a.gfx.snapshot();
         save("pill_glance_cpu", gw, ih, bw, &buf);
+        // next meeting, date page with dots, and the workday line
+        {
+            let (now, _) = crate::cal::now();
+            *crate::cal::EVENTS.lock().unwrap() = vec![crate::cal::Event { start: now + 90 * 60, title: "Quarterly planning review".into(), link: None }];
+        }
+        a.cfg.idle_glance = 4;
+        let shots: [(&str, u8, bool, bool); 4] = [("pill_glance_meeting", 4, false, false), ("pill_cycle_date_dots", 0, true, false), ("pill_day_line", 0, false, true), ("pill_glance_meeting_day", 4, false, true)];
+        for (name, kind, cyc, day) in shots {
+            a.cfg.idle_glance = kind;
+            a.cfg.idle_cycle = cyc;
+            a.cycle = 1;
+            a.cycle_until = if cyc { Some(Instant::now() + std::time::Duration::from_secs(30)) } else { None };
+            a.cfg.day_line = day;
+            a.cfg.day_start = 0;
+            a.cfg.day_end = 24;
+            let gw = ((COL_IDLE_W + a.glance_extra_w()) * scale) as i32;
+            a.gfx.begin(gw, ih).unwrap();
+            let mut hg = Vec::new();
+            crate::ui::draw(&a, COL_IDLE_W + a.glance_extra_w(), a.col_h(), &mut hg);
+            let _ = a.gfx.end();
+            let (bw, _bh, buf) = a.gfx.snapshot();
+            save(name, gw, ih, bw, &buf);
+        }
+        a.cfg.idle_glance = 0;
+        a.cfg.idle_cycle = false;
+        a.cfg.day_line = false;
+        a.cycle_until = None;
+        crate::cal::EVENTS.lock().unwrap().clear();
         a.cfg.idle_glance = 0;
         a.stats = None;
         a.timer_start = Some(Instant::now() - std::time::Duration::from_secs(10 * 60));
@@ -3299,27 +3414,129 @@ mod preview {
     }
 }
 
-/// What the idle glance slot shows (kind 1 tasks left, 2 focus today, 3 CPU and RAM) and the width it reserves.
-pub fn glance_text(kind: u8, has_todos: bool, left: usize, focus_min: u32, stats: Option<(u32, u32)>) -> Option<(String, f32)> {
-    match kind {
-        1 if has_todos => Some((format!("{left} left"), 64.0)),
-        2 => Some((format!("{focus_min} min"), 58.0)),
-        3 => stats.map(|(c, m)| (format!("CPU {c}% RAM {m}%"), 112.0)),
+/// Everything the idle glance slot may need to format.
+pub struct GlanceIn {
+    pub kind: u8,
+    pub has_todos: bool,
+    pub left: usize,
+    pub focus_min: u32,
+    pub stats: Option<(u32, u32)>,
+    pub meeting: Option<String>,
+    pub date: String,
+}
+
+/// What the idle glance slot shows and the fixed width it reserves (so numbers never jitter).
+/// Kinds: 1 tasks left, 2 focus today, 3 CPU and RAM, 4 next meeting, 5 date.
+pub fn glance_text(g: &GlanceIn) -> Option<(String, f32)> {
+    match g.kind {
+        1 if g.has_todos => Some((format!("{} left", g.left), 64.0)),
+        2 => Some((format!("{} min", g.focus_min), 58.0)),
+        3 => g.stats.map(|(c, m)| (format!("CPU {c}% RAM {m}%"), 112.0)),
+        4 => g.meeting.clone().map(|m| (m, 142.0)),
+        5 => Some((g.date.clone(), 76.0)),
         _ => None,
     }
 }
 
+/// Cut `s` to at most `max` characters, ending with an ellipsis when it was longer.
+pub fn ellipsize(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        s.to_string()
+    } else {
+        let head: String = s.chars().take(max.saturating_sub(1)).collect();
+        format!("{}\u{2026}", head.trim_end())
+    }
+}
+
+/// "Standup 10:30" (or "Standup 10:30 AM"): `start` is a local epoch in seconds.
+pub fn meeting_text(title: &str, start: i64, clock24: bool) -> String {
+    let secs = start.rem_euclid(86400);
+    let (h, m) = (secs / 3600, secs % 3600 / 60);
+    let time = if clock24 {
+        format!("{h:02}:{m:02}")
+    } else {
+        let h12 = match h {
+            0 => 12,
+            1..=12 => h,
+            _ => h - 12,
+        };
+        format!("{h12}:{m:02} {}", if h < 12 { "AM" } else { "PM" })
+    };
+    format!("{} {}", ellipsize(title, 11), time)
+}
+
+/// The next meeting that starts within `hours` hours from `now` (not one that has begun).
+pub fn next_meeting(events: &[crate::cal::Event], now: i64, hours: i64) -> Option<&crate::cal::Event> {
+    events.iter().filter(|e| e.start > now && e.start - now <= hours * 3600).min_by_key(|e| e.start)
+}
+
+/// "Sun 1 Nov".
+pub fn date_text(month: u32, day: u32, wday: u32) -> String {
+    const DAYS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    format!("{} {} {}", DAYS[(wday as usize).min(6)], day, MONTHS[(month as usize).clamp(1, 12) - 1])
+}
+
+/// How much of the workday [start, end) hours has passed at hh:mm; None outside the workday.
+pub fn day_fraction(hh: u32, mm: u32, start: u8, end: u8) -> Option<f32> {
+    if end <= start {
+        return None;
+    }
+    let now = hh as u32 * 60 + mm as u32;
+    let (s, e) = (start as u32 * 60, end as u32 * 60);
+    if now < s || now >= e {
+        return None;
+    }
+    Some((now - s) as f32 / (e - s) as f32)
+}
+
 #[cfg(test)]
 mod glance_tests {
-    use super::glance_text;
+    use super::*;
+
+    fn g(kind: u8) -> GlanceIn {
+        GlanceIn { kind, has_todos: true, left: 3, focus_min: 42, stats: Some((12, 63)), meeting: Some("Standup 10:30".into()), date: "Sun 1 Nov".into() }
+    }
 
     #[test]
     fn formats_each_glance() {
-        assert_eq!(glance_text(1, true, 3, 0, None).map(|g| g.0), Some("3 left".to_string()));
-        assert_eq!(glance_text(1, false, 0, 0, None), None);
-        assert_eq!(glance_text(2, false, 0, 42, None).map(|g| g.0), Some("42 min".to_string()));
-        assert_eq!(glance_text(3, false, 0, 0, Some((12, 63))).map(|g| g.0), Some("CPU 12% RAM 63%".to_string()));
-        assert_eq!(glance_text(3, false, 0, 0, None), None);
-        assert_eq!(glance_text(0, true, 5, 9, Some((1, 1))), None);
+        assert_eq!(glance_text(&g(1)).map(|x| x.0), Some("3 left".to_string()));
+        assert_eq!(glance_text(&GlanceIn { has_todos: false, ..g(1) }), None);
+        assert_eq!(glance_text(&g(2)).map(|x| x.0), Some("42 min".to_string()));
+        assert_eq!(glance_text(&g(3)).map(|x| x.0), Some("CPU 12% RAM 63%".to_string()));
+        assert_eq!(glance_text(&GlanceIn { stats: None, ..g(3) }), None);
+        assert_eq!(glance_text(&g(4)).map(|x| x.0), Some("Standup 10:30".to_string()));
+        assert_eq!(glance_text(&GlanceIn { meeting: None, ..g(4) }), None);
+        assert_eq!(glance_text(&g(5)).map(|x| x.0), Some("Sun 1 Nov".to_string()));
+        assert_eq!(glance_text(&g(0)), None);
+    }
+
+    #[test]
+    fn long_meeting_names_are_truncated() {
+        assert_eq!(ellipsize("Quarterly planning review", 11), "Quarterly\u{2026}");
+        assert_eq!(ellipsize("Standup", 11), "Standup");
+        assert_eq!(meeting_text("Quarterly planning review", 10 * 3600 + 30 * 60, true), "Quarterly\u{2026} 10:30");
+        assert_eq!(meeting_text("Standup", 15 * 3600 + 5 * 60, false), "Standup 3:05 PM");
+        assert_eq!(meeting_text("Sync", 0, false), "Sync 12:00 AM");
+    }
+
+    #[test]
+    fn picks_the_next_meeting_within_the_window() {
+        let ev = |t: i64, s: &str| crate::cal::Event { start: t, title: s.into(), link: None };
+        let events = vec![ev(100, "past"), ev(3 * 3600 + 500, "far"), ev(2 * 3600, "soon"), ev(3600, "first")];
+        assert_eq!(next_meeting(&events, 200, 3).map(|e| e.title.as_str()), Some("first"));
+        assert_eq!(next_meeting(&events, 200, 3).map(|e| e.start), Some(3600));
+        assert!(next_meeting(&events[1..2], 200, 1).is_none());
+        assert!(next_meeting(&[], 0, 3).is_none());
+    }
+
+    #[test]
+    fn date_and_day_progress() {
+        assert_eq!(date_text(11, 1, 0), "Sun 1 Nov");
+        assert_eq!(day_fraction(9, 0, 9, 18), Some(0.0));
+        assert_eq!(day_fraction(13, 30, 9, 18), Some(0.5));
+        assert_eq!(day_fraction(8, 59, 9, 18), None);
+        assert_eq!(day_fraction(18, 0, 9, 18), None);
+        assert_eq!(day_fraction(10, 0, 18, 9), None);
     }
 }

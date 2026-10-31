@@ -247,11 +247,29 @@ fn draw_collapsed(a: &App, w: f32, ca: f32) {
             let sx = x0 + dw + 15.0 + tw + 7.0;
             g.fill_rrect(Rect::new(sx, ch / 2.0 - 7.0, 1.0, 14.0), 0.5, Color::white(0.18 * ca));
             let mut gx = sx + 9.0;
-            if a.cfg.idle_glance == 1 {
+            let kind = a.glance_kind();
+            if kind == 1 {
                 g.icon('\u{E73A}', Rect::new(gx, 0.0, 16.0, ch), &f.icon14, T2.fade(ca));
                 gx += 19.0;
             }
-            g.text(&txt, Rect::new(gx, 0.0, gwid, ch), &f.small, T2.fade(ca), Align::Left);
+            // the next meeting is dimmer than the other glances
+            let gcol = if kind == 4 { Color(0.55, 0.53, 0.49, ca) } else { T2.fade(ca) };
+            g.text(&txt, Rect::new(gx, 0.0, gwid, ch), &f.small, gcol, Align::Left);
+        }
+        if a.cycle_dots() {
+            // page dots while cycling: the active page in blue, the others grey
+            let active = a.cycle as usize % 4;
+            for i in 0..4 {
+                let c = if i == active { Color(DEFAULT_ACCENT.0, DEFAULT_ACCENT.1, DEFAULT_ACCENT.2, ca) } else { Color(0.267, 0.267, 0.267, ca) };
+                g.fill_circle(w / 2.0 - 12.0 + i as f32 * 8.0, ch - 4.0, 2.0, c);
+            }
+        } else if a.cfg.day_line {
+            let (_, _, _, _, hh, mm, _, _) = sys::local_time();
+            if let Some(frac) = crate::app::day_fraction(hh, mm, a.cfg.day_start, a.cfg.day_end) {
+                let (x, len, y) = (14.0, (w - 28.0).max(1.0), ch - 5.0);
+                g.fill_rrect(Rect::new(x, y, len, 2.0), 1.0, Color(0.15, 0.15, 0.165, ca));
+                g.fill_rrect(Rect::new(x, y, (len * frac).max(2.0), 2.0), 1.0, Color(0.55, 0.53, 0.49, ca));
+            }
         }
     }
 
