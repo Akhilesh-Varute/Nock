@@ -167,6 +167,7 @@ fn main() -> Result<()> {
             a.buddy = buddy::Buddy::new(buddy_hwnd, a.scale);
             a.stage = scene::Stage::new(stage_hwnd, a.scale);
             a.plan_scene();
+            a.plan_peek();
             a.sync_stats();
             a.sync_water();
             a.sync_eyes();
@@ -472,6 +473,10 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
         let _ = AppendMenuW(menu, MF_STRING | dl, 96, w!("Workday progress line on the notch"));
         let ic = if a.cfg.idle_cycle { MF_CHECKED } else { MF_UNCHECKED };
         let _ = AppendMenuW(menu, MF_STRING | ic, 97, w!("Scroll up over the notch cycles time, date, tasks"));
+        let sd = if a.cfg.state_dot { MF_CHECKED } else { MF_UNCHECKED };
+        let _ = AppendMenuW(menu, MF_STRING | sd, 98, w!("State dot on the notch (mic, battery, focus)"));
+        let pk = if a.cfg.peek { MF_CHECKED } else { MF_UNCHECKED };
+        let _ = AppendMenuW(menu, MF_STRING | pk, 99, w!("Buddy peeks over the notch now and then"));
         if let Ok(sub) = CreatePopupMenu() {
             let on = if a.cfg.scenes { MF_CHECKED } else { MF_UNCHECKED };
             let _ = AppendMenuW(sub, MF_STRING | on, 30, w!("Play scenes now and then"));
@@ -586,6 +591,8 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             95 => a.toggle_idle_focus_bar(),
             96 => a.toggle_day_line(),
             97 => a.toggle_idle_cycle(),
+            98 => a.toggle_state_dot(),
+            99 => a.toggle_peek(),
             30 => a.toggle_scenes(),
             60..=63 => a.set_clock_style((cmd.0 - 60) as u8),
             80..=83 => a.set_eye_min([0u16, 20, 30, 45][(cmd.0 - 80) as usize]),

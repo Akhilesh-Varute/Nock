@@ -115,6 +115,10 @@ const T_WATER: usize = 20;
 const T_EYES: usize = 21;
 /// One-shot: hides the cycle page dots 2 s after the last scroll.
 const T_DOTS: usize = 22;
+/// One-shot, rare (3 to 8 minutes): the next buddy peek over the notch.
+const T_BPEEK: usize = 23;
+/// How long a peek lasts, seconds.
+const PEEK_SECS: f32 = 1.5;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Page {
@@ -350,6 +354,8 @@ pub struct App {
     pub cycle: u8,
     /// The page dots stay visible until then.
     pub cycle_until: Option<Instant>,
+    /// When the running buddy peek started.
+    bpeek: Option<Instant>,
     /// Width of the glance last time the minute timer looked (to resize the pill when it changes).
     glance_last: f32,
     /// the task being focused on, and whether the timer is running a break
@@ -523,6 +529,7 @@ impl App {
             timer_total_s: 25 * 60,
             cycle: 0,
             cycle_until: None,
+            bpeek: None,
             glance_last: 0.0,
             timer_task: None,
             break_mode: false,
@@ -680,6 +687,7 @@ impl App {
             || self.jiggle > 0.0
             || self.beat_start.is_some_and(|t| t.elapsed().as_secs_f32() < 1.0)
             || self.confetti_t().is_some()
+            || self.bpeek.is_some()
     }
 
     /// What the clipboard page lists: pinned items first, then recent ones, filtered
@@ -758,6 +766,63 @@ impl App {
             [0, 5, 1, 2][(self.cycle % 4) as usize]
         } else {
             self.cfg.idle_glance
+        }
+    }
+
+    /// What the state glyph shows: the mic and battery states win over a running focus session.
+    pub fn dot_state(&self) -> DotState {
+        dot_state(self.call_since.is_some(), self.mic_muted, self.batt_warned, self.timer_running())
+    }
+
+    /// Height factor of the running buddy peek, 0 to 1 (None when no peek is running).
+    pub fn peek_k(&self) -> Option<f32> {
+        peek_height(self.bpeek?.elapsed().as_secs_f32())
+    }
+
+    /// Seconds into the running peek (0 when none).
+    pub fn peek_t(&self) -> f32 {
+        self.bpeek.map_or(0.0, |t| t.elapsed().as_secs_f32())
+    }
+
+    /// Arm the next peek with one long one-shot timer (nothing at all when peeks are off).
+    pub fn plan_peek(&mut self) {
+        self.kill_timer(T_BPEEK);
+        let kind = crate::buddy::BuddyKind::from_id(self.cfg.buddy);
+        if self.cfg.peek && matches!(kind, Some(crate::buddy::BuddyKind::Robot | crate::buddy::BuddyKind::Cat)) {
+            let (_, _, _, _, h, m, s, ms) = sys::local_time();
+            self.set_timer(T_BPEEK, peek_delay_ms((h * 3600 + m * 60 + s) * 1000 + ms));
+        }
+    }
+
+    fn on_peek_timer(&mut self) {
+        self.kill_timer(T_BPEEK);
+        if !self.cfg.peek {
+            return;
+        }
+        // only when the notch is visible, closed and showing just the clock or a timer, and no scene plays
+        let ok = !self.hidden && !self.fs_hidden && !self.expanded && !self.scene_active() && self.cfg.buddy != 0 && !self.alerting() && !self.has_media();
+        if !ok {
+            self.set_timer(T_BPEEK, 60_000);
+            return;
+        }
+        self.bpeek = Some(Instant::now());
+        self.last_tick = Instant::now();
+        self.set_anim(16);
+        self.render();
+        self.plan_peek();
+    }
+
+    pub fn toggle_peek(&mut self) {
+        self.cfg.peek = !self.cfg.peek;
+        store::save_config(&self.cfg);
+        self.plan_peek();
+    }
+
+    pub fn toggle_state_dot(&mut self) {
+        self.cfg.state_dot = !self.cfg.state_dot;
+        store::save_config(&self.cfg);
+        if !self.hidden {
+            self.render();
         }
     }
 
@@ -945,6 +1010,9 @@ impl App {
         let now = Instant::now();
         let mut dt = (now - self.last_tick).as_secs_f32().min(0.05);
         self.last_tick = now;
+        if self.bpeek.is_some_and(|t| t.elapsed().as_secs_f32() >= PEEK_SECS) {
+            self.bpeek = None; // the peek is over
+        }
         if self.alert_until.is_some() && !self.alerting() {
             self.alert_until = None; // alert expired: shrink back
         }
@@ -1010,6 +1078,7 @@ impl App {
             T_GAME => self.on_game_tick(),
             T_WATER => self.water_reminder(),
             T_EYES => self.eye_reminder(),
+            T_BPEEK => self.on_peek_timer(),
             T_DOTS => {
                 self.kill_timer(T_DOTS);
                 self.cycle_until = None;
@@ -3363,6 +3432,52 @@ mod preview {
         a.cfg.day_line = false;
         a.cycle_until = None;
         crate::cal::EVENTS.lock().unwrap().clear();
+        // state glyph variants (idle clock, battery, running focus, mic + focus, muted) and the buddy peek
+        a.cfg.state_dot = true;
+        let states: [(&str, bool, bool, bool, bool); 5] = [
+            ("pill_dot_idle", false, false, false, false),
+            ("pill_dot_battery", false, true, false, false),
+            ("pill_dot_focus", true, false, false, false),
+            ("pill_dot_mic", true, false, true, false),
+            ("pill_dot_muted", true, false, true, true),
+        ];
+        for (name, focus, batt, mic, muted) in states {
+            a.batt_warned = batt;
+            a.call_since = if mic { Some(Instant::now()) } else { None };
+            a.mic_muted = muted;
+            if focus {
+                a.timer_start = Some(Instant::now() - std::time::Duration::from_secs(10 * 60));
+                a.timer_total_s = 25 * 60;
+            } else {
+                a.timer_start = None;
+            }
+            let ww = if focus { COL_TIMER_W } else { COL_IDLE_W };
+            let (pw2, ph2) = ((ww * scale) as i32, (a.col_h() * scale) as i32);
+            a.gfx.begin(pw2, ph2).unwrap();
+            let mut hd = Vec::new();
+            crate::ui::draw(&a, ww, a.col_h(), &mut hd);
+            let _ = a.gfx.end();
+            let (bw, _bh, buf) = a.gfx.snapshot();
+            save(name, pw2, ph2, bw, &buf);
+        }
+        a.batt_warned = false;
+        a.call_since = None;
+        a.mic_muted = false;
+        a.timer_start = None;
+        a.cfg.state_dot = false;
+        for (name, buddy) in [("pill_peek_robot", 5u8), ("pill_peek_cat", 2u8)] {
+            a.cfg.buddy = buddy;
+            a.bpeek = Some(Instant::now() - std::time::Duration::from_millis(700));
+            let (pw2, ph2) = ((COL_IDLE_W * scale) as i32, (a.col_h() * scale) as i32);
+            a.gfx.begin(pw2, ph2).unwrap();
+            let mut hd = Vec::new();
+            crate::ui::draw(&a, COL_IDLE_W, a.col_h(), &mut hd);
+            let _ = a.gfx.end();
+            let (bw, _bh, buf) = a.gfx.snapshot();
+            save(name, pw2, ph2, bw, &buf);
+        }
+        a.bpeek = None;
+        a.cfg.buddy = 5;
         a.cfg.idle_glance = 0;
         a.stats = None;
         a.timer_start = Some(Instant::now() - std::time::Duration::from_secs(10 * 60));
@@ -3414,6 +3529,53 @@ mod preview {
         buddy_shot("buddy_necro_say", 8, 1, 4, 1.0, Some("Death is a pause."));
         std::fs::write(format!("{dir}/coords.json"), format!("{{\n  \"bar\": {{ {} }},\n  \"tabs\": {{ {} }}\n}}", hits.join(", "), tabs.join(", "))).unwrap();
     }
+}
+
+/// The state glyph: shape as well as colour tells the states apart.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum DotState {
+    /// steady dot
+    Idle,
+    /// ring: the microphone is in use
+    Mic,
+    /// red ring: the microphone is muted
+    MicMuted,
+    /// amber square with a tick: battery low
+    Battery,
+    /// arc: a focus session runs
+    Focus,
+}
+
+/// Mic beats battery beats focus beats idle.
+pub fn dot_state(mic: bool, muted: bool, battery_low: bool, focus: bool) -> DotState {
+    if mic {
+        if muted { DotState::MicMuted } else { DotState::Mic }
+    } else if battery_low {
+        DotState::Battery
+    } else if focus {
+        DotState::Focus
+    } else {
+        DotState::Idle
+    }
+}
+
+/// How far the peeking buddy has risen after `t` seconds: up in 0.25 s, held, down in 0.25 s.
+pub fn peek_height(t: f32) -> Option<f32> {
+    let ease = |x: f32| x * x * (3.0 - 2.0 * x);
+    if t < 0.0 || t >= PEEK_SECS {
+        None
+    } else if t < 0.25 {
+        Some(ease(t / 0.25))
+    } else if t < PEEK_SECS - 0.25 {
+        Some(1.0)
+    } else {
+        Some(1.0 - ease((t - (PEEK_SECS - 0.25)) / 0.25))
+    }
+}
+
+/// Milliseconds until the next peek: 3 to 8 minutes, spread by `seed`.
+pub fn peek_delay_ms(seed: u32) -> u32 {
+    180_000 + seed.wrapping_mul(2_654_435_761) % 300_000
 }
 
 /// Everything the idle glance slot may need to format.
@@ -3530,6 +3692,22 @@ mod glance_tests {
         assert_eq!(next_meeting(&events, 200, 3).map(|e| e.start), Some(3600));
         assert!(next_meeting(&events[1..2], 200, 1).is_none());
         assert!(next_meeting(&[], 0, 3).is_none());
+    }
+
+    #[test]
+    fn state_dot_priority_and_peek_timing() {
+        assert_eq!(dot_state(false, false, false, false), DotState::Idle);
+        assert_eq!(dot_state(false, false, false, true), DotState::Focus);
+        assert_eq!(dot_state(false, false, true, true), DotState::Battery);
+        assert_eq!(dot_state(true, false, true, true), DotState::Mic);
+        assert_eq!(dot_state(true, true, false, false), DotState::MicMuted);
+        assert_eq!(peek_height(0.0), Some(0.0));
+        assert_eq!(peek_height(0.7), Some(1.0));
+        assert!(peek_height(1.4).is_some_and(|k| k < 0.5));
+        assert_eq!(peek_height(1.5), None);
+        for s in [0u32, 1, 86_399_999, 12_345_678] {
+            assert!((180_000..480_000).contains(&peek_delay_ms(s)));
+        }
     }
 
     #[test]

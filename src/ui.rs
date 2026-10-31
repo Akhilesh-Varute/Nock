@@ -276,6 +276,51 @@ fn draw_collapsed(a: &App, w: f32, ca: f32) {
     if timer && a.cfg.idle_focus_bar {
         draw_focus_line(a, w, ch, ca);
     }
+    if a.cfg.state_dot && !m.has_track() {
+        draw_state_dot(a, ch, ca);
+    }
+    if let Some(k) = a.peek_k() {
+        use crate::buddy::BuddyKind;
+        if let Some(kind @ (BuddyKind::Robot | BuddyKind::Cat)) = BuddyKind::from_id(a.cfg.buddy) {
+            crate::buddy::draw_peek(g, kind, w - 26.0, ch, k, a.peek_t());
+        }
+    }
+}
+
+/// The state glyph at the left of the idle and timer notch. Shape differs by state, not just colour.
+fn draw_state_dot(a: &App, ch: f32, ca: f32) {
+    let g = &a.gfx;
+    let (cx, cy) = (13.0, ch / 2.0);
+    let blue = Color(DEFAULT_ACCENT.0, DEFAULT_ACCENT.1, DEFAULT_ACCENT.2, ca);
+    match a.dot_state() {
+        DotState::Idle => g.fill_circle(cx, cy, 3.0, blue),
+        DotState::Mic | DotState::MicMuted => {
+            let c = if a.dot_state() == DotState::MicMuted { Color(1.0, 0.3, 0.3, ca) } else { blue };
+            g.fill_circle(cx, cy, 4.2, c);
+            g.fill_circle(cx, cy, 2.6, BLACK);
+        }
+        DotState::Battery => {
+            let amber = Color(1.0, 0.72, 0.2, ca);
+            g.fill_rrect(Rect::new(cx - 4.0, cy - 4.0, 8.0, 8.0), 1.8, amber);
+            g.fill_rrect(Rect::new(cx - 0.55, cy - 2.6, 1.1, 3.2), 0.5, BLACK);
+            g.fill_circle(cx, cy + 2.0, 0.6, BLACK);
+        }
+        DotState::Focus => {
+            let done = focus_fraction(a.timer_total_s, a.timer_remaining_ms());
+            let col = if a.break_mode { Color(0.12, 0.72, 0.62, ca) } else { blue };
+            let steps = 28;
+            let pt = |i: usize| {
+                let ang = -std::f32::consts::FRAC_PI_2 + i as f32 / steps as f32 * std::f32::consts::TAU;
+                (cx + 4.4 * ang.cos(), cy + 4.4 * ang.sin())
+            };
+            for i in 0..steps {
+                g.line(pt(i), pt(i + 1), 1.6, Color(0.2, 0.2, 0.22, ca));
+            }
+            for i in 0..((done * steps as f32).round() as usize).min(steps) {
+                g.line(pt(i), pt(i + 1), 1.8, col);
+            }
+        }
+    }
 }
 
 /// How much of a timer session has passed, 0 to 1.
