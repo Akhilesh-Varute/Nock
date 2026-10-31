@@ -113,6 +113,12 @@ const T_STATS: usize = 18;
 const T_GAME: usize = 19;
 const T_WATER: usize = 20;
 const T_EYES: usize = 21;
+/// One-shot: hides the cycle page dots 2 s after the last scroll.
+const T_DOTS: usize = 22;
+/// One-shot, rare (3 to 8 minutes): the next buddy peek over the notch.
+const T_BPEEK: usize = 23;
+/// How long a peek lasts, seconds.
+const PEEK_SECS: f32 = 1.5;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Page {
@@ -344,6 +350,14 @@ pub struct App {
 
     // tasks
     pub timer_total_s: u32,
+    /// Which page the scroll-up cycle is on: 0 time only, 1 date, 2 tasks left, 3 focus today.
+    pub cycle: u8,
+    /// The page dots stay visible until then.
+    pub cycle_until: Option<Instant>,
+    /// When the running buddy peek started.
+    bpeek: Option<Instant>,
+    /// Width of the glance last time the minute timer looked (to resize the pill when it changes).
+    glance_last: f32,
     /// the task being focused on, and whether the timer is running a break
     pub timer_task: Option<String>,
     pub break_mode: bool,
@@ -513,6 +527,10 @@ impl App {
             apps: store::load_apps(),
             app_icons: Vec::new(),
             timer_total_s: 25 * 60,
+            cycle: 0,
+            cycle_until: None,
+            bpeek: None,
+            glance_last: 0.0,
             timer_task: None,
             break_mode: false,
             cycle_focus_s: 25 * 60,
@@ -669,6 +687,7 @@ impl App {
             || self.jiggle > 0.0
             || self.beat_start.is_some_and(|t| t.elapsed().as_secs_f32() < 1.0)
             || self.confetti_t().is_some()
+            || self.bpeek.is_some()
     }
 
     /// What the clipboard page lists: pinned items first, then recent ones, filtered
@@ -720,7 +739,152 @@ impl App {
         } else if self.timer_running() {
             (COL_TIMER_W, self.col_h())
         } else {
-            (COL_IDLE_W, self.col_h())
+            (COL_IDLE_W + self.glance_extra_w(), self.col_h())
+        }
+    }
+
+    /// Text and reserved width (fixed, so numbers never jitter) of the idle glance slot.
+    pub fn glance(&self) -> Option<(String, f32)> {
+        let kind = self.glance_kind();
+        let left = self.todos.iter().filter(|t| !t.done).count();
+        let (_, mo, day, wday, hh, mm, ..) = sys::local_time();
+        let meeting = if kind == 4 {
+            let (now, _) = crate::cal::now();
+            let hours = self.cfg.idle_meeting_hours as i64;
+            next_meeting(&crate::cal::EVENTS.lock().unwrap(), now, hours).map(|e| meeting_text(&e.title, e.start, self.cfg.clock_24h))
+        } else {
+            None
+        };
+        let _ = (hh, mm);
+        glance_text(&GlanceIn { kind, has_todos: !self.todos.is_empty(), left, focus_min: self.focus_today, stats: self.stats, meeting, date: date_text(mo, day, wday) })
+    }
+
+    /// What the slot shows right now: the cycle page when cycling is on, else the chosen glance.
+    /// Kinds: 0 none, 1 tasks left, 2 focus today, 3 CPU and RAM, 4 next meeting, 5 date.
+    pub fn glance_kind(&self) -> u8 {
+        if self.cfg.idle_cycle {
+            [0, 5, 1, 2][(self.cycle % 4) as usize]
+        } else {
+            self.cfg.idle_glance
+        }
+    }
+
+    /// What the state glyph shows: the mic and battery states win over a running focus session.
+    pub fn dot_state(&self) -> DotState {
+        dot_state(self.call_since.is_some(), self.mic_muted, self.batt_warned, self.timer_running())
+    }
+
+    /// Height factor of the running buddy peek, 0 to 1 (None when no peek is running).
+    pub fn peek_k(&self) -> Option<f32> {
+        peek_height(self.bpeek?.elapsed().as_secs_f32())
+    }
+
+    /// Seconds into the running peek (0 when none).
+    pub fn peek_t(&self) -> f32 {
+        self.bpeek.map_or(0.0, |t| t.elapsed().as_secs_f32())
+    }
+
+    /// Arm the next peek with one long one-shot timer (nothing at all when peeks are off).
+    pub fn plan_peek(&mut self) {
+        self.kill_timer(T_BPEEK);
+        let kind = crate::buddy::BuddyKind::from_id(self.cfg.buddy);
+        if self.cfg.peek && matches!(kind, Some(crate::buddy::BuddyKind::Robot | crate::buddy::BuddyKind::Cat)) {
+            let (_, _, _, _, h, m, s, ms) = sys::local_time();
+            self.set_timer(T_BPEEK, peek_delay_ms((h * 3600 + m * 60 + s) * 1000 + ms));
+        }
+    }
+
+    fn on_peek_timer(&mut self) {
+        self.kill_timer(T_BPEEK);
+        if !self.cfg.peek {
+            return;
+        }
+        // only when the notch is visible, closed and showing just the clock or a timer, and no scene plays
+        let ok = !self.hidden && !self.fs_hidden && !self.expanded && !self.scene_active() && self.cfg.buddy != 0 && !self.alerting() && !self.has_media();
+        if !ok {
+            self.set_timer(T_BPEEK, 60_000);
+            return;
+        }
+        self.bpeek = Some(Instant::now());
+        self.last_tick = Instant::now();
+        self.set_anim(16);
+        self.render();
+        self.plan_peek();
+    }
+
+    pub fn toggle_peek(&mut self) {
+        self.cfg.peek = !self.cfg.peek;
+        store::save_config(&self.cfg);
+        self.plan_peek();
+    }
+
+    pub fn toggle_state_dot(&mut self) {
+        self.cfg.state_dot = !self.cfg.state_dot;
+        store::save_config(&self.cfg);
+        if !self.hidden {
+            self.render();
+        }
+    }
+
+    /// Page dots are showing (during and just after a scroll).
+    pub fn cycle_dots(&self) -> bool {
+        self.cfg.idle_cycle && self.cycle_until.is_some_and(|t| Instant::now() < t)
+    }
+
+    /// True when the collapsed pill would show only the clock.
+    fn idle_pill(&self) -> bool {
+        !self.alerting() && !(self.call_since.is_some() && !self.timer_running()) && !self.has_media() && !self.timer_running()
+    }
+
+    /// Scroll up over the idle pill: next page. A one-shot timer hides the dots afterwards.
+    fn cycle_next(&mut self) {
+        self.cycle = (self.cycle + 1) % 4;
+        self.cycle_until = Some(Instant::now() + std::time::Duration::from_secs(2));
+        self.set_timer(T_DOTS, 2000);
+        self.retarget();
+        self.render();
+    }
+
+    pub fn toggle_day_line(&mut self) {
+        self.cfg.day_line = !self.cfg.day_line;
+        store::save_config(&self.cfg);
+        if !self.hidden {
+            self.render();
+        }
+    }
+
+    pub fn toggle_idle_cycle(&mut self) {
+        self.cfg.idle_cycle = !self.cfg.idle_cycle;
+        self.cycle = 0;
+        store::save_config(&self.cfg);
+        // the CPU and RAM sampling follows what the slot shows
+        self.sync_stats();
+        if !self.hidden && !self.expanded {
+            self.retarget();
+            self.render();
+        }
+    }
+
+    /// Extra pill width for the glance (separator and padding included).
+    pub fn glance_extra_w(&self) -> f32 {
+        self.glance().map_or(0.0, |(_, w)| w + 16.0)
+    }
+
+    pub fn set_idle_glance(&mut self, v: u8) {
+        self.cfg.idle_glance = v.min(4);
+        store::save_config(&self.cfg);
+        self.sync_stats();
+        if !self.hidden && !self.expanded {
+            self.retarget();
+            self.render();
+        }
+    }
+
+    pub fn toggle_idle_focus_bar(&mut self) {
+        self.cfg.idle_focus_bar = !self.cfg.idle_focus_bar;
+        store::save_config(&self.cfg);
+        if !self.hidden {
+            self.render();
         }
     }
 
@@ -846,6 +1010,9 @@ impl App {
         let now = Instant::now();
         let mut dt = (now - self.last_tick).as_secs_f32().min(0.05);
         self.last_tick = now;
+        if self.bpeek.is_some_and(|t| t.elapsed().as_secs_f32() >= PEEK_SECS) {
+            self.bpeek = None; // the peek is over
+        }
         if self.alert_until.is_some() && !self.alerting() {
             self.alert_until = None; // alert expired: shrink back
         }
@@ -911,6 +1078,14 @@ impl App {
             T_GAME => self.on_game_tick(),
             T_WATER => self.water_reminder(),
             T_EYES => self.eye_reminder(),
+            T_BPEEK => self.on_peek_timer(),
+            T_DOTS => {
+                self.kill_timer(T_DOTS);
+                self.cycle_until = None;
+                if !self.expanded && !self.hidden {
+                    self.render();
+                }
+            }
             T_STATS => self.on_stats_tick(),
             T_FSCHK => {
                 self.kill_timer(T_FSCHK);
@@ -938,6 +1113,14 @@ impl App {
                 if self.bar_visible() {
                     self.refresh_bar_data();
                     self.render_bar();
+                }
+                // a meeting entering or leaving the window changes the glance width
+                let gx = self.glance_extra_w();
+                if (gx - self.glance_last).abs() > 0.5 {
+                    self.glance_last = gx;
+                    if !self.expanded && !self.hidden {
+                        self.retarget();
+                    }
                 }
                 if !self.expanded && (self.call_since.is_some() || (!self.has_media() && !self.timer_running())) {
                     self.render();
@@ -1076,7 +1259,7 @@ impl App {
 
     /// Start or stop the 3 s CPU/RAM sampling to match the setting.
     pub fn sync_stats(&mut self) {
-        if self.cfg.stats {
+        if self.cfg.stats || self.glance_kind() == 3 {
             self.cpu_prev = sys::cpu_times();
             self.set_timer(T_STATS, 3000);
         } else {
@@ -1261,7 +1444,10 @@ impl App {
     }
 
     fn on_stats_tick(&mut self) {
-        if !self.cfg.stats || !self.bar_visible() {
+        // sampled for the bar read-out and/or the idle glance, never otherwise
+        let on_bar = self.cfg.stats && self.bar_visible();
+        let on_pill = self.glance_kind() == 3 && !self.hidden;
+        if !on_bar && !on_pill {
             return;
         }
         let (idle, total) = sys::cpu_times();
@@ -1270,8 +1456,18 @@ impl App {
         let cpu = if dt == 0 { 0 } else { (100 - (di.min(dt) * 100 / dt)) as u32 };
         let now = Some((cpu, sys::mem_percent()));
         if now != self.stats {
+            let first = self.stats.is_none();
             self.stats = now;
-            self.render_bar();
+            if on_bar {
+                self.render_bar();
+            }
+            if on_pill && !self.expanded {
+                // the slot only changes width when the first sample arrives
+                if first {
+                    self.retarget();
+                }
+                self.render();
+            }
         }
     }
 
@@ -1483,7 +1679,11 @@ impl App {
         let y = py as f32 / self.scale;
         if !self.expanded {
             if delta < 0 {
+                // scrolling down opens the panel, as always
                 self.set_expanded(true);
+            } else if delta > 0 && self.cfg.idle_cycle && self.idle_pill() {
+                // scrolling up cycles the idle extra
+                self.cycle_next();
             }
             return;
         }
@@ -3183,6 +3383,114 @@ mod preview {
         let _ = a.gfx.end();
         let (bw, _bh, buf) = a.gfx.snapshot();
         save("pill_idle", iw, ih, bw, &buf);
+        // idle glance variants and the focus progress line
+        for (kind, name) in [(1u8, "pill_glance_tasks"), (2, "pill_glance_focus")] {
+            a.cfg.idle_glance = kind;
+            a.focus_today = 42;
+            let gw = ((COL_IDLE_W + a.glance_extra_w()) * scale) as i32;
+            a.gfx.begin(gw, ih).unwrap();
+            let mut hg = Vec::new();
+            crate::ui::draw(&a, COL_IDLE_W + a.glance_extra_w(), a.col_h(), &mut hg);
+            let _ = a.gfx.end();
+            let (bw, _bh, buf) = a.gfx.snapshot();
+            save(name, gw, ih, bw, &buf);
+        }
+        a.cfg.idle_glance = 3;
+        a.stats = Some((12, 63));
+        let gw = ((COL_IDLE_W + a.glance_extra_w()) * scale) as i32;
+        a.gfx.begin(gw, ih).unwrap();
+        let mut hg = Vec::new();
+        crate::ui::draw(&a, COL_IDLE_W + a.glance_extra_w(), a.col_h(), &mut hg);
+        let _ = a.gfx.end();
+        let (bw, _bh, buf) = a.gfx.snapshot();
+        save("pill_glance_cpu", gw, ih, bw, &buf);
+        // next meeting, date page with dots, and the workday line
+        {
+            let (now, _) = crate::cal::now();
+            *crate::cal::EVENTS.lock().unwrap() = vec![crate::cal::Event { start: now + 90 * 60, title: "Quarterly planning review".into(), link: None }];
+        }
+        a.cfg.idle_glance = 4;
+        let shots: [(&str, u8, bool, bool); 4] = [("pill_glance_meeting", 4, false, false), ("pill_cycle_date_dots", 0, true, false), ("pill_day_line", 0, false, true), ("pill_glance_meeting_day", 4, false, true)];
+        for (name, kind, cyc, day) in shots {
+            a.cfg.idle_glance = kind;
+            a.cfg.idle_cycle = cyc;
+            a.cycle = 1;
+            a.cycle_until = if cyc { Some(Instant::now() + std::time::Duration::from_secs(30)) } else { None };
+            a.cfg.day_line = day;
+            a.cfg.day_start = 0;
+            a.cfg.day_end = 24;
+            let gw = ((COL_IDLE_W + a.glance_extra_w()) * scale) as i32;
+            a.gfx.begin(gw, ih).unwrap();
+            let mut hg = Vec::new();
+            crate::ui::draw(&a, COL_IDLE_W + a.glance_extra_w(), a.col_h(), &mut hg);
+            let _ = a.gfx.end();
+            let (bw, _bh, buf) = a.gfx.snapshot();
+            save(name, gw, ih, bw, &buf);
+        }
+        a.cfg.idle_glance = 0;
+        a.cfg.idle_cycle = false;
+        a.cfg.day_line = false;
+        a.cycle_until = None;
+        crate::cal::EVENTS.lock().unwrap().clear();
+        // state glyph variants (idle clock, battery, running focus, mic + focus, muted) and the buddy peek
+        a.cfg.state_dot = true;
+        let states: [(&str, bool, bool, bool, bool); 5] = [
+            ("pill_dot_idle", false, false, false, false),
+            ("pill_dot_battery", false, true, false, false),
+            ("pill_dot_focus", true, false, false, false),
+            ("pill_dot_mic", true, false, true, false),
+            ("pill_dot_muted", true, false, true, true),
+        ];
+        for (name, focus, batt, mic, muted) in states {
+            a.batt_warned = batt;
+            a.call_since = if mic { Some(Instant::now()) } else { None };
+            a.mic_muted = muted;
+            if focus {
+                a.timer_start = Some(Instant::now() - std::time::Duration::from_secs(10 * 60));
+                a.timer_total_s = 25 * 60;
+            } else {
+                a.timer_start = None;
+            }
+            let ww = if focus { COL_TIMER_W } else { COL_IDLE_W };
+            let (pw2, ph2) = ((ww * scale) as i32, (a.col_h() * scale) as i32);
+            a.gfx.begin(pw2, ph2).unwrap();
+            let mut hd = Vec::new();
+            crate::ui::draw(&a, ww, a.col_h(), &mut hd);
+            let _ = a.gfx.end();
+            let (bw, _bh, buf) = a.gfx.snapshot();
+            save(name, pw2, ph2, bw, &buf);
+        }
+        a.batt_warned = false;
+        a.call_since = None;
+        a.mic_muted = false;
+        a.timer_start = None;
+        a.cfg.state_dot = false;
+        for (name, buddy) in [("pill_peek_robot", 5u8), ("pill_peek_cat", 2u8)] {
+            a.cfg.buddy = buddy;
+            a.bpeek = Some(Instant::now() - std::time::Duration::from_millis(700));
+            let (pw2, ph2) = ((COL_IDLE_W * scale) as i32, (a.col_h() * scale) as i32);
+            a.gfx.begin(pw2, ph2).unwrap();
+            let mut hd = Vec::new();
+            crate::ui::draw(&a, COL_IDLE_W, a.col_h(), &mut hd);
+            let _ = a.gfx.end();
+            let (bw, _bh, buf) = a.gfx.snapshot();
+            save(name, pw2, ph2, bw, &buf);
+        }
+        a.bpeek = None;
+        a.cfg.buddy = 5;
+        a.cfg.idle_glance = 0;
+        a.stats = None;
+        a.timer_start = Some(Instant::now() - std::time::Duration::from_secs(10 * 60));
+        a.timer_total_s = 25 * 60;
+        a.timer_left_ms = 25 * 60 * 1000;
+        a.gfx.begin(cw, chh).unwrap();
+        let mut hf = Vec::new();
+        crate::ui::draw(&a, COL_TIMER_W, a.col_h(), &mut hf);
+        let _ = a.gfx.end();
+        let (bw, _bh, buf) = a.gfx.snapshot();
+        save("pill_focus_line", cw, chh, bw, &buf);
+        a.timer_start = None;
+        a.timer_left_ms = 25 * 60 * 1000;
         a.mstate.has_session = true;
         let (mw, mh) = ((COL_MEDIA_W * scale) as i32, (a.col_h() * scale) as i32);
         a.gfx.begin(mw, mh).unwrap();
@@ -3220,5 +3528,195 @@ mod preview {
         buddy_shot("buddy_courier_say", 7, 1, 4, 1.0, Some("Delivery's late. Again."));
         buddy_shot("buddy_necro_say", 8, 1, 4, 1.0, Some("Death is a pause."));
         std::fs::write(format!("{dir}/coords.json"), format!("{{\n  \"bar\": {{ {} }},\n  \"tabs\": {{ {} }}\n}}", hits.join(", "), tabs.join(", "))).unwrap();
+    }
+}
+
+/// The state glyph: shape as well as colour tells the states apart.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum DotState {
+    /// steady dot
+    Idle,
+    /// ring: the microphone is in use
+    Mic,
+    /// red ring: the microphone is muted
+    MicMuted,
+    /// amber square with a tick: battery low
+    Battery,
+    /// arc: a focus session runs
+    Focus,
+}
+
+/// Mic beats battery beats focus beats idle.
+pub fn dot_state(mic: bool, muted: bool, battery_low: bool, focus: bool) -> DotState {
+    if mic {
+        if muted { DotState::MicMuted } else { DotState::Mic }
+    } else if battery_low {
+        DotState::Battery
+    } else if focus {
+        DotState::Focus
+    } else {
+        DotState::Idle
+    }
+}
+
+/// How far the peeking buddy has risen after `t` seconds: up in 0.25 s, held, down in 0.25 s.
+pub fn peek_height(t: f32) -> Option<f32> {
+    let ease = |x: f32| x * x * (3.0 - 2.0 * x);
+    if t < 0.0 || t >= PEEK_SECS {
+        None
+    } else if t < 0.25 {
+        Some(ease(t / 0.25))
+    } else if t < PEEK_SECS - 0.25 {
+        Some(1.0)
+    } else {
+        Some(1.0 - ease((t - (PEEK_SECS - 0.25)) / 0.25))
+    }
+}
+
+/// Milliseconds until the next peek: 3 to 8 minutes, spread by `seed`.
+pub fn peek_delay_ms(seed: u32) -> u32 {
+    180_000 + seed.wrapping_mul(2_654_435_761) % 300_000
+}
+
+/// Everything the idle glance slot may need to format.
+pub struct GlanceIn {
+    pub kind: u8,
+    pub has_todos: bool,
+    pub left: usize,
+    pub focus_min: u32,
+    pub stats: Option<(u32, u32)>,
+    pub meeting: Option<String>,
+    pub date: String,
+}
+
+/// What the idle glance slot shows and the fixed width it reserves (so numbers never jitter).
+/// Kinds: 1 tasks left, 2 focus today, 3 CPU and RAM, 4 next meeting, 5 date.
+pub fn glance_text(g: &GlanceIn) -> Option<(String, f32)> {
+    match g.kind {
+        1 if g.has_todos => Some((format!("{} left", g.left), 64.0)),
+        2 => Some((format!("{} min", g.focus_min), 58.0)),
+        3 => g.stats.map(|(c, m)| (format!("CPU {c}% RAM {m}%"), 112.0)),
+        4 => g.meeting.clone().map(|m| (m, 142.0)),
+        5 => Some((g.date.clone(), 76.0)),
+        _ => None,
+    }
+}
+
+/// Cut `s` to at most `max` characters, ending with an ellipsis when it was longer.
+pub fn ellipsize(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        s.to_string()
+    } else {
+        let head: String = s.chars().take(max.saturating_sub(1)).collect();
+        format!("{}\u{2026}", head.trim_end())
+    }
+}
+
+/// "Standup 10:30" (or "Standup 10:30 AM"): `start` is a local epoch in seconds.
+pub fn meeting_text(title: &str, start: i64, clock24: bool) -> String {
+    let secs = start.rem_euclid(86400);
+    let (h, m) = (secs / 3600, secs % 3600 / 60);
+    let time = if clock24 {
+        format!("{h:02}:{m:02}")
+    } else {
+        let h12 = match h {
+            0 => 12,
+            1..=12 => h,
+            _ => h - 12,
+        };
+        format!("{h12}:{m:02} {}", if h < 12 { "AM" } else { "PM" })
+    };
+    format!("{} {}", ellipsize(title, 11), time)
+}
+
+/// The next meeting that starts within `hours` hours from `now` (not one that has begun).
+pub fn next_meeting(events: &[crate::cal::Event], now: i64, hours: i64) -> Option<&crate::cal::Event> {
+    events.iter().filter(|e| e.start > now && e.start - now <= hours * 3600).min_by_key(|e| e.start)
+}
+
+/// "Sun 1 Nov".
+pub fn date_text(month: u32, day: u32, wday: u32) -> String {
+    const DAYS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    format!("{} {} {}", DAYS[(wday as usize).min(6)], day, MONTHS[(month as usize).clamp(1, 12) - 1])
+}
+
+/// How much of the workday [start, end) hours has passed at hh:mm; None outside the workday.
+pub fn day_fraction(hh: u32, mm: u32, start: u8, end: u8) -> Option<f32> {
+    if end <= start {
+        return None;
+    }
+    let now = hh as u32 * 60 + mm as u32;
+    let (s, e) = (start as u32 * 60, end as u32 * 60);
+    if now < s || now >= e {
+        return None;
+    }
+    Some((now - s) as f32 / (e - s) as f32)
+}
+
+#[cfg(test)]
+mod glance_tests {
+    use super::*;
+
+    fn g(kind: u8) -> GlanceIn {
+        GlanceIn { kind, has_todos: true, left: 3, focus_min: 42, stats: Some((12, 63)), meeting: Some("Standup 10:30".into()), date: "Sun 1 Nov".into() }
+    }
+
+    #[test]
+    fn formats_each_glance() {
+        assert_eq!(glance_text(&g(1)).map(|x| x.0), Some("3 left".to_string()));
+        assert_eq!(glance_text(&GlanceIn { has_todos: false, ..g(1) }), None);
+        assert_eq!(glance_text(&g(2)).map(|x| x.0), Some("42 min".to_string()));
+        assert_eq!(glance_text(&g(3)).map(|x| x.0), Some("CPU 12% RAM 63%".to_string()));
+        assert_eq!(glance_text(&GlanceIn { stats: None, ..g(3) }), None);
+        assert_eq!(glance_text(&g(4)).map(|x| x.0), Some("Standup 10:30".to_string()));
+        assert_eq!(glance_text(&GlanceIn { meeting: None, ..g(4) }), None);
+        assert_eq!(glance_text(&g(5)).map(|x| x.0), Some("Sun 1 Nov".to_string()));
+        assert_eq!(glance_text(&g(0)), None);
+    }
+
+    #[test]
+    fn long_meeting_names_are_truncated() {
+        assert_eq!(ellipsize("Quarterly planning review", 11), "Quarterly\u{2026}");
+        assert_eq!(ellipsize("Standup", 11), "Standup");
+        assert_eq!(meeting_text("Quarterly planning review", 10 * 3600 + 30 * 60, true), "Quarterly\u{2026} 10:30");
+        assert_eq!(meeting_text("Standup", 15 * 3600 + 5 * 60, false), "Standup 3:05 PM");
+        assert_eq!(meeting_text("Sync", 0, false), "Sync 12:00 AM");
+    }
+
+    #[test]
+    fn picks_the_next_meeting_within_the_window() {
+        let ev = |t: i64, s: &str| crate::cal::Event { start: t, title: s.into(), link: None };
+        let events = vec![ev(100, "past"), ev(3 * 3600 + 500, "far"), ev(2 * 3600, "soon"), ev(3600, "first")];
+        assert_eq!(next_meeting(&events, 200, 3).map(|e| e.title.as_str()), Some("first"));
+        assert_eq!(next_meeting(&events, 200, 3).map(|e| e.start), Some(3600));
+        assert!(next_meeting(&events[1..2], 200, 1).is_none());
+        assert!(next_meeting(&[], 0, 3).is_none());
+    }
+
+    #[test]
+    fn state_dot_priority_and_peek_timing() {
+        assert_eq!(dot_state(false, false, false, false), DotState::Idle);
+        assert_eq!(dot_state(false, false, false, true), DotState::Focus);
+        assert_eq!(dot_state(false, false, true, true), DotState::Battery);
+        assert_eq!(dot_state(true, false, true, true), DotState::Mic);
+        assert_eq!(dot_state(true, true, false, false), DotState::MicMuted);
+        assert_eq!(peek_height(0.0), Some(0.0));
+        assert_eq!(peek_height(0.7), Some(1.0));
+        assert!(peek_height(1.4).is_some_and(|k| k < 0.5));
+        assert_eq!(peek_height(1.5), None);
+        for s in [0u32, 1, 86_399_999, 12_345_678] {
+            assert!((180_000..480_000).contains(&peek_delay_ms(s)));
+        }
+    }
+
+    #[test]
+    fn date_and_day_progress() {
+        assert_eq!(date_text(11, 1, 0), "Sun 1 Nov");
+        assert_eq!(day_fraction(9, 0, 9, 18), Some(0.0));
+        assert_eq!(day_fraction(13, 30, 9, 18), Some(0.5));
+        assert_eq!(day_fraction(8, 59, 9, 18), None);
+        assert_eq!(day_fraction(18, 0, 9, 18), None);
+        assert_eq!(day_fraction(10, 0, 18, 9), None);
     }
 }

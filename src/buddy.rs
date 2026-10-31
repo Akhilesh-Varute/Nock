@@ -242,6 +242,7 @@ impl App {
         }
         self.kill_timer(T_BUDDY);
         self.sync_buddy();
+        self.plan_peek();
         // greet the new buddy
         if id != 0 {
             self.buddy_event_bubble("Hi!", 2500);
@@ -889,6 +890,40 @@ fn draw_sprite(g: &Gfx, kind: BuddyKind, p: &Pose, mode: Mode, tick: u32) {
             let a = if (tick / 4) % 2 == 0 { 0.0 } else { 3.0 };
             g.text("\u{2726}", Rect::new(cx - 20.0, 2.0 + a, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
             g.text("\u{2726}", Rect::new(cx + 12.0, 5.0 - a, 10.0, 10.0), &g.fonts.tiny, c, Align::Left);
+        }
+        _ => {}
+    }
+}
+
+/// The buddy's head rising over the bottom edge of the notch for a moment (robot and kitty).
+/// `cx` is the head's centre, `base` the notch's bottom edge, `k` the rise 0..1, `t` seconds into the peek.
+pub fn draw_peek(g: &Gfx, kind: BuddyKind, cx: f32, base: f32, k: f32, t: f32) {
+    let (body, dark) = palette(kind);
+    let top = base - 4.0 - 11.0 * k; // head top; the lower part stays below the edge and is clipped away
+    let look = (t * 6.0).sin() * 1.1;
+    match kind {
+        BuddyKind::Robot => {
+            g.line((cx, top), (cx, top - 2.0), 1.2, dark);
+            g.fill_circle(cx, top - 2.8, 1.5, ROBOT_BLUE);
+            g.fill_rrect(Rect::new(cx - 8.0, top, 16.0, 13.0), 3.4, body);
+            g.fill_rrect(Rect::new(cx - 6.4, top + 1.8, 12.8, 9.0), 2.6, ROBOT_SCREEN);
+            for sx in [-1.0f32, 1.0] {
+                g.fill_circle(cx + sx * 3.3, top + 6.2, 1.9, ROBOT_BONE);
+                g.fill_circle(cx + sx * 3.3 + look * 0.6, top + 6.2, 0.95, ROBOT_SCREEN);
+            }
+        }
+        BuddyKind::Cat => {
+            let ink = Color(0.13, 0.12, 0.17, 1.0);
+            let pink = Color(1.0, 0.55, 0.7, 1.0);
+            for sx in [-1.0f32, 1.0] {
+                g.fill_poly(&[(cx + sx * 7.6, top + 6.0), (cx + sx * 6.6, top - 1.4), (cx + sx * 1.8, top + 1.4)], body);
+                g.fill_poly(&[(cx + sx * 6.4, top + 4.4), (cx + sx * 5.9, top + 0.6), (cx + sx * 3.4, top + 2.2)], pink);
+            }
+            g.fill_circle(cx, top + 8.0, 8.0, body);
+            for sx in [-1.0f32, 1.0] {
+                g.fill_circle(cx + sx * 3.3 + look * 0.5, top + 8.0, 1.45, ink);
+            }
+            g.fill_circle(cx, top + 10.6, 0.8, pink);
         }
         _ => {}
     }

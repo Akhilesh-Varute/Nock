@@ -236,10 +236,109 @@ fn draw_collapsed(a: &App, w: f32, ca: f32) {
         let (_, _, day, wday, ..) = sys::local_time();
         // date | time, centred as a pair; the time is the bold part
         let (dw, tw) = (50.0, if a.cfg.clock_24h { 44.0 } else { 70.0 });
-        let x0 = (w - (dw + 15.0 + tw)) / 2.0;
+        let glance = a.glance();
+        let gw = glance.as_ref().map_or(0.0, |(_, gw)| gw + 16.0);
+        let x0 = (w - (dw + 15.0 + tw + gw)) / 2.0;
         g.text(&format!("{} {}", DAYS[(wday as usize).min(6)], day), Rect::new(x0, 0.0, dw, ch), &f.small, T3.fade(ca), Align::Right);
         g.fill_rrect(Rect::new(x0 + dw + 7.0, ch / 2.0 - 7.0, 1.0, 14.0), 0.5, Color::white(0.18 * ca));
         g.text(&label, Rect::new(x0 + dw + 15.0, 0.0, tw, ch), &f.menu, T1.fade(ca), Align::Left);
+        if let Some((txt, gwid)) = glance {
+            // optional glance: separator, then secondary-colour text (tasks get a small checkbox)
+            let sx = x0 + dw + 15.0 + tw + 7.0;
+            g.fill_rrect(Rect::new(sx, ch / 2.0 - 7.0, 1.0, 14.0), 0.5, Color::white(0.18 * ca));
+            let mut gx = sx + 9.0;
+            let kind = a.glance_kind();
+            if kind == 1 {
+                g.icon('\u{E73A}', Rect::new(gx, 0.0, 16.0, ch), &f.icon14, T2.fade(ca));
+                gx += 19.0;
+            }
+            // the next meeting is dimmer than the other glances
+            let gcol = if kind == 4 { Color(0.55, 0.53, 0.49, ca) } else { T2.fade(ca) };
+            g.text(&txt, Rect::new(gx, 0.0, gwid, ch), &f.small, gcol, Align::Left);
+        }
+        if a.cycle_dots() {
+            // page dots while cycling: the active page in blue, the others grey
+            let active = a.cycle as usize % 4;
+            for i in 0..4 {
+                let c = if i == active { Color(DEFAULT_ACCENT.0, DEFAULT_ACCENT.1, DEFAULT_ACCENT.2, ca) } else { Color(0.267, 0.267, 0.267, ca) };
+                g.fill_circle(w / 2.0 - 12.0 + i as f32 * 8.0, ch - 4.0, 2.0, c);
+            }
+        } else if a.cfg.day_line {
+            let (_, _, _, _, hh, mm, _, _) = sys::local_time();
+            if let Some(frac) = crate::app::day_fraction(hh, mm, a.cfg.day_start, a.cfg.day_end) {
+                let (x, len, y) = (14.0, (w - 28.0).max(1.0), ch - 5.0);
+                g.fill_rrect(Rect::new(x, y, len, 2.0), 1.0, Color(0.15, 0.15, 0.165, ca));
+                g.fill_rrect(Rect::new(x, y, (len * frac).max(2.0), 2.0), 1.0, Color(0.55, 0.53, 0.49, ca));
+            }
+        }
+    }
+
+    if timer && a.cfg.idle_focus_bar {
+        draw_focus_line(a, w, ch, ca);
+    }
+    if a.cfg.state_dot && !m.has_track() {
+        draw_state_dot(a, ch, ca);
+    }
+    if let Some(k) = a.peek_k() {
+        use crate::buddy::BuddyKind;
+        if let Some(kind @ (BuddyKind::Robot | BuddyKind::Cat)) = BuddyKind::from_id(a.cfg.buddy) {
+            crate::buddy::draw_peek(g, kind, w - 26.0, ch, k, a.peek_t());
+        }
+    }
+}
+
+/// The state glyph at the left of the idle and timer notch. Shape differs by state, not just colour.
+fn draw_state_dot(a: &App, ch: f32, ca: f32) {
+    let g = &a.gfx;
+    let (cx, cy) = (13.0, ch / 2.0);
+    let blue = Color(DEFAULT_ACCENT.0, DEFAULT_ACCENT.1, DEFAULT_ACCENT.2, ca);
+    match a.dot_state() {
+        DotState::Idle => g.fill_circle(cx, cy, 3.0, blue),
+        DotState::Mic | DotState::MicMuted => {
+            let c = if a.dot_state() == DotState::MicMuted { Color(1.0, 0.3, 0.3, ca) } else { blue };
+            g.fill_circle(cx, cy, 4.2, c);
+            g.fill_circle(cx, cy, 2.6, BLACK);
+        }
+        DotState::Battery => {
+            let amber = Color(1.0, 0.72, 0.2, ca);
+            g.fill_rrect(Rect::new(cx - 4.0, cy - 4.0, 8.0, 8.0), 1.8, amber);
+            g.fill_rrect(Rect::new(cx - 0.55, cy - 2.6, 1.1, 3.2), 0.5, BLACK);
+            g.fill_circle(cx, cy + 2.0, 0.6, BLACK);
+        }
+        DotState::Focus => {
+            let done = focus_fraction(a.timer_total_s, a.timer_remaining_ms());
+            let col = if a.break_mode { Color(0.12, 0.72, 0.62, ca) } else { blue };
+            let steps = 28;
+            let pt = |i: usize| {
+                let ang = -std::f32::consts::FRAC_PI_2 + i as f32 / steps as f32 * std::f32::consts::TAU;
+                (cx + 4.4 * ang.cos(), cy + 4.4 * ang.sin())
+            };
+            for i in 0..steps {
+                g.line(pt(i), pt(i + 1), 1.6, Color(0.2, 0.2, 0.22, ca));
+            }
+            for i in 0..((done * steps as f32).round() as usize).min(steps) {
+                g.line(pt(i), pt(i + 1), 1.8, col);
+            }
+        }
+    }
+}
+
+/// How much of a timer session has passed, 0 to 1.
+pub fn focus_fraction(total_s: u32, remaining_ms: i64) -> f32 {
+    let total = (total_s as f32 * 1000.0).max(1.0);
+    (1.0 - remaining_ms as f32 / total).clamp(0.0, 1.0)
+}
+
+/// A 2 px line along the inside bottom edge of the pill: how much of the focus session has passed.
+fn draw_focus_line(a: &App, w: f32, ch: f32, ca: f32) {
+    let g = &a.gfx;
+    let done = focus_fraction(a.timer_total_s, a.timer_remaining_ms());
+    let (x, len, y) = (14.0, (w - 28.0).max(1.0), ch - 5.0);
+    g.fill_rrect(Rect::new(x, y, len, 2.0), 1.0, Color(0.15, 0.15, 0.165, ca));
+    if done > 0.0 {
+        // the existing blue; breaks use the teal of the break nudge
+        let c = if a.break_mode { Color(0.12, 0.72, 0.62, ca) } else { Color(DEFAULT_ACCENT.0, DEFAULT_ACCENT.1, DEFAULT_ACCENT.2, ca) };
+        g.fill_rrect(Rect::new(x, y, (len * done).max(2.0), 2.0), 1.0, c);
     }
 }
 
@@ -1367,6 +1466,15 @@ pub fn fmt_time(secs: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn focus_fraction_is_clamped() {
+        assert_eq!(focus_fraction(1500, 1_500_000), 0.0);
+        assert!((focus_fraction(1500, 750_000) - 0.5).abs() < 1e-6);
+        assert_eq!(focus_fraction(1500, 0), 1.0);
+        assert_eq!(focus_fraction(1500, -5), 1.0);
+        assert_eq!(focus_fraction(0, 0), 1.0);
+    }
 
     #[test]
     fn time_format() {

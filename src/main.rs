@@ -167,6 +167,7 @@ fn main() -> Result<()> {
             a.buddy = buddy::Buddy::new(buddy_hwnd, a.scale);
             a.stage = scene::Stage::new(stage_hwnd, a.scale);
             a.plan_scene();
+            a.plan_peek();
             a.sync_stats();
             a.sync_water();
             a.sync_eyes();
@@ -457,6 +458,26 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Buddy"));
         }
         if let Ok(sub) = CreatePopupMenu() {
+            let cur = a.cfg.idle_glance;
+            let mark = |id: u8| if cur == id { MF_CHECKED } else { MF_UNCHECKED };
+            let _ = AppendMenuW(sub, MF_STRING | mark(0), 90, w!("Off"));
+            let _ = AppendMenuW(sub, MF_STRING | mark(1), 91, w!("Tasks left"));
+            let _ = AppendMenuW(sub, MF_STRING | mark(2), 92, w!("Focus today"));
+            let _ = AppendMenuW(sub, MF_STRING | mark(3), 93, w!("CPU and RAM"));
+            let _ = AppendMenuW(sub, MF_STRING | mark(4), 94, w!("Next meeting"));
+            let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Idle glance"));
+        }
+        let fb = if a.cfg.idle_focus_bar { MF_CHECKED } else { MF_UNCHECKED };
+        let _ = AppendMenuW(menu, MF_STRING | fb, 95, w!("Show focus progress on the notch"));
+        let dl = if a.cfg.day_line { MF_CHECKED } else { MF_UNCHECKED };
+        let _ = AppendMenuW(menu, MF_STRING | dl, 96, w!("Workday progress line on the notch"));
+        let ic = if a.cfg.idle_cycle { MF_CHECKED } else { MF_UNCHECKED };
+        let _ = AppendMenuW(menu, MF_STRING | ic, 97, w!("Scroll up over the notch cycles time, date, tasks"));
+        let sd = if a.cfg.state_dot { MF_CHECKED } else { MF_UNCHECKED };
+        let _ = AppendMenuW(menu, MF_STRING | sd, 98, w!("State dot on the notch (mic, battery, focus)"));
+        let pk = if a.cfg.peek { MF_CHECKED } else { MF_UNCHECKED };
+        let _ = AppendMenuW(menu, MF_STRING | pk, 99, w!("Buddy peeks over the notch now and then"));
+        if let Ok(sub) = CreatePopupMenu() {
             let on = if a.cfg.scenes { MF_CHECKED } else { MF_UNCHECKED };
             let _ = AppendMenuW(sub, MF_STRING | on, 30, w!("Play scenes now and then"));
             let _ = AppendMenuW(sub, MF_SEPARATOR, 0, PCWSTR::null());
@@ -566,6 +587,12 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             4 => sys::open(&store::data_dir().to_string_lossy(), ""),
             15 => sys::check_update(hwnd.0 as isize),
             20..=29 => a.set_buddy((cmd.0 - 20) as u8),
+            90..=94 => a.set_idle_glance((cmd.0 - 90) as u8),
+            95 => a.toggle_idle_focus_bar(),
+            96 => a.toggle_day_line(),
+            97 => a.toggle_idle_cycle(),
+            98 => a.toggle_state_dot(),
+            99 => a.toggle_peek(),
             30 => a.toggle_scenes(),
             60..=63 => a.set_clock_style((cmd.0 - 60) as u8),
             80..=83 => a.set_eye_min([0u16, 20, 30, 45][(cmd.0 - 80) as usize]),
