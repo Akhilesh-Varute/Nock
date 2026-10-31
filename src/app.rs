@@ -720,7 +720,36 @@ impl App {
         } else if self.timer_running() {
             (COL_TIMER_W, self.col_h())
         } else {
-            (COL_IDLE_W, self.col_h())
+            (COL_IDLE_W + self.glance_extra_w(), self.col_h())
+        }
+    }
+
+    /// Text and reserved width (fixed, so numbers never jitter) of the idle glance slot.
+    pub fn glance(&self) -> Option<(String, f32)> {
+        let left = self.todos.iter().filter(|t| !t.done).count();
+        glance_text(self.cfg.idle_glance, !self.todos.is_empty(), left, self.focus_today, self.stats)
+    }
+
+    /// Extra pill width for the glance (separator and padding included).
+    pub fn glance_extra_w(&self) -> f32 {
+        self.glance().map_or(0.0, |(_, w)| w + 16.0)
+    }
+
+    pub fn set_idle_glance(&mut self, v: u8) {
+        self.cfg.idle_glance = v.min(3);
+        store::save_config(&self.cfg);
+        self.sync_stats();
+        if !self.hidden && !self.expanded {
+            self.retarget();
+            self.render();
+        }
+    }
+
+    pub fn toggle_idle_focus_bar(&mut self) {
+        self.cfg.idle_focus_bar = !self.cfg.idle_focus_bar;
+        store::save_config(&self.cfg);
+        if !self.hidden {
+            self.render();
         }
     }
 
@@ -1076,7 +1105,7 @@ impl App {
 
     /// Start or stop the 3 s CPU/RAM sampling to match the setting.
     pub fn sync_stats(&mut self) {
-        if self.cfg.stats {
+        if self.cfg.stats || self.cfg.idle_glance == 3 {
             self.cpu_prev = sys::cpu_times();
             self.set_timer(T_STATS, 3000);
         } else {
@@ -1261,7 +1290,10 @@ impl App {
     }
 
     fn on_stats_tick(&mut self) {
-        if !self.cfg.stats || !self.bar_visible() {
+        // sampled for the bar read-out and/or the idle glance, never otherwise
+        let on_bar = self.cfg.stats && self.bar_visible();
+        let on_pill = self.cfg.idle_glance == 3 && !self.hidden;
+        if !on_bar && !on_pill {
             return;
         }
         let (idle, total) = sys::cpu_times();
@@ -1270,8 +1302,18 @@ impl App {
         let cpu = if dt == 0 { 0 } else { (100 - (di.min(dt) * 100 / dt)) as u32 };
         let now = Some((cpu, sys::mem_percent()));
         if now != self.stats {
+            let first = self.stats.is_none();
             self.stats = now;
-            self.render_bar();
+            if on_bar {
+                self.render_bar();
+            }
+            if on_pill && !self.expanded {
+                // the slot only changes width when the first sample arrives
+                if first {
+                    self.retarget();
+                }
+                self.render();
+            }
         }
     }
 
@@ -3183,6 +3225,40 @@ mod preview {
         let _ = a.gfx.end();
         let (bw, _bh, buf) = a.gfx.snapshot();
         save("pill_idle", iw, ih, bw, &buf);
+        // idle glance variants and the focus progress line
+        for (kind, name) in [(1u8, "pill_glance_tasks"), (2, "pill_glance_focus")] {
+            a.cfg.idle_glance = kind;
+            a.focus_today = 42;
+            let gw = ((COL_IDLE_W + a.glance_extra_w()) * scale) as i32;
+            a.gfx.begin(gw, ih).unwrap();
+            let mut hg = Vec::new();
+            crate::ui::draw(&a, COL_IDLE_W + a.glance_extra_w(), a.col_h(), &mut hg);
+            let _ = a.gfx.end();
+            let (bw, _bh, buf) = a.gfx.snapshot();
+            save(name, gw, ih, bw, &buf);
+        }
+        a.cfg.idle_glance = 3;
+        a.stats = Some((12, 63));
+        let gw = ((COL_IDLE_W + a.glance_extra_w()) * scale) as i32;
+        a.gfx.begin(gw, ih).unwrap();
+        let mut hg = Vec::new();
+        crate::ui::draw(&a, COL_IDLE_W + a.glance_extra_w(), a.col_h(), &mut hg);
+        let _ = a.gfx.end();
+        let (bw, _bh, buf) = a.gfx.snapshot();
+        save("pill_glance_cpu", gw, ih, bw, &buf);
+        a.cfg.idle_glance = 0;
+        a.stats = None;
+        a.timer_start = Some(Instant::now() - std::time::Duration::from_secs(10 * 60));
+        a.timer_total_s = 25 * 60;
+        a.timer_left_ms = 25 * 60 * 1000;
+        a.gfx.begin(cw, chh).unwrap();
+        let mut hf = Vec::new();
+        crate::ui::draw(&a, COL_TIMER_W, a.col_h(), &mut hf);
+        let _ = a.gfx.end();
+        let (bw, _bh, buf) = a.gfx.snapshot();
+        save("pill_focus_line", cw, chh, bw, &buf);
+        a.timer_start = None;
+        a.timer_left_ms = 25 * 60 * 1000;
         a.mstate.has_session = true;
         let (mw, mh) = ((COL_MEDIA_W * scale) as i32, (a.col_h() * scale) as i32);
         a.gfx.begin(mw, mh).unwrap();
@@ -3220,5 +3296,30 @@ mod preview {
         buddy_shot("buddy_courier_say", 7, 1, 4, 1.0, Some("Delivery's late. Again."));
         buddy_shot("buddy_necro_say", 8, 1, 4, 1.0, Some("Death is a pause."));
         std::fs::write(format!("{dir}/coords.json"), format!("{{\n  \"bar\": {{ {} }},\n  \"tabs\": {{ {} }}\n}}", hits.join(", "), tabs.join(", "))).unwrap();
+    }
+}
+
+/// What the idle glance slot shows (kind 1 tasks left, 2 focus today, 3 CPU and RAM) and the width it reserves.
+pub fn glance_text(kind: u8, has_todos: bool, left: usize, focus_min: u32, stats: Option<(u32, u32)>) -> Option<(String, f32)> {
+    match kind {
+        1 if has_todos => Some((format!("{left} left"), 64.0)),
+        2 => Some((format!("{focus_min} min"), 58.0)),
+        3 => stats.map(|(c, m)| (format!("CPU {c}% RAM {m}%"), 112.0)),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod glance_tests {
+    use super::glance_text;
+
+    #[test]
+    fn formats_each_glance() {
+        assert_eq!(glance_text(1, true, 3, 0, None).map(|g| g.0), Some("3 left".to_string()));
+        assert_eq!(glance_text(1, false, 0, 0, None), None);
+        assert_eq!(glance_text(2, false, 0, 42, None).map(|g| g.0), Some("42 min".to_string()));
+        assert_eq!(glance_text(3, false, 0, 0, Some((12, 63))).map(|g| g.0), Some("CPU 12% RAM 63%".to_string()));
+        assert_eq!(glance_text(3, false, 0, 0, None), None);
+        assert_eq!(glance_text(0, true, 5, 9, Some((1, 1))), None);
     }
 }

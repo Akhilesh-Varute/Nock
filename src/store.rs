@@ -62,6 +62,10 @@ pub struct Config {
     pub smart: bool,
     /// A short chime with the important hints (meeting, low battery, break).
     pub smart_sound: bool,
+    /// Optional extra beside the idle clock: 0 off, 1 tasks left, 2 focus minutes today, 3 CPU and RAM.
+    pub idle_glance: u8,
+    /// A thin progress line along the bottom of the notch while a focus session runs.
+    pub idle_focus_bar: bool,
     /// Read-only ICS link (Google / Outlook) for "meeting in 5 min" hints; empty = off.
     pub calendar_url: String,
     /// A Start Menu shortcut so Windows search finds Nock.
@@ -119,6 +123,10 @@ calendar_url=
 smart_sound=0
 # display for the notch and bar: 0 = primary, 2 = second display, and so on
 monitor=0
+# extra beside the idle clock: 0 = off, 1 = tasks left, 2 = focus minutes today, 3 = CPU and RAM
+idle_glance=0
+# progress line on the notch while a focus session runs: 1 = on
+idle_focus_bar=1
 ";
 
 pub fn load_config() -> Config {
@@ -151,6 +159,8 @@ pub fn load_config() -> Config {
         auto_close: true,
         smart: true,
         smart_sound: false,
+        idle_glance: 0,
+        idle_focus_bar: true,
         calendar_url: String::new(),
         monitor: 0,
     };
@@ -177,6 +187,8 @@ pub fn load_config() -> Config {
                 "auto_close" => cfg.auto_close = on,
                 "smart" => cfg.smart = on,
                 "smart_sound" => cfg.smart_sound = on,
+                "idle_glance" => cfg.idle_glance = v.trim().parse::<u8>().unwrap_or(0).min(3),
+                "idle_focus_bar" => cfg.idle_focus_bar = on,
                 "calendar_url" => cfg.calendar_url = v.trim().to_string(),
                 "eye_min" => cfg.eye_min = v.trim().parse::<u16>().unwrap_or(0).min(600),
                 "clock_style" => cfg.clock_style = v.trim().parse::<u8>().unwrap_or(0).min(3),
@@ -195,7 +207,7 @@ pub fn load_config() -> Config {
     }
     // A config file from an older version lacks the newer settings: write the
     // file back with every setting present (keeping the user's values).
-    let keys = ["hover_expand", "eq_animation", "clock_24h", "reserve_space", "top_bar", "buddy", "scenes", "scene_min", "stats", "clock_style", "water_min", "auto_break", "eye_min", "start_menu", "fs_hide", "auto_hide", "smart_hide", "auto_close", "smart", "calendar_url", "smart_sound", "monitor"];
+    let keys = ["hover_expand", "eq_animation", "clock_24h", "reserve_space", "top_bar", "buddy", "scenes", "scene_min", "stats", "clock_style", "water_min", "auto_break", "eye_min", "start_menu", "fs_hide", "auto_hide", "smart_hide", "auto_close", "smart", "calendar_url", "smart_sound", "monitor", "idle_glance", "idle_focus_bar"];
     let present = |k: &str| text.lines().any(|l| l.trim().split_once('=').map(|(a, _)| a.trim() == k).unwrap_or(false));
     if keys.iter().any(|k| !present(k)) {
         save_config(&cfg);
@@ -206,7 +218,7 @@ pub fn load_config() -> Config {
 pub fn save_config(c: &Config) {
     let b = |v: bool| if v { 1 } else { 0 };
     let text = format!(
-        "# Nock settings (1 = on, 0 = off)\nhover_expand={}\neq_animation={}\nclock_24h={}\nreserve_space={}\ntop_bar={}\n# buddy: 0 = off, 1 = blob, 2 = cat, 3 = bunny, 4 = hero, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer\nbuddy={}\n# fight scenes now and then (needs a buddy): 1 = on\nscenes={}\n# average minutes between scenes (1 to 60)\nscene_min={}\n# CPU and memory read-out on the top bar: 1 = on\nstats={}\n# top bar clock: 0 = digital, 1 = analog, 2 = binary, 3 = countdown to Friday\nclock_style={}\n# minutes between water reminders (0 = off)\nwater_min={}\n# after a focus session start a 5 minute break, then focus again: 1 = on\nauto_break={}\n# minutes between look-away reminders for your eyes (0 = off)\neye_min={}\n# a Start Menu shortcut so typing Nock in Windows search finds it: 1 = on\nstart_menu={}\n# hide the notch and bar while a full-screen app or game is in front: 1 = on\nfs_hide={}\n# keep the notch and bar hidden until the pointer touches the top edge: 1 = on\nauto_hide={}\n# fade the notch out while a window covers it, and back in when the window moves away: 1 = on\nsmart_hide={}\n# close the open panel when the pointer leaves it or another window comes to the front: 1 = on\nauto_close={}\n# smart notch hints (low battery, take a break after 90 min at the PC, link/code copied): 1 = on\nsmart={}\n# calendar link (Google: Settings > your calendar > Secret address in iCal format) for meeting hints; empty = off\ncalendar_url={}\n# a short chime with meeting, low battery and break hints: 1 = on\nsmart_sound={}\n# display for the notch and bar: 0 = primary, 2 = second display, and so on\nmonitor={}\n",
+        "# Nock settings (1 = on, 0 = off)\nhover_expand={}\neq_animation={}\nclock_24h={}\nreserve_space={}\ntop_bar={}\n# buddy: 0 = off, 2 = cat, 5 = robot, 6 = ronin, 7 = courier, 8 = necromancer (1, 3 and 4 were retired and now give the robot)\nbuddy={}\n# fight scenes now and then (needs a buddy): 1 = on\nscenes={}\n# average minutes between scenes (1 to 60)\nscene_min={}\n# CPU and memory read-out on the top bar: 1 = on\nstats={}\n# top bar clock: 0 = digital, 1 = analog, 2 = binary, 3 = countdown to Friday\nclock_style={}\n# minutes between water reminders (0 = off)\nwater_min={}\n# after a focus session start a 5 minute break, then focus again: 1 = on\nauto_break={}\n# minutes between look-away reminders for your eyes (0 = off)\neye_min={}\n# a Start Menu shortcut so typing Nock in Windows search finds it: 1 = on\nstart_menu={}\n# hide the notch and bar while a full-screen app or game is in front: 1 = on\nfs_hide={}\n# keep the notch and bar hidden until the pointer touches the top edge: 1 = on\nauto_hide={}\n# fade the notch out while a window covers it, and back in when the window moves away: 1 = on\nsmart_hide={}\n# close the open panel when the pointer leaves it or another window comes to the front: 1 = on\nauto_close={}\n# smart notch hints (low battery, take a break after 90 min at the PC, link/code copied): 1 = on\nsmart={}\n# calendar link (Google: Settings > your calendar > Secret address in iCal format) for meeting hints; empty = off\ncalendar_url={}\n# a short chime with meeting, low battery and break hints: 1 = on\nsmart_sound={}\n# display for the notch and bar: 0 = primary, 2 = second display, and so on\nmonitor={}\n# extra beside the idle clock: 0 = off, 1 = tasks left, 2 = focus minutes today, 3 = CPU and RAM\nidle_glance={}\n# progress line on the notch while a focus session runs: 1 = on\nidle_focus_bar={}\n",
         b(c.hover_expand),
         b(c.eq_animation),
         b(c.clock_24h),
@@ -228,7 +240,9 @@ pub fn save_config(c: &Config) {
         b(c.smart),
         c.calendar_url,
         b(c.smart_sound),
-        c.monitor
+        c.monitor,
+        c.idle_glance,
+        b(c.idle_focus_bar)
     );
     let _ = fs::write(data_dir().join("config.ini"), text);
 }
