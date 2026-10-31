@@ -150,7 +150,7 @@ A tiny original character lives on the top bar, in the free stretch between the 
 - **Follows your pointer** when you move it over that part of the bar, and its eyes follow the cursor. Click it to pet it.
 - **Cheers** when the focus timer ends, and says "Connected!" or "Oops" after a Wi-Fi / Bluetooth attempt, "Low battery" when the battery runs low, "Bedtime?" late at night, and your reminders.
 
-Pick the character from the tray menu → **Buddy**: Robot (default), Kitty, Blob, Bunny or Hero, or Off. It is also the `buddy` setting in `config.ini` (0 = off, 1 blob, 2 cat, 3 bunny, 4 hero, 5 robot, 6 ronin, 7 courier, 8 necromancer). The characters are drawn from simple shapes in code, so there are no image files. It hides together with the bar in full screen.
+Pick the character from the tray menu → **Buddy**: Robot (default, a bone-white little robot with a blue status light and equaliser bars on its chest) or Kitty, or Off. It is also the `buddy` setting in `config.ini` (0 = off, 2 cat, 5 robot, 6 ronin, 7 courier, 8 necromancer). The retired blob, bunny and hero (1, 3, 4) now show the robot. The characters are drawn from simple shapes in code, so there are no image files. It hides together with the bar in full screen.
 
 ### Pixel characters
 

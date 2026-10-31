@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.12.9
 
+- New Robot buddy, now the default: a bone-white robot with a blue status light, big eyes that follow the pointer, and three equaliser bars on its chest that dance with the music. It replaces the old robot.
+- Removed the Blob, Bunny and Hero buddies. Existing settings that used them now show the Robot. Kitty and the three pixel characters stay.
 - Removed the press-conference scene and its photo cut-out (`assets/face.png`). The other scenes are unchanged, and the tray menu keeps the same order.
 
 ## 0.12.1
