@@ -7,9 +7,13 @@ use std::fs;
 use std::path::PathBuf;
 
 pub fn data_dir() -> PathBuf {
-    let base = std::env::var_os("APPDATA")
+    #[cfg(windows)]
+    let base = std::env::var_os("APPDATA").map(PathBuf::from);
+    #[cfg(not(windows))]
+    let base = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")));
+    let base = base.unwrap_or_else(|| PathBuf::from("."));
     let d = base.join("Nock");
     // Settings from earlier working names are carried over once.
     if !d.exists() {
@@ -303,6 +307,7 @@ pub struct AppEntry {
     pub args: String,
 }
 
+#[cfg(windows)]
 const DEFAULT_APPS: &str = "\
 # Pinned apps for the notch launcher. One per line:  Name|target|optional arguments
 # target can be an .exe name or path, a folder, a URL, or something like ms-settings:
@@ -312,6 +317,16 @@ Terminal|wt.exe
 Notepad|notepad.exe
 Calculator|calc.exe
 Settings|ms-settings:
+Browser|https://www.google.com
+";
+
+#[cfg(not(windows))]
+const DEFAULT_APPS: &str = "\
+# Pinned apps for the notch launcher. One per line:  Name|target|optional arguments
+# target can be a command, a .desktop file, a folder or a URL.
+# The first 12 entries are shown.
+Files|xdg-open|~
+Terminal|x-terminal-emulator
 Browser|https://www.google.com
 ";
 
@@ -353,6 +368,44 @@ pub fn load_apps() -> Vec<AppEntry> {
         })
         .take(12)
         .collect()
+}
+
+// --------------------------------------------------------------- clipboard
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ClipKind {
+    Link,
+    Mail,
+    Path,
+    Code,
+    Text,
+}
+
+/// What kind of thing was copied.
+pub fn clip_kind_of(s: &str) -> ClipKind {
+    let t = s.trim();
+    let lower = t.to_ascii_lowercase();
+    if lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("www.") {
+        ClipKind::Link
+    } else if t.contains('@') && !t.contains(' ') && t.contains('.') {
+        ClipKind::Mail
+    } else if t.contains(":\\") || t.starts_with("\\\\") || t.starts_with('/') || t.starts_with("~/") {
+        ClipKind::Path
+    } else if t.contains(" --") || t.contains("();") || t.contains("=>") || t.contains('{') || t.contains("::") || t.starts_with("cargo ") || t.starts_with("git ") {
+        ClipKind::Code
+    } else {
+        ClipKind::Text
+    }
+}
+
+/// One-line preview of copied text (whitespace collapsed, capped).
+pub fn preview(s: &str) -> String {
+    let one: String = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    if one.chars().count() > 160 {
+        one.chars().take(160).collect()
+    } else {
+        one
+    }
 }
 
 // ------------------------------------------------------------------- todos
@@ -483,6 +536,20 @@ pub fn save_todos(todos: &[Todo]) {
         s.push('\n');
     }
     let _ = fs::write(data_dir().join("todos.txt"), s);
+}
+
+#[cfg(test)]
+mod clip_tests {
+    use super::*;
+
+    #[test]
+    fn kinds() {
+        assert_eq!(clip_kind_of("https://example.com"), ClipKind::Link);
+        assert_eq!(clip_kind_of("a@b.co"), ClipKind::Mail);
+        assert_eq!(clip_kind_of("/usr/bin"), ClipKind::Path);
+        assert_eq!(clip_kind_of("cargo build --release"), ClipKind::Code);
+        assert_eq!(clip_kind_of("hello there"), ClipKind::Text);
+    }
 }
 
 #[cfg(test)]

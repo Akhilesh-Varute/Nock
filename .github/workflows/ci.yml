@@ -36,3 +36,31 @@ jobs:
           path: |
             target/release/nock.exe
             installer/Output/NockSetup-*.exe
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install test tools
+        run: sudo apt-get update && sudo apt-get install -y fonts-dejavu-core xvfb xdotool
+      - run: cargo build --release
+      - run: cargo test --release
+      - name: Build packages
+        run: packaging/linux/package.sh 0.0.0-ci
+      - name: Package smoke test (install the .deb, start it, uninstall)
+        run: |
+          sudo apt-get install -y ./packaging/linux/out/nock_0.0.0-ci_amd64.deb
+          test -x /usr/bin/nock
+          test -f /usr/share/applications/nock.desktop
+          # a clean start must keep running (timeout kills it after 6 s and exits with 124)
+          code=0
+          xvfb-run -a timeout 6 nock || code=$?
+          test "$code" = 124 || { echo "nock exited early with $code"; exit 1; }
+          sudo apt-get remove -y nock
+          test ! -e /usr/bin/nock
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nock-linux
+          path: packaging/linux/out/*

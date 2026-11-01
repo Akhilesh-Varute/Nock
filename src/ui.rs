@@ -4,6 +4,7 @@
 
 use crate::app::*;
 use crate::gfx::*;
+use crate::store::{clip_kind_of, preview, ClipKind};
 use crate::sys;
 
 const BLACK: Color = Color(0.0, 0.0, 0.0, 1.0);
@@ -871,27 +872,12 @@ const C_PINK: Color = Color(1.0, 0.50, 0.62, 1.0);
 
 /// What kind of thing was copied: an icon and a colour for its row.
 fn clip_kind(s: &str) -> (char, Color) {
-    let t = s.trim();
-    let lower = t.to_ascii_lowercase();
-    if lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("www.") {
-        ('\u{E71B}', C_CPU)
-    } else if t.contains('@') && !t.contains(' ') && t.contains('.') {
-        ('\u{E715}', C_BAT)
-    } else if t.contains(":\\") || t.starts_with("\\\\") || t.starts_with('/') || t.starts_with("~/") {
-        ('\u{E8B7}', C_MEM)
-    } else if t.contains(" --") || t.contains("();") || t.contains("=>") || t.contains('{') || t.contains("::") || t.starts_with("cargo ") || t.starts_with("git ") {
-        ('\u{E943}', C_PINK)
-    } else {
-        ('\u{E8A5}', C_UP)
-    }
-}
-
-fn preview(s: &str) -> String {
-    let one: String = s.split_whitespace().collect::<Vec<_>>().join(" ");
-    if one.chars().count() > 160 {
-        one.chars().take(160).collect()
-    } else {
-        one
+    match clip_kind_of(s) {
+        ClipKind::Link => ('\u{E71B}', C_CPU),
+        ClipKind::Mail => ('\u{E715}', C_BAT),
+        ClipKind::Path => ('\u{E8B7}', C_MEM),
+        ClipKind::Code => ('\u{E943}', C_PINK),
+        ClipKind::Text => ('\u{E8A5}', C_UP),
     }
 }
 
@@ -1096,22 +1082,6 @@ fn page_app_picker(a: &App, ca: f32, hits: &mut Vec<Hit>) {
         let y = track.y + (track.h - hgt) * a.app_scroll as f32 / (view.len() - PICK_ROWS) as f32;
         g.fill_rrect(Rect::new(track.x, y, 3.0, hgt), 1.5, Color::white(0.3 * ca));
     }
-}
-
-fn name_color(name: &str) -> Color {
-    let mut h: u32 = 2166136261;
-    for b in name.bytes() {
-        h = (h ^ b as u32).wrapping_mul(16777619);
-    }
-    const P: [Color; 6] = [
-        Color::rgb(0xFF, 0xB4, 0x6B),
-        Color::rgb(0x8F, 0xD3, 0xFF),
-        Color::rgb(0xB9, 0xA4, 0xFF),
-        Color::rgb(0x9B, 0xE8, 0xA8),
-        Color::rgb(0xFF, 0x9E, 0xB8),
-        Color::rgb(0xF2, 0xE0, 0x7A),
-    ];
-    P[(h % 6) as usize]
 }
 
 // ----------------------------------------------------------------- tasks ----
@@ -1400,31 +1370,7 @@ fn draw_calendar(a: &App, ca: f32) {
     }
 }
 
-/// Weekday (0 = Sunday) of the 1st of the month, given today's day and weekday.
-pub(crate) fn first_weekday(day: u32, wday: u32) -> u32 {
-    (wday + 7 - (day - 1) % 7) % 7
-}
-
-/// Weekday (0 = Sunday) of the 1st of any month.
-pub(crate) fn first_of_month(y: i32, m: u32) -> u32 {
-    const T: [i32; 12] = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
-    let y = if m < 3 { y - 1 } else { y };
-    ((y + y / 4 - y / 100 + y / 400 + T[(m as usize - 1) % 12] + 1).rem_euclid(7)) as u32
-}
-
-pub(crate) fn days_in_month(y: i32, m: u32) -> u32 {
-    match m {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        _ => {
-            if (y % 4 == 0 && y % 100 != 0) || y % 400 == 0 {
-                29
-            } else {
-                28
-            }
-        }
-    }
-}
+pub(crate) use crate::cal::{days_in_month, first_of_month, first_weekday};
 
 // --------------------------------------------------------------- helpers ----
 
@@ -1454,14 +1400,7 @@ fn slider(
     }
 }
 
-pub fn fmt_time(secs: f64) -> String {
-    let s = secs.max(0.0) as i64;
-    if s >= 3600 {
-        format!("{}:{:02}:{:02}", s / 3600, (s % 3600) / 60, s % 60)
-    } else {
-        format!("{}:{:02}", s / 60, s % 60)
-    }
-}
+pub use crate::cal::fmt_time;
 
 #[cfg(test)]
 mod tests {
@@ -1474,39 +1413,6 @@ mod tests {
         assert_eq!(focus_fraction(1500, 0), 1.0);
         assert_eq!(focus_fraction(1500, -5), 1.0);
         assert_eq!(focus_fraction(0, 0), 1.0);
-    }
-
-    #[test]
-    fn time_format() {
-        assert_eq!(fmt_time(0.0), "0:00");
-        assert_eq!(fmt_time(65.4), "1:05");
-        assert_eq!(fmt_time(3725.0), "1:02:05");
-        assert_eq!(fmt_time(-5.0), "0:00");
-    }
-
-    #[test]
-    fn month_lengths() {
-        assert_eq!(days_in_month(2026, 2), 28);
-        assert_eq!(days_in_month(2028, 2), 29);
-        assert_eq!(days_in_month(1900, 2), 28);
-        assert_eq!(days_in_month(2000, 2), 29);
-        assert_eq!(days_in_month(2026, 10), 31);
-        assert_eq!(days_in_month(2026, 11), 30);
-    }
-
-    #[test]
-    fn first_of_month_weekday() {
-        // Thu 15 Oct 2026 -> 1 Oct 2026 was a Thursday (4)
-        assert_eq!(first_weekday(15, 4), 4);
-        // Sun 1 Nov 2026 -> itself
-        assert_eq!(first_weekday(1, 0), 0);
-        // Fri 30 Oct 2026 (5): 1st is 29 days earlier -> Thursday (4)
-        assert_eq!(first_weekday(30, 5), 4);
-        // any month: Oct 2026 Thu, Nov 2026 Sun, Feb 2024 Thu, Jan 2000 Sat
-        assert_eq!(first_of_month(2026, 10), 4);
-        assert_eq!(first_of_month(2026, 11), 0);
-        assert_eq!(first_of_month(2024, 2), 4);
-        assert_eq!(first_of_month(2000, 1), 6);
     }
 
     #[test]

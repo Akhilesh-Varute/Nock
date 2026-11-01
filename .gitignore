@@ -2,3 +2,4 @@ target/
 Cargo.lock.bak
 *.zip
 installer/Output/
+packaging/linux/out/

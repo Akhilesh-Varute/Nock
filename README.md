@@ -16,7 +16,7 @@ Written in Rust. No webview, no framework, no runtime. One small <code>.exe</cod
 
 <p align="center"><a href="https://github.com/Akhilesh-Varute/Nock/releases/latest"><b>⬇ Download for Windows 10/11</b></a> &nbsp;·&nbsp; free, MIT, about 1 MB</p>
 
-> **Actively developed.** Nock is young and still being tested on more PCs, so you may hit rough edges. Bug reports and ideas are very welcome: [open an issue](../../issues). A Linux port is in progress.
+> **Actively developed.** Nock is young and still being tested on more PCs, so you may hit rough edges. Bug reports and ideas are very welcome: [open an issue](../../issues). A **Linux preview** is available: see [Linux](#linux-preview).
 
 ## Features
 
@@ -54,6 +54,36 @@ Right-click the tray icon → **Start with Windows** to launch it at login.
 3. Run `target\release\nock.exe`. It is a single self-contained file. Copy it anywhere.
 
 To build the installer yourself, install [Inno Setup 6](https://jrsoftware.org/isinfo.php) and run `ISCC.exe /DMyAppVersion=1.2.3 installer\nock.iss` after the release build. The release workflow does this on every version tag.
+
+## Linux (preview)
+
+Nock also runs on Linux, drawn with the same code as the Windows version. It is a **preview**: every tab and the top bar work, but it has had far less testing than the Windows build, and it is not code-signed or in any package repository yet.
+
+**Install** (Debian, Ubuntu and friends): download `nock_<version>_amd64.deb` from the [latest release](../../releases/latest) and run `sudo apt install ./nock_<version>_amd64.deb`. Or download `nock-<version>-x86_64-linux.tar.gz`, unpack it and run `./install.sh` (add `--autostart` to start it at login, `--uninstall` to remove it). It installs just for you, no root needed.
+
+**Needs** an X11 session (or Wayland through XWayland, which is how most desktops run it) and the DejaVu Sans font (`fonts-dejavu-core`). Nock uses these tools when they are installed and quietly hides the matching item when they are not:
+
+| Feature | Tool |
+|---|---|
+| Wi-Fi dropdown | `nmcli` (NetworkManager) |
+| Bluetooth dropdown | `bluetoothctl` (BlueZ) |
+| Volume | `wpctl` (PipeWire) or `pactl` (PulseAudio) |
+| Brightness | `brightnessctl` |
+| Focused app name in the bar, auto-paste from Clipboard | `xdotool` |
+| Cover art from the web | `curl` |
+| Screenshot tile | `gnome-screenshot`, `spectacle`, `flameshot` or `scrot` |
+
+Now playing works with any MPRIS player (Spotify, browsers, VLC, mpv). Settings and data live in `~/.local/share/Nock`.
+
+**Not in the Linux preview yet:** game sound effects, the smart pill alerts (low battery, mic on, copied-link hints, meeting countdowns), reminders, the tray menu and the buddy and scenes. Idle cost is low but not zero like on Windows: the clipboard, the player and the bar are checked once every one to ten seconds, because X11 has no cheap change events for them. The notch needs X11 window hints, so on a pure Wayland session without XWayland it will not start.
+
+**Build from source:**
+
+```
+sudo apt install build-essential fonts-dejavu-core
+cargo build --release
+packaging/linux/package.sh        # optional: builds the .deb and the tarball
+```
 
 ## Tip: auto-hide the Windows taskbar
 
