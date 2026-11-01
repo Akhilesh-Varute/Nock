@@ -5,9 +5,10 @@ use std::num::NonZeroU32;
 use std::rc::Rc;
 
 use winit::application::ApplicationHandler;
-use winit::dpi::LogicalSize;
+use winit::dpi::{LogicalSize, PhysicalPosition};
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::platform::x11::{EventLoopBuilderExtX11, WindowAttributesExtX11, WindowType};
 use winit::window::{Window, WindowId, WindowLevel};
 
 use crate::gfx::*;
@@ -61,8 +62,15 @@ impl ApplicationHandler for App {
             .with_transparent(true)
             .with_resizable(false)
             .with_window_level(WindowLevel::AlwaysOnTop)
+            .with_x11_window_type(vec![WindowType::Dock])
             .with_inner_size(LogicalSize::new(W as f64, H as f64));
         let Ok(win) = el.create_window(attrs) else { return };
+        // top-centre of the primary monitor (X11 only: Wayland ignores client positions)
+        if let Some(m) = el.primary_monitor().or_else(|| win.current_monitor()) {
+            let (mp, ms) = (m.position(), m.size());
+            let x = mp.x + (ms.width as i32 - win.outer_size().width as i32) / 2;
+            win.set_outer_position(PhysicalPosition::new(x, mp.y));
+        }
         let win = Rc::new(win);
         if let Ok(ctx) = softbuffer::Context::new(win.clone()) {
             self.surface = softbuffer::Surface::new(&ctx, win.clone()).ok();
@@ -80,7 +88,8 @@ impl ApplicationHandler for App {
 }
 
 pub fn run() {
-    let el = EventLoop::new().expect("event loop");
+    // ponytail: X11 only (Xwayland on Wayland desktops); native Wayland needs layer-shell
+    let el = EventLoop::builder().with_x11().build().expect("event loop");
     if let Err(e) = el.run_app(&mut App::default()) {
         eprintln!("nock: {e}");
     }
