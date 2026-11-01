@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Nock
+GenericName=Notch and top bar
+Comment=A tiny native notch and top bar
+Exec=nock
+Icon=nock
+Terminal=false
+Categories=Utility;
+StartupNotify=false

@@ -32,3 +32,19 @@ jobs:
 
             **Don't want to install? Use `Nock-portable-...exe`.** Put it in a folder you'll keep and run it. No Start menu entry beyond the one Nock adds itself, and it can update itself from the tray menu too.
           generate_release_notes: true
+
+  # Linux preview packages join the release the Windows job created.
+  linux:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - name: Build packages
+        run: packaging/linux/package.sh "${{ github.ref_name }}"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            packaging/linux/out/nock_*_amd64.deb
+            packaging/linux/out/nock-*-x86_64-linux.tar.gz

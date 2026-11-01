@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Linux preview (X11 / XWayland): the pill, the nine tabs (Media through MPRIS, Controls, Today, Stats, Clipboard, Shelf, Apps, Games, Power) and the top bar with Wi-Fi, Bluetooth, sound, brightness, battery and calendar dropdowns. Packaged as a `.deb` and a user-level tarball; CI builds, tests and smoke-tests both. Not yet on Linux: game sounds, smart pill alerts, reminders, tray menu, buddy and scenes.
+
 ## 0.12.10
 
 - Idle notch extras, all optional and event driven (no new polling or always-on timers): an idle glance next to the clock (tasks left, focus today, CPU and RAM, or the next meeting), a focus progress line along the bottom of the notch while a focus session runs (on by default), a workday progress line, and scroll-up cycling through time, date, tasks left and focus today. New tray items: *Idle glance*, *Show focus progress on the notch*, *Workday progress line on the notch*, *Scroll up over the notch cycles time, date, tasks*. New `config.ini` keys: `idle_glance`, `idle_focus_bar`, `idle_meeting_hours`, `day_line`, `day_start`, `day_end`, `idle_cycle`.
