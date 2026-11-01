@@ -4,6 +4,7 @@
 
 use crate::app::*;
 use crate::gfx::*;
+use crate::store::{clip_kind_of, preview, ClipKind};
 use crate::sys;
 
 const BLACK: Color = Color(0.0, 0.0, 0.0, 1.0);
@@ -871,27 +872,12 @@ const C_PINK: Color = Color(1.0, 0.50, 0.62, 1.0);
 
 /// What kind of thing was copied: an icon and a colour for its row.
 fn clip_kind(s: &str) -> (char, Color) {
-    let t = s.trim();
-    let lower = t.to_ascii_lowercase();
-    if lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("www.") {
-        ('\u{E71B}', C_CPU)
-    } else if t.contains('@') && !t.contains(' ') && t.contains('.') {
-        ('\u{E715}', C_BAT)
-    } else if t.contains(":\\") || t.starts_with("\\\\") || t.starts_with('/') || t.starts_with("~/") {
-        ('\u{E8B7}', C_MEM)
-    } else if t.contains(" --") || t.contains("();") || t.contains("=>") || t.contains('{') || t.contains("::") || t.starts_with("cargo ") || t.starts_with("git ") {
-        ('\u{E943}', C_PINK)
-    } else {
-        ('\u{E8A5}', C_UP)
-    }
-}
-
-fn preview(s: &str) -> String {
-    let one: String = s.split_whitespace().collect::<Vec<_>>().join(" ");
-    if one.chars().count() > 160 {
-        one.chars().take(160).collect()
-    } else {
-        one
+    match clip_kind_of(s) {
+        ClipKind::Link => ('\u{E71B}', C_CPU),
+        ClipKind::Mail => ('\u{E715}', C_BAT),
+        ClipKind::Path => ('\u{E8B7}', C_MEM),
+        ClipKind::Code => ('\u{E943}', C_PINK),
+        ClipKind::Text => ('\u{E8A5}', C_UP),
     }
 }
 

@@ -370,6 +370,44 @@ pub fn load_apps() -> Vec<AppEntry> {
         .collect()
 }
 
+// --------------------------------------------------------------- clipboard
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ClipKind {
+    Link,
+    Mail,
+    Path,
+    Code,
+    Text,
+}
+
+/// What kind of thing was copied.
+pub fn clip_kind_of(s: &str) -> ClipKind {
+    let t = s.trim();
+    let lower = t.to_ascii_lowercase();
+    if lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("www.") {
+        ClipKind::Link
+    } else if t.contains('@') && !t.contains(' ') && t.contains('.') {
+        ClipKind::Mail
+    } else if t.contains(":\\") || t.starts_with("\\\\") || t.starts_with('/') || t.starts_with("~/") {
+        ClipKind::Path
+    } else if t.contains(" --") || t.contains("();") || t.contains("=>") || t.contains('{') || t.contains("::") || t.starts_with("cargo ") || t.starts_with("git ") {
+        ClipKind::Code
+    } else {
+        ClipKind::Text
+    }
+}
+
+/// One-line preview of copied text (whitespace collapsed, capped).
+pub fn preview(s: &str) -> String {
+    let one: String = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    if one.chars().count() > 160 {
+        one.chars().take(160).collect()
+    } else {
+        one
+    }
+}
+
 // ------------------------------------------------------------------- todos
 
 #[derive(Clone)]
@@ -498,6 +536,20 @@ pub fn save_todos(todos: &[Todo]) {
         s.push('\n');
     }
     let _ = fs::write(data_dir().join("todos.txt"), s);
+}
+
+#[cfg(test)]
+mod clip_tests {
+    use super::*;
+
+    #[test]
+    fn kinds() {
+        assert_eq!(clip_kind_of("https://example.com"), ClipKind::Link);
+        assert_eq!(clip_kind_of("a@b.co"), ClipKind::Mail);
+        assert_eq!(clip_kind_of("/usr/bin"), ClipKind::Path);
+        assert_eq!(clip_kind_of("cargo build --release"), ClipKind::Code);
+        assert_eq!(clip_kind_of("hello there"), ClipKind::Text);
+    }
 }
 
 #[cfg(test)]

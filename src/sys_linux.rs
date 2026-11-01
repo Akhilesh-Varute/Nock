@@ -155,6 +155,37 @@ pub fn list_apps() -> Vec<(String, String)> {
     out
 }
 
+thread_local! {
+    // X11 serves the clipboard from the process that set it, so keep one handle alive
+    static CLIP: std::cell::RefCell<Option<arboard::Clipboard>> = const { std::cell::RefCell::new(None) };
+}
+
+fn with_clip<T>(f: impl FnOnce(&mut arboard::Clipboard) -> Option<T>) -> Option<T> {
+    CLIP.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.is_none() {
+            *c = arboard::Clipboard::new().ok();
+        }
+        c.as_mut().and_then(f)
+    })
+}
+
+pub fn clipboard_text() -> Option<String> {
+    with_clip(|c| c.get_text().ok())
+}
+
+pub fn set_clipboard_text(text: &str) -> bool {
+    with_clip(|c| c.set_text(text.to_string()).ok()).is_some()
+}
+
+/// Press Ctrl+V in whatever window regains focus (needs xdotool; without it the user pastes).
+pub fn paste_soon() {
+    std::thread::spawn(|| {
+        std::thread::sleep(std::time::Duration::from_millis(170));
+        run("xdotool", &["key", "ctrl+v"]);
+    });
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

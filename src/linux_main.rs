@@ -17,7 +17,7 @@ use winit::window::{Window, WindowId, WindowLevel};
 
 use crate::cal::{days_in_month, first_weekday, fmt_time};
 use crate::gfx::*;
-use crate::store::{self, AppEntry, Todo};
+use crate::store::{self, clip_kind_of, preview, AppEntry, ClipKind, Todo};
 use crate::sys;
 
 const PILL_W: f32 = 176.0;
@@ -27,6 +27,7 @@ const EXP_H: f32 = 250.0;
 const CONTENT_Y: f32 = 40.0;
 const MAX_TODO: usize = 5;
 const PICK_ROWS: usize = 5;
+const CLIP_ROWS: usize = 5;
 
 const T1: Color = Color::white(0.96);
 const T2: Color = Color::white(0.62);
@@ -38,11 +39,14 @@ const C_CPU: Color = Color(0.30, 0.78, 0.98, 1.0);
 const C_MEM: Color = Color(0.98, 0.70, 0.20, 1.0);
 const C_BAT: Color = Color(0.40, 0.85, 0.50, 1.0);
 const C_UP: Color = Color(0.72, 0.58, 1.0, 1.0);
+const C_GOLD: Color = Color(1.0, 0.82, 0.28, 1.0);
+const C_PINK: Color = Color(1.0, 0.50, 0.62, 1.0);
 const C_FOC: Color = Color(1.0, 0.58, 0.42, 1.0);
 
 const TAB_LABELS: [&str; 9] =
     ["Media", "Controls", "Today", "Stats", "Clipboard", "Shelf", "Apps", "Games", "Power"];
 const CONTROLS: usize = 1;
+const CLIPBOARD: usize = 4;
 const APPS: usize = 6;
 const TODAY: usize = 2;
 const STATS: usize = 3;
@@ -109,6 +113,11 @@ enum Act {
     TodoDel(usize),
     TodoFocus(usize),
     TodoAdd,
+    ClipItem(usize),
+    ClipPin(usize),
+    ClipSearch,
+    ClipSearchClear,
+    ClipClear,
     Launch(usize),
     AppUnpin(usize),
     AppAdd,
@@ -153,6 +162,14 @@ struct Panel {
     app_filter: String,
     entry_search: bool,
     app_scroll: usize,
+    /// Clipboard tab: recent copies, pinned snippets, filter and scroll
+    clips: Vec<String>,
+    pins: Vec<String>,
+    clip_filter: String,
+    clip_scroll: usize,
+    /// last text seen on the system clipboard, and one we set ourselves and should not record
+    clip_seen: Option<String>,
+    ignore_clip: Option<String>,
 }
 
 impl Panel {
@@ -177,6 +194,12 @@ impl Panel {
             app_filter: String::new(),
             entry_search: false,
             app_scroll: 0,
+            clips: Vec::new(),
+            pins: store::load_pins(),
+            clip_filter: String::new(),
+            clip_scroll: 0,
+            clip_seen: sys::clipboard_text(),
+            ignore_clip: None,
         }
     }
 
@@ -186,12 +209,49 @@ impl Panel {
         self.app_list.iter().filter(|(n, _)| q.is_empty() || n.to_lowercase().contains(&q)).collect()
     }
 
-    fn scroll(&mut self, rows: isize) -> bool {
-        if self.page != APPS || !self.picking {
+    /// What the clipboard page lists: pinned items first, then recent ones, filtered
+    /// by the search text. Each entry is (text, pinned).
+    fn clip_view(&self) -> Vec<(&str, bool)> {
+        let q = self.clip_filter.to_lowercase();
+        self.pins
+            .iter()
+            .map(|t| (t.as_str(), true))
+            .chain(self.clips.iter().map(|t| (t.as_str(), false)))
+            .filter(|(t, _)| q.is_empty() || t.to_lowercase().contains(&q))
+            .collect()
+    }
+
+    /// Record a new copy from the system clipboard. Returns true if the list changed.
+    fn poll_clipboard(&mut self) -> bool {
+        let Some(text) = sys::clipboard_text() else { return false };
+        if self.clip_seen.as_deref() == Some(text.as_str()) {
             return false;
         }
-        let max = self.app_view().len().saturating_sub(PICK_ROWS);
-        self.app_scroll = (self.app_scroll as isize + rows).clamp(0, max as isize) as usize;
+        self.clip_seen = Some(text.clone());
+        if self.ignore_clip.as_deref() == Some(text.as_str()) {
+            self.ignore_clip = None;
+            return false;
+        }
+        if text.trim().is_empty() || self.pins.contains(&text) {
+            return false;
+        }
+        self.clips.retain(|c| *c != text);
+        self.clips.insert(0, text);
+        self.clips.truncate(20);
+        self.clip_scroll = 0;
+        true
+    }
+
+    fn scroll(&mut self, rows: isize) -> bool {
+        let step = |pos: usize, len: usize, rows_shown: usize| {
+            let max = len.saturating_sub(rows_shown);
+            (pos as isize + rows).clamp(0, max as isize) as usize
+        };
+        match (self.page, self.picking) {
+            (APPS, true) => self.app_scroll = step(self.app_scroll, self.app_view().len(), PICK_ROWS),
+            (CLIPBOARD, _) => self.clip_scroll = step(self.clip_scroll, self.clip_view().len(), CLIP_ROWS),
+            _ => return false,
+        }
         true
     }
 
@@ -300,6 +360,46 @@ impl Panel {
                 self.entering = Some(String::new());
                 self.entry_timer = false;
             }
+            Act::ClipItem(i) => {
+                let item = self.clip_view().get(i).map(|(t, p)| (t.to_string(), *p));
+                if let Some((t, pinned)) = item {
+                    self.ignore_clip = Some(t.clone());
+                    if sys::set_clipboard_text(&t) {
+                        self.clip_seen = Some(t.clone());
+                        if !pinned {
+                            self.clips.retain(|c| *c != t);
+                            self.clips.insert(0, t);
+                        }
+                        self.clip_scroll = 0;
+                        sys::paste_soon();
+                        return true;
+                    }
+                    self.ignore_clip = None;
+                }
+            }
+            Act::ClipPin(i) => {
+                let item = self.clip_view().get(i).map(|(t, p)| (t.to_string(), *p));
+                if let Some((t, pinned)) = item {
+                    if pinned {
+                        self.pins.retain(|p| *p != t);
+                        self.clips.insert(0, t);
+                    } else {
+                        self.clips.retain(|c| *c != t);
+                        self.pins.insert(0, t);
+                        self.pins.truncate(20);
+                    }
+                    store::save_pins(&self.pins);
+                }
+            }
+            Act::ClipSearch => self.entry_search = true,
+            Act::ClipSearchClear => {
+                self.clip_filter.clear();
+                self.clip_scroll = 0;
+            }
+            Act::ClipClear => {
+                self.clips.clear();
+                self.clip_scroll = 0;
+            }
             Act::Launch(i) => {
                 if let Some(e) = self.apps.get(i) {
                     sys::open(&e.target, &e.args);
@@ -353,20 +453,32 @@ impl Panel {
     /// Typed text goes to the open entry box. Returns true if the key was used.
     fn key(&mut self, key: &Key, text: Option<&str>) -> bool {
         if self.entry_search {
+            let clip = self.page == CLIPBOARD;
+            let filter = if clip { &mut self.clip_filter } else { &mut self.app_filter };
+            let mut changed = false;
             match key {
-                Key::Named(NamedKey::Escape | NamedKey::Enter) => self.entry_search = false,
-                Key::Named(NamedKey::Backspace) => {
-                    self.app_filter.pop();
-                    self.app_scroll = 0;
+                // Esc clears the clipboard filter (as on Windows); Enter keeps it
+                Key::Named(NamedKey::Escape) => {
+                    self.entry_search = false;
+                    if clip {
+                        filter.clear();
+                        changed = true;
+                    }
                 }
+                Key::Named(NamedKey::Enter) => self.entry_search = false,
+                Key::Named(NamedKey::Backspace) => changed = filter.pop().is_some(),
                 _ => {
                     if let Some(t) = text.filter(|t| t.chars().all(|c| !c.is_control())) {
-                        if self.app_filter.chars().count() < 40 {
-                            self.app_filter.push_str(t);
-                            self.app_scroll = 0;
+                        if filter.chars().count() < 40 {
+                            filter.push_str(t);
+                            changed = true;
                         }
                     }
                 }
+            }
+            if changed {
+                self.app_scroll = 0;
+                self.clip_scroll = 0;
             }
             return true;
         }
@@ -430,6 +542,7 @@ impl Panel {
         g.shifted(0.0, CONTENT_Y, || match self.page {
             CONTROLS => self.page_controls(g, hits),
             APPS => self.page_apps(g, hits),
+            CLIPBOARD => self.page_clipboard(g, hits),
             TODAY => self.page_today(g, hits),
             STATS => page_stats(g),
             POWER => self.page_power(g, hits),
@@ -440,6 +553,95 @@ impl Panel {
         });
         for h in &mut hits[start..] {
             h.r.y += CONTENT_Y;
+        }
+    }
+
+    fn page_clipboard(&self, g: &Gfx, hits: &mut Vec<Hit>) {
+        let f = &g.fonts;
+        let view = self.clip_view();
+        let total = self.pins.len() + self.clips.len();
+        let head = if total == 0 { "Clipboard".to_string() } else { format!("Clipboard  \u{00B7}  {total}") };
+        g.text(&head, Rect::new(28.0, 12.0, 200.0, 24.0), &f.small, C_MEM, Align::Left);
+        if !self.clips.is_empty() {
+            let r = Rect::new(EXP_W - 112.0, 12.0, 64.0, 24.0);
+            hits.push(Hit { r, act: Act::ClipClear });
+            if self.hot(Act::ClipClear) {
+                g.fill_rrect(r, 12.0, Color::white(0.10));
+            }
+            g.text("Clear", r, &f.small, C_PINK, Align::Center);
+        }
+        // search chip: click, type to filter, Enter keeps it, Esc clears it
+        let sr = Rect::new(EXP_W - 252.0, 12.0, 132.0, 24.0);
+        let typing = self.entry_search;
+        if typing || !self.clip_filter.is_empty() {
+            let mut t = self.clip_filter.clone();
+            if typing {
+                t.push('\u{2502}');
+            }
+            g.fill_rrect(sr, 12.0, Color::white(0.14));
+            g.text(&t, Rect::new(sr.x + 10.0, sr.y, sr.w - 30.0, sr.h), &f.small, T1, Align::Left);
+            if !typing {
+                let x = Rect::new(sr.x + sr.w - 24.0, sr.y, 24.0, sr.h);
+                hits.push(Hit { r: sr, act: Act::ClipSearch });
+                hits.push(Hit { r: x, act: Act::ClipSearchClear });
+                g.icon('\u{2715}', x, &f.icon14, if self.hot(Act::ClipSearchClear) { T1 } else { T2 });
+            }
+        } else {
+            hits.push(Hit { r: sr, act: Act::ClipSearch });
+            if self.hot(Act::ClipSearch) {
+                g.fill_rrect(sr, 12.0, Color::white(0.10));
+            }
+            g.text("Search", Rect::new(sr.x + 10.0, sr.y, sr.w - 14.0, sr.h), &f.small, T3, Align::Left);
+        }
+
+        if view.is_empty() {
+            let (l1, l2) = if self.clip_filter.is_empty() {
+                ("Copy something and it will appear here.", "Click an item to paste it. Click the star to pin it as a saved snippet.")
+            } else {
+                ("No matches.", "Press Esc in the search box to clear the filter.")
+            };
+            g.text(l1, Rect::new(0.0, 80.0, EXP_W, 24.0), &f.body, T3, Align::Center);
+            g.text(l2, Rect::new(0.0, 104.0, EXP_W, 20.0), &f.small, T3.fade(0.8), Align::Center);
+            return;
+        }
+        for row in 0..CLIP_ROWS {
+            let idx = self.clip_scroll + row;
+            let Some((text, pinned)) = view.get(idx) else { break };
+            let r = Rect::new(24.0, 40.0 + row as f32 * 31.0, EXP_W - 48.0, 28.0);
+            let (act, pact) = (Act::ClipItem(idx), Act::ClipPin(idx));
+            hits.push(Hit { r, act });
+            let pin = Rect::new(r.x + r.w - 32.0, r.y, 30.0, r.h);
+            hits.push(Hit { r: pin, act: pact });
+            let (kind, kc) = match clip_kind_of(text) {
+                ClipKind::Link => ('\u{2197}', C_CPU),
+                ClipKind::Mail => ('\u{2709}', C_BAT),
+                ClipKind::Path => ('\u{2302}', C_MEM),
+                ClipKind::Code => ('\u{2328}', C_PINK),
+                ClipKind::Text => ('\u{2261}', C_UP),
+            };
+            let over = self.hot(act) || self.hot(pact);
+            g.fill_rrect(r, 10.0, Color::white(if over { 0.12 } else { 0.04 }));
+            g.fill_rrect(r, 10.0, kc.fade(0.06));
+            let chip = Rect::new(r.x + 6.0, r.y + 3.0, 22.0, 22.0);
+            g.fill_circle(chip.cx(), chip.cy(), 11.0, kc.fade(0.20));
+            g.icon(kind, chip, &f.icon14, kc);
+            g.text(&preview(text), Rect::new(r.x + 38.0, r.y, r.w - 76.0, r.h), &f.body, T1, Align::Left);
+            let (glyph, col) = if *pinned {
+                ('\u{2605}', C_GOLD)
+            } else if self.hot(pact) {
+                ('\u{2606}', T1)
+            } else {
+                ('\u{2606}', T3)
+            };
+            g.icon(glyph, pin, &f.icon14, col.fade(if *pinned || over { 1.0 } else { 0.6 }));
+        }
+        if view.len() > CLIP_ROWS {
+            let (top, h) = (40.0, CLIP_ROWS as f32 * 31.0 - 3.0);
+            let track = Rect::new(EXP_W - 17.0, top, 4.0, h);
+            g.fill_rrect(track, 2.0, Color::white(0.07));
+            let thumb_h = (h * CLIP_ROWS as f32 / view.len() as f32).max(18.0);
+            let frac = self.clip_scroll as f32 / (view.len() - CLIP_ROWS) as f32;
+            g.fill_rrect(Rect::new(track.x, top + (h - thumb_h) * frac.clamp(0.0, 1.0), 4.0, thumb_h), 2.0, C_MEM.fade(0.8));
         }
     }
 
@@ -938,12 +1140,18 @@ impl ApplicationHandler for App {
 
     /// Wake once a second while the timer runs (the only thing that changes by itself).
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+        // ponytail: X11 has no cheap clipboard-change event here, so look once a second
+        // (event-driven XFixes selection notify would be the zero-idle upgrade)
+        let clip_changed = self.panel.poll_clipboard();
         if self.panel.animating() {
             self.panel.tick();
             self.redraw();
             el.set_control_flow(ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(500)));
         } else {
-            el.set_control_flow(ControlFlow::Wait);
+            if clip_changed && self.expanded && self.panel.page == CLIPBOARD {
+                self.redraw();
+            }
+            el.set_control_flow(ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(1000)));
         }
     }
 }
@@ -987,7 +1195,16 @@ mod tests {
             Todo { done: true, text: "Ship Nock 0.12.10".into() },
         ];
         p.timer_task = Some("Linux port".into());
-        for page in [CONTROLS, APPS, TODAY, STATS, POWER] {
+        p.pins = vec!["ssh dev@example.com".into()];
+        p.clips = vec![
+            "https://example.com/some/long/link/to/read/later".into(),
+            "Meeting at 11:00 in room 4".into(),
+            "cargo build --release".into(),
+            "/home/akhil/notes.txt".into(),
+            "akhil@example.com".into(),
+            "one more".into(),
+        ];
+        for page in [CONTROLS, APPS, CLIPBOARD, TODAY, STATS, POWER] {
             p.page = page;
             p.hover = Some(Act::Tab(0));
             let _ = g.begin(EXP_W as i32, EXP_H as i32);
@@ -1032,6 +1249,29 @@ mod tests {
         assert!(p.running());
         p.act(Act::TimerToggle);
         assert!(!p.running());
+    }
+
+    /// Needs an X11 display and xclip: copy from another process, expect it to be recorded.
+    #[test]
+    #[ignore]
+    fn clipboard_is_recorded() {
+        sandbox();
+        let mut p = Panel::new();
+        let mut xclip = std::process::Command::new("xclip")
+            .args(["-selection", "clipboard", "-i"])
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .expect("xclip");
+        use std::io::Write;
+        xclip.stdin.take().unwrap().write_all(b"copied elsewhere").unwrap();
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(p.poll_clipboard());
+        assert_eq!(p.clips[0], "copied elsewhere");
+        assert!(!p.poll_clipboard(), "the same text is not recorded twice");
+        // pasting one of our own entries does not re-record it
+        assert!(p.act(Act::ClipItem(0)));
+        assert!(!p.poll_clipboard());
+        let _ = xclip.kill();
     }
 
     #[test]
