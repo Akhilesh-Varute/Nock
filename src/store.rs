@@ -307,6 +307,7 @@ pub struct AppEntry {
     pub args: String,
 }
 
+#[cfg(windows)]
 const DEFAULT_APPS: &str = "\
 # Pinned apps for the notch launcher. One per line:  Name|target|optional arguments
 # target can be an .exe name or path, a folder, a URL, or something like ms-settings:
@@ -316,6 +317,16 @@ Terminal|wt.exe
 Notepad|notepad.exe
 Calculator|calc.exe
 Settings|ms-settings:
+Browser|https://www.google.com
+";
+
+#[cfg(not(windows))]
+const DEFAULT_APPS: &str = "\
+# Pinned apps for the notch launcher. One per line:  Name|target|optional arguments
+# target can be a command, a .desktop file, a folder or a URL.
+# The first 12 entries are shown.
+Files|xdg-open|~
+Terminal|x-terminal-emulator
 Browser|https://www.google.com
 ";
 

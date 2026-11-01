@@ -91,11 +91,83 @@ pub fn open_settings(page: u8) -> bool {
     ])
 }
 
+/// Open a pinned entry: a .desktop file, a URL, a folder or a command with arguments.
+pub fn open(target: &str, args: &str) {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let expand = |s: &str| if s == "~" || s.starts_with("~/") { format!("{home}{}", &s[1..]) } else { s.to_string() };
+    let target = expand(target);
+    let args: Vec<String> = args.split_whitespace().map(expand).collect();
+    if target.ends_with(".desktop") {
+        let stem = std::path::Path::new(&target).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        run_first(&[("gio", &["launch", &target]), ("gtk-launch", &[&stem])]);
+    } else if target.contains("://") {
+        run("xdg-open", &[&target]);
+    } else {
+        let a: Vec<&str> = args.iter().map(String::as_str).collect();
+        run(&target, &a);
+    }
+}
+
+/// Name of a launchable application from a .desktop file, or None to hide it.
+pub fn desktop_name(text: &str) -> Option<String> {
+    let (mut name, mut hidden, mut is_app, mut in_entry) = (None, false, false, false);
+    for line in text.lines().map(str::trim) {
+        if line.starts_with('[') {
+            in_entry = line == "[Desktop Entry]";
+        } else if in_entry {
+            match line.split_once('=') {
+                Some(("Name", v)) if name.is_none() => name = Some(v.trim().to_string()),
+                Some(("Type", v)) => is_app = v.trim() == "Application",
+                Some(("NoDisplay" | "Hidden", v)) if v.trim() == "true" => hidden = true,
+                _ => {}
+            }
+        }
+    }
+    name.filter(|n| is_app && !hidden && !n.is_empty())
+}
+
+/// Installed apps for the picker: (name, path of the .desktop file), sorted by name.
+pub fn list_apps() -> Vec<(String, String)> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let dirs = [
+        "/usr/share/applications".to_string(),
+        "/usr/local/share/applications".to_string(),
+        "/var/lib/flatpak/exports/share/applications".to_string(),
+        "/var/lib/snapd/desktop/applications".to_string(),
+        format!("{home}/.local/share/flatpak/exports/share/applications"),
+        format!("{home}/.local/share/applications"),
+    ];
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for d in dirs {
+        let Ok(rd) = std::fs::read_dir(&d) else { continue };
+        for e in rd.flatten() {
+            let file = e.file_name().to_string_lossy().into_owned();
+            if !file.ends_with(".desktop") || !seen.insert(file) {
+                continue;
+            }
+            if let Some(name) = std::fs::read_to_string(e.path()).ok().and_then(|t| desktop_name(&t)) {
+                out.push((name, e.path().to_string_lossy().into_owned()));
+            }
+        }
+    }
+    out.sort_by_key(|(n, _)| n.to_lowercase());
+    out
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
     fn missing_tools_are_skipped() {
         assert!(!super::run_first(&[("nock-no-such-tool", &[]), ("nock-no-such-tool-2", &["x"])]));
         assert!(super::run_first(&[("nock-no-such-tool", &[]), ("true", &[])]));
+    }
+
+    #[test]
+    fn desktop_files() {
+        let app = "[Desktop Entry]\nType=Application\nName=Calculator\nName[de]=Rechner\nExec=calc\n[Desktop Action x]\nName=Other\n";
+        assert_eq!(super::desktop_name(app).as_deref(), Some("Calculator"));
+        assert_eq!(super::desktop_name("[Desktop Entry]\nType=Application\nName=X\nNoDisplay=true\n"), None);
+        assert_eq!(super::desktop_name("[Desktop Entry]\nType=Link\nName=X\n"), None);
     }
 }

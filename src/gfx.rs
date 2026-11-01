@@ -51,3 +51,20 @@ pub enum Align {
     Center,
     Right,
 }
+
+/// A stable pastel per name, for letter badges when an app has no icon.
+pub fn name_color(name: &str) -> Color {
+    let mut h: u32 = 2166136261;
+    for b in name.bytes() {
+        h = (h ^ b as u32).wrapping_mul(16777619);
+    }
+    const P: [Color; 6] = [
+        Color::rgb(0xFF, 0xB4, 0x6B),
+        Color::rgb(0x8F, 0xD3, 0xFF),
+        Color::rgb(0xB9, 0xA4, 0xFF),
+        Color::rgb(0x9B, 0xE8, 0xA8),
+        Color::rgb(0xFF, 0x9E, 0xB8),
+        Color::rgb(0xF2, 0xE0, 0x7A),
+    ];
+    P[(h % 6) as usize]
+}

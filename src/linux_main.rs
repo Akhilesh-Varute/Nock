@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition};
-use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::platform::x11::{EventLoopBuilderExtX11, WindowAttributesExtX11, WindowType};
@@ -17,7 +17,7 @@ use winit::window::{Window, WindowId, WindowLevel};
 
 use crate::cal::{days_in_month, first_weekday, fmt_time};
 use crate::gfx::*;
-use crate::store::{self, Todo};
+use crate::store::{self, AppEntry, Todo};
 use crate::sys;
 
 const PILL_W: f32 = 176.0;
@@ -26,6 +26,7 @@ const EXP_W: f32 = 600.0;
 const EXP_H: f32 = 250.0;
 const CONTENT_Y: f32 = 40.0;
 const MAX_TODO: usize = 5;
+const PICK_ROWS: usize = 5;
 
 const T1: Color = Color::white(0.96);
 const T2: Color = Color::white(0.62);
@@ -42,6 +43,7 @@ const C_FOC: Color = Color(1.0, 0.58, 0.42, 1.0);
 const TAB_LABELS: [&str; 9] =
     ["Media", "Controls", "Today", "Stats", "Clipboard", "Shelf", "Apps", "Games", "Power"];
 const CONTROLS: usize = 1;
+const APPS: usize = 6;
 const TODAY: usize = 2;
 const STATS: usize = 3;
 const POWER: usize = 8;
@@ -107,6 +109,13 @@ enum Act {
     TodoDel(usize),
     TodoFocus(usize),
     TodoAdd,
+    Launch(usize),
+    AppUnpin(usize),
+    AppAdd,
+    AppDone,
+    AppSearch,
+    AppRefresh,
+    AppPick(usize),
     Screenshot,
     Settings(u8),
     Lock,
@@ -137,6 +146,13 @@ struct Panel {
     entry_timer: bool,
     /// restart / shut down wait for a second click: (which, when armed)
     power_confirm: Option<(u8, Instant)>,
+    /// Apps tab: pinned apps, and the picker (open?, installed apps, search text, scroll)
+    apps: Vec<AppEntry>,
+    picking: bool,
+    app_list: Vec<(String, String)>,
+    app_filter: String,
+    entry_search: bool,
+    app_scroll: usize,
 }
 
 impl Panel {
@@ -155,7 +171,28 @@ impl Panel {
             entering: None,
             entry_timer: false,
             power_confirm: None,
+            apps: store::load_apps(),
+            picking: false,
+            app_list: Vec::new(),
+            app_filter: String::new(),
+            entry_search: false,
+            app_scroll: 0,
         }
+    }
+
+    /// Installed apps matching the search text.
+    fn app_view(&self) -> Vec<&(String, String)> {
+        let q = self.app_filter.to_lowercase();
+        self.app_list.iter().filter(|(n, _)| q.is_empty() || n.to_lowercase().contains(&q)).collect()
+    }
+
+    fn scroll(&mut self, rows: isize) -> bool {
+        if self.page != APPS || !self.picking {
+            return false;
+        }
+        let max = self.app_view().len().saturating_sub(PICK_ROWS);
+        self.app_scroll = (self.app_scroll as isize + rows).clamp(0, max as isize) as usize;
+        true
     }
 
     fn armed(&self, k: u8) -> bool {
@@ -263,6 +300,42 @@ impl Panel {
                 self.entering = Some(String::new());
                 self.entry_timer = false;
             }
+            Act::Launch(i) => {
+                if let Some(e) = self.apps.get(i) {
+                    sys::open(&e.target, &e.args);
+                    return true;
+                }
+            }
+            Act::AppUnpin(i) => {
+                if i < self.apps.len() {
+                    self.apps.remove(i);
+                    store::save_apps(&self.apps);
+                }
+            }
+            Act::AppAdd | Act::AppRefresh => {
+                // a directory scan is quick, so it runs inline (the list is a few hundred files)
+                self.picking = true;
+                self.app_list = sys::list_apps();
+                if act == Act::AppAdd {
+                    self.app_filter.clear();
+                    self.app_scroll = 0;
+                }
+            }
+            Act::AppDone => {
+                self.picking = false;
+                self.entry_search = false;
+                self.app_filter.clear();
+            }
+            Act::AppSearch => self.entry_search = true,
+            Act::AppPick(i) => {
+                let item = self.app_view().get(i).map(|(n, p)| (n.clone(), p.clone()));
+                if let Some((name, target)) = item {
+                    if self.apps.len() < 12 && !self.apps.iter().any(|a| a.target == target) {
+                        self.apps.push(AppEntry { name, target, args: String::new() });
+                        store::save_apps(&self.apps);
+                    }
+                }
+            }
             Act::Screenshot => {
                 sys::screenshot();
             }
@@ -279,6 +352,24 @@ impl Panel {
 
     /// Typed text goes to the open entry box. Returns true if the key was used.
     fn key(&mut self, key: &Key, text: Option<&str>) -> bool {
+        if self.entry_search {
+            match key {
+                Key::Named(NamedKey::Escape | NamedKey::Enter) => self.entry_search = false,
+                Key::Named(NamedKey::Backspace) => {
+                    self.app_filter.pop();
+                    self.app_scroll = 0;
+                }
+                _ => {
+                    if let Some(t) = text.filter(|t| t.chars().all(|c| !c.is_control())) {
+                        if self.app_filter.chars().count() < 40 {
+                            self.app_filter.push_str(t);
+                            self.app_scroll = 0;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
         let Some(buf) = &mut self.entering else { return false };
         match key {
             Key::Named(NamedKey::Escape) => self.entering = None,
@@ -338,6 +429,7 @@ impl Panel {
         let start = hits.len();
         g.shifted(0.0, CONTENT_Y, || match self.page {
             CONTROLS => self.page_controls(g, hits),
+            APPS => self.page_apps(g, hits),
             TODAY => self.page_today(g, hits),
             STATS => page_stats(g),
             POWER => self.page_power(g, hits),
@@ -348,6 +440,107 @@ impl Panel {
         });
         for h in &mut hits[start..] {
             h.r.y += CONTENT_Y;
+        }
+    }
+
+    fn page_apps(&self, g: &Gfx, hits: &mut Vec<Hit>) {
+        if self.picking {
+            return self.page_app_picker(g, hits);
+        }
+        let f = &g.fonts;
+        let (cols, tw, th) = (6usize, 88.0, 86.0);
+        let gap = (EXP_W - 56.0 - cols as f32 * tw) / (cols as f32 - 1.0);
+        let cell = |i: usize| {
+            let (c, r) = (i % cols, i / cols);
+            Rect::new(28.0 + c as f32 * (tw + gap), 6.0 + r as f32 * (th + 8.0), tw, th)
+        };
+        for (i, e) in self.apps.iter().enumerate().take(12) {
+            let rect = cell(i);
+            let (act, xact) = (Act::Launch(i), Act::AppUnpin(i));
+            hits.push(Hit { r: rect, act });
+            let x = Rect::new(rect.x + rect.w - 22.0, rect.y + 3.0, 19.0, 19.0);
+            hits.push(Hit { r: x, act: xact });
+            let over = self.hot(act) || self.hot(xact);
+            g.fill_rrect(rect, 16.0, Color::white(if over { 0.12 } else { 0.05 }));
+            let ic = Rect::new(rect.cx() - 18.0, rect.y + 10.0, 36.0, 36.0);
+            g.fill_circle(ic.cx(), ic.cy(), 18.0, name_color(&e.name));
+            let letter: String = e.name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
+            g.text(&letter, ic, &f.title, Color(0.0, 0.0, 0.0, 0.75), Align::Center);
+            g.text(&e.name, Rect::new(rect.x + 4.0, rect.y + 52.0, rect.w - 8.0, 24.0), &f.tiny, T2, Align::Center);
+            if over {
+                g.fill_circle(x.cx(), x.cy(), 8.5, Color(0.0, 0.0, 0.0, 0.75));
+                g.icon('\u{2715}', x, &f.icon14, if self.hot(xact) { Color(1.0, 0.5, 0.5, 1.0) } else { T1 });
+            }
+        }
+        if self.apps.len() < 12 {
+            let rect = cell(self.apps.len());
+            hits.push(Hit { r: rect, act: Act::AppAdd });
+            let on = self.hot(Act::AppAdd);
+            g.fill_rrect(rect, 16.0, Color::white(if on { 0.12 } else { 0.04 }));
+            g.stroke_rrect(rect, 16.0, Color::white(if on { 0.35 } else { 0.14 }), 1.0);
+            g.fill_circle(rect.cx(), rect.y + 28.0, 18.0, ACCENT.fade(if on { 0.4 } else { 0.22 }));
+            g.icon('+', Rect::new(rect.cx() - 18.0, rect.y + 10.0, 36.0, 36.0), &f.icon14, ACCENT);
+            g.text("Add app", Rect::new(rect.x + 4.0, rect.y + 52.0, rect.w - 8.0, 24.0), &f.tiny, T2, Align::Center);
+        }
+    }
+
+    fn page_app_picker(&self, g: &Gfx, hits: &mut Vec<Hit>) {
+        let f = &g.fonts;
+        g.text("Add an app", Rect::new(28.0, 4.0, 160.0, 26.0), &f.body, T1, Align::Left);
+        let done = Rect::new(EXP_W - 24.0 - 76.0, 4.0, 76.0, 26.0);
+        hits.push(Hit { r: done, act: Act::AppDone });
+        g.fill_rrect(done, 13.0, Color::white(if self.hot(Act::AppDone) { 1.0 } else { 0.92 }));
+        g.text("Done", done, &f.small, Color(0.0, 0.0, 0.0, 1.0), Align::Center);
+        let sr = Rect::new(done.x - 12.0 - 210.0, 4.0, 210.0, 26.0);
+        if self.entry_search || !self.app_filter.is_empty() {
+            let mut t = self.app_filter.clone();
+            if self.entry_search {
+                t.push('\u{2502}');
+            }
+            g.fill_rrect(sr, 13.0, Color::white(0.14));
+            g.text(&t, Rect::new(sr.x + 12.0, sr.y, sr.w - 16.0, sr.h), &f.small, T1, Align::Left);
+        } else {
+            g.fill_rrect(sr, 13.0, Color::white(if self.hot(Act::AppSearch) { 0.12 } else { 0.07 }));
+            g.text("Search apps", Rect::new(sr.x + 12.0, sr.y, sr.w - 16.0, sr.h), &f.small, T3, Align::Left);
+        }
+        hits.push(Hit { r: sr, act: Act::AppSearch });
+        let rf = Rect::new(sr.x - 36.0, 4.0, 26.0, 26.0);
+        hits.push(Hit { r: rf, act: Act::AppRefresh });
+        g.fill_rrect(rf, 13.0, Color::white(if self.hot(Act::AppRefresh) { 0.14 } else { 0.07 }));
+        g.icon('\u{21BA}', rf, &f.icon14, T2);
+
+        let list = Rect::new(24.0, 40.0, EXP_W - 48.0, PICK_ROWS as f32 * 32.0);
+        let view = self.app_view();
+        if view.is_empty() {
+            let msg = if self.app_filter.is_empty() { "No apps found" } else { "No apps match that search" };
+            g.text(msg, Rect::new(0.0, 90.0, EXP_W, 24.0), &f.body, T3, Align::Center);
+            return;
+        }
+        for row in 0..PICK_ROWS {
+            let idx = self.app_scroll + row;
+            let Some((name, path)) = view.get(idx) else { break };
+            let r = Rect::new(list.x, list.y + row as f32 * 32.0, list.w - 10.0, 28.0);
+            let pinned = self.apps.iter().any(|p| &p.target == path);
+            let act = Act::AppPick(idx);
+            if !pinned {
+                hits.push(Hit { r, act });
+            }
+            let on = self.hot(act) && !pinned;
+            g.fill_rrect(r, 10.0, Color::white(if on { 0.12 } else if row % 2 == 0 { 0.05 } else { 0.0 }));
+            let ic = Rect::new(r.x + 10.0, r.y + 3.0, 22.0, 22.0);
+            g.fill_circle(ic.cx(), ic.cy(), 11.0, name_color(name));
+            let letter: String = name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
+            g.text(&letter, ic, &f.tiny, Color(0.0, 0.0, 0.0, 0.75), Align::Center);
+            g.text(name, Rect::new(r.x + 44.0, r.y, r.w - 150.0, r.h), &f.body, if pinned { T3 } else { T1 }, Align::Left);
+            let (label, col) = if pinned { ("\u{2713} Pinned", T3) } else if on { ("Pin to panel", ACCENT) } else { ("", T3) };
+            g.text(label, Rect::new(r.x + r.w - 130.0, r.y, 120.0, r.h), &f.small, col, Align::Right);
+        }
+        if view.len() > PICK_ROWS {
+            let track = Rect::new(list.x + list.w - 5.0, list.y, 3.0, PICK_ROWS as f32 * 32.0 - 4.0);
+            g.fill_rrect(track, 1.5, Color::white(0.08));
+            let hgt = track.h * PICK_ROWS as f32 / view.len() as f32;
+            let y = track.y + (track.h - hgt) * self.app_scroll as f32 / (view.len() - PICK_ROWS) as f32;
+            g.fill_rrect(Rect::new(track.x, y, 3.0, hgt), 1.5, Color::white(0.3));
         }
     }
 
@@ -724,6 +917,16 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => self.click(),
+            WindowEvent::MouseWheel { delta, .. } => {
+                let rows = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => -y as isize,
+                    MouseScrollDelta::PixelDelta(p) => (-p.y / 30.0) as isize,
+                };
+                if self.expanded && self.panel.scroll(rows) {
+                    self.panel.hover = None;
+                    self.redraw();
+                }
+            }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 if self.panel.key(&event.logical_key, event.text.as_deref()) {
                     self.redraw();
@@ -784,7 +987,7 @@ mod tests {
             Todo { done: true, text: "Ship Nock 0.12.10".into() },
         ];
         p.timer_task = Some("Linux port".into());
-        for page in [CONTROLS, TODAY, STATS, POWER] {
+        for page in [CONTROLS, APPS, TODAY, STATS, POWER] {
             p.page = page;
             p.hover = Some(Act::Tab(0));
             let _ = g.begin(EXP_W as i32, EXP_H as i32);
@@ -792,6 +995,15 @@ mod tests {
             let _ = g.end();
             g.save_png(&format!("{dir}/page{page}.png"));
         }
+        // the app picker, with a fake list so the render does not depend on this machine
+        p.page = APPS;
+        p.picking = true;
+        p.app_list = (1..=9).map(|i| (format!("Sample app {i}"), format!("/x/{i}.desktop"))).collect();
+        p.apps[0].target = "/x/2.desktop".into();
+        let _ = g.begin(EXP_W as i32, EXP_H as i32);
+        p.draw(&g, &mut Vec::new());
+        let _ = g.end();
+        g.save_png(&format!("{dir}/picker.png"));
     }
 
     #[test]
