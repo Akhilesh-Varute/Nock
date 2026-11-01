@@ -24,3 +24,29 @@ pub fn local_time() -> (i32, u32, u32, u32, u32, u32, u32, u32) {
 pub(crate) fn powershell(_cmd: &str) -> Option<String> {
     None
 }
+
+fn run(cmd: &str, args: &[&str]) {
+    // fire and forget; a missing tool or a refused request just does nothing
+    let _ = std::process::Command::new(cmd)
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+}
+
+pub fn lock_pc() {
+    run("loginctl", &["lock-session"]);
+}
+
+pub fn sleep_pc() {
+    run("systemctl", &["suspend"]);
+}
+
+pub fn restart_pc() {
+    run("systemctl", &["reboot"]);
+}
+
+pub fn shutdown_pc() {
+    run("systemctl", &["poweroff"]);
+}

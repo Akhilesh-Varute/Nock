@@ -18,6 +18,7 @@ use winit::window::{Window, WindowId, WindowLevel};
 use crate::cal::{days_in_month, first_weekday, fmt_time};
 use crate::gfx::*;
 use crate::store::{self, Todo};
+use crate::sys;
 
 const PILL_W: f32 = 176.0;
 const PILL_H: f32 = 34.0;
@@ -32,6 +33,8 @@ const T3: Color = Color::white(0.38);
 const SURF: Color = Color::white(0.09);
 const HOVER: Color = Color::white(0.17);
 const ACCENT: Color = Color(0.40, 0.60, 1.0, 1.0);
+const C_CPU: Color = Color(0.30, 0.78, 0.98, 1.0);
+const C_MEM: Color = Color(0.98, 0.70, 0.20, 1.0);
 const C_BAT: Color = Color(0.40, 0.85, 0.50, 1.0);
 const C_UP: Color = Color(0.72, 0.58, 1.0, 1.0);
 const C_FOC: Color = Color(1.0, 0.58, 0.42, 1.0);
@@ -40,6 +43,7 @@ const TAB_LABELS: [&str; 9] =
     ["Media", "Controls", "Today", "Stats", "Clipboard", "Shelf", "Apps", "Games", "Power"];
 const TODAY: usize = 2;
 const STATS: usize = 3;
+const POWER: usize = 8;
 
 /// Where each tab sits in the top row (same layout rule as the Windows panel).
 fn tab_rects() -> Vec<Rect> {
@@ -102,6 +106,10 @@ enum Act {
     TodoDel(usize),
     TodoFocus(usize),
     TodoAdd,
+    Lock,
+    Sleep,
+    Restart,
+    Shutdown,
 }
 
 struct Hit {
@@ -124,6 +132,8 @@ struct Panel {
     /// text being typed, and whether it is for the timer length (else a new to-do)
     entering: Option<String>,
     entry_timer: bool,
+    /// restart / shut down wait for a second click: (which, when armed)
+    power_confirm: Option<(u8, Instant)>,
 }
 
 impl Panel {
@@ -141,7 +151,27 @@ impl Panel {
             done_today,
             entering: None,
             entry_timer: false,
+            power_confirm: None,
         }
+    }
+
+    fn armed(&self, k: u8) -> bool {
+        matches!(self.power_confirm, Some((p, t)) if p == k && t.elapsed().as_secs_f32() < 3.5)
+    }
+
+    /// Restart / shut down only on a second click within a few seconds.
+    fn power_press(&mut self, k: u8) {
+        if self.armed(k) {
+            self.power_confirm = None;
+            if k == 1 { sys::restart_pc() } else { sys::shutdown_pc() }
+        } else {
+            self.power_confirm = Some((k, Instant::now()));
+        }
+    }
+
+    /// Something on screen changes by itself (running timer, expiring confirmation).
+    fn animating(&self) -> bool {
+        self.running() || self.power_confirm.is_some()
     }
 
     fn running(&self) -> bool {
@@ -175,6 +205,9 @@ impl Panel {
 
     /// Credit a finished session once; returns true when it just ended.
     fn tick(&mut self) -> bool {
+        if matches!(self.power_confirm, Some((_, t)) if t.elapsed().as_secs_f32() >= 3.5) {
+            self.power_confirm = None;
+        }
         if self.running() && self.left_ms() == 0 {
             self.rem_ms = 0;
             self.run_since = None;
@@ -227,6 +260,10 @@ impl Panel {
                 self.entering = Some(String::new());
                 self.entry_timer = false;
             }
+            Act::Lock => sys::lock_pc(),
+            Act::Sleep => sys::sleep_pc(),
+            Act::Restart => self.power_press(1),
+            Act::Shutdown => self.power_press(2),
         }
         false
     }
@@ -293,6 +330,7 @@ impl Panel {
         g.shifted(0.0, CONTENT_Y, || match self.page {
             TODAY => self.page_today(g, hits),
             STATS => page_stats(g),
+            POWER => self.page_power(g, hits),
             p => {
                 let r = Rect::new(0.0, 0.0, EXP_W, EXP_H - CONTENT_Y);
                 g.text(&format!("{} is not ported to Linux yet", TAB_LABELS[p]), r, &f.body, T3, Align::Center);
@@ -300,6 +338,58 @@ impl Panel {
         });
         for h in &mut hits[start..] {
             h.r.y += CONTENT_Y;
+        }
+    }
+
+    fn page_power(&self, g: &Gfx, hits: &mut Vec<Hit>) {
+        let f = &g.fonts;
+        let items: [(char, &str, Act, u8); 4] = [
+            ('\0', "Lock", Act::Lock, 0),
+            ('\u{263E}', "Sleep", Act::Sleep, 0),
+            ('\u{27F3}', "Restart", Act::Restart, 1),
+            ('\0', "Shut down", Act::Shutdown, 2),
+        ];
+        let (w, gap) = (129.0, 12.0);
+        for (i, (glyph, label, act, k)) in items.iter().enumerate() {
+            let r = Rect::new(24.0 + i as f32 * (w + gap), 28.0, w, 130.0);
+            hits.push(Hit { r, act: *act });
+            let danger = *k != 0 && self.armed(*k);
+            // colour says how serious it is: calm blue and violet, amber for restart, red for shut down
+            let tint = [C_CPU, C_UP, C_MEM, Color(1.0, 0.42, 0.45, 1.0)][i];
+            let hot = self.hot(*act);
+            let bg = if danger { Color(0.85, 0.25, 0.28, 1.0) } else if hot { HOVER } else { SURF };
+            g.fill_rrect(r, 20.0, bg);
+            if !danger {
+                g.fill_rrect(r, 20.0, tint.fade(if hot { 0.14 } else { 0.07 }));
+                g.fill_circle(r.cx(), r.y + 42.0, 24.0, tint.fade(0.16));
+            }
+            let ic = if danger { Color::white(1.0) } else { tint };
+            let (cx, cy) = (r.cx(), r.y + 42.0);
+            match act {
+                // DejaVu has no lock or power symbols, so these two are drawn
+                Act::Lock => {
+                    g.stroke_rrect(Rect::new(cx - 6.0, cy - 12.0, 12.0, 16.0), 6.0, ic, 2.4);
+                    g.fill_rrect(Rect::new(cx - 9.0, cy - 3.0, 18.0, 14.0), 3.0, ic);
+                }
+                Act::Shutdown => {
+                    let seg = |a: f32| (cx + 10.0 * a.to_radians().sin(), cy + 2.0 - 10.0 * a.to_radians().cos());
+                    for a in (40..320).step_by(10) {
+                        g.line(seg(a as f32), seg(a as f32 + 10.0), 2.6, ic);
+                    }
+                    g.line((cx, cy - 12.0), (cx, cy), 2.6, ic);
+                }
+                _ => g.icon(*glyph, Rect::new(r.x, r.y + 22.0, r.w, 40.0), &f.icon22, ic),
+            }
+            g.text(label, Rect::new(r.x, r.y + 70.0, r.w, 24.0), &f.body, if danger { Color::white(1.0) } else { T1 }, Align::Center);
+            if *k != 0 {
+                g.text(
+                    if danger { "Click again to confirm" } else { "Asks to confirm" },
+                    Rect::new(r.x + 4.0, r.y + 96.0, r.w - 8.0, 20.0),
+                    &f.tiny,
+                    if danger { Color::white(0.95) } else { T3 },
+                    Align::Center,
+                );
+            }
         }
     }
 
@@ -607,7 +697,7 @@ impl ApplicationHandler for App {
 
     /// Wake once a second while the timer runs (the only thing that changes by itself).
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
-        if self.panel.running() {
+        if self.panel.animating() {
             self.panel.tick();
             self.redraw();
             el.set_control_flow(ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(500)));
@@ -656,7 +746,7 @@ mod tests {
             Todo { done: true, text: "Ship Nock 0.12.10".into() },
         ];
         p.timer_task = Some("Linux port".into());
-        for page in [TODAY, STATS] {
+        for page in [TODAY, STATS, POWER] {
             p.page = page;
             p.hover = Some(Act::Tab(0));
             let _ = g.begin(EXP_W as i32, EXP_H as i32);
@@ -692,5 +782,15 @@ mod tests {
         assert!(p.running());
         p.act(Act::TimerToggle);
         assert!(!p.running());
+    }
+
+    #[test]
+    fn power_needs_a_second_click() {
+        // only the arming click runs here: a confirmed one would really restart the machine
+        sandbox();
+        let mut p = Panel::new();
+        assert!(!p.armed(1));
+        p.act(Act::Restart);
+        assert!(p.armed(1) && !p.armed(2));
     }
 }
