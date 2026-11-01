@@ -31,6 +31,8 @@ jobs:
             **Most people: download `NockSetup-...exe` (the installer).** It adds Nock to the Start menu, can start with Windows, and updates itself from the tray menu.
 
             **Don't want to install? Use `Nock-portable-...exe`.** Put it in a folder you'll keep and run it. No Start menu entry beyond the one Nock adds itself, and it can update itself from the tray menu too.
+
+            **Linux (preview): use `nock_...amd64.deb` or `nock-...-x86_64-linux.tar.gz`.** Needs an X11 session (or XWayland) and the DejaVu Sans font. The `.deb` installs with `sudo apt install ./nock_...amd64.deb`; the tarball installs for your user with `./install.sh`. It is a preview, with fewer features and far less testing than the Windows version. See the README for what is missing.
           generate_release_notes: true
 
   # Linux preview packages join the release the Windows job created.

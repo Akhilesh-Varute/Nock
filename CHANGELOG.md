@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.13.0
 
 - Linux preview (X11 / XWayland): the pill, the nine tabs (Media through MPRIS, Controls, Today, Stats, Clipboard, Shelf, Apps, Games, Power) and the top bar with Wi-Fi, Bluetooth, sound, brightness, battery and calendar dropdowns. Packaged as a `.deb` and a user-level tarball; CI builds, tests and smoke-tests both. Not yet on Linux: game sounds, smart pill alerts, reminders, tray menu, buddy and scenes.
 
