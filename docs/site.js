@@ -442,17 +442,22 @@
 
   /* ---------- latest release: direct download links and version ---------- */
   function hrefs(rel) {
-    var setup = '', portable = '';
+    var setup = '', portable = '', deb = '', targz = '';
     (rel.assets || []).forEach(function (a) {
       if (/^NockSetup-.*\.exe$/i.test(a.name)) setup = a.browser_download_url;
       if (/^Nock-portable-.*\.exe$/i.test(a.name)) portable = a.browser_download_url;
+      if (/^nock_.*_amd64\.deb$/i.test(a.name)) deb = a.browser_download_url;
+      if (/^nock-.*-linux\.tar\.gz$/i.test(a.name)) targz = a.browser_download_url;
     });
     $$('[data-dl="setup"]').forEach(function (a) { if (setup) a.href = setup; });
     $$('[data-dl="portable"]').forEach(function (a) { if (portable) a.href = portable; });
+    // an older release has no Linux files: hide those buttons rather than link to nothing
+    $$('[data-dl="deb"]').forEach(function (a) { if (deb) a.href = deb; else a.style.display = 'none'; });
+    $$('[data-dl="targz"]').forEach(function (a) { if (targz) a.href = targz; else a.style.display = 'none'; });
     var v = rel.tag_name || '';
     if (v) {
       $('#verLine').textContent = 'Latest: ' + v + '. Free, MIT licensed. Installer or one portable .exe.';
-      $('#verLine2').textContent = 'Latest: ' + v + '. Free. Windows 10/11. The installer adds a Start menu entry; the portable file is just the app.';
+      $('#verLine2').textContent = 'Latest: ' + v + '. Free. Windows 10/11. The installer adds a Start menu entry; the portable file is just the app. Linux is a preview for X11 or XWayland: fewer features, less tested.';
     }
   }
   try {
@@ -487,7 +492,14 @@
     }).catch(function () {});
   })();
 
-  if (!/Windows/i.test(navigator.userAgent)) $('#osNote').style.display = 'block';
+  if (!/Windows/i.test(navigator.userAgent)) {
+    var ua = navigator.userAgent;
+    // desktop Linux (not Android): point straight at the preview downloads
+    if (/Linux|X11/i.test(ua) && !/Android/i.test(ua)) {
+      $('#osNote').innerHTML = 'You are on Linux: Nock has a preview for you (<a href="#get">.deb and tarball</a>, X11 or XWayland). The Windows installer above will not run here. The demo works in any browser.';
+    }
+    $('#osNote').style.display = 'block';
+  }
 
   /* ---------- init ---------- */
   var QDO = { // clicking a quest does the action for you
