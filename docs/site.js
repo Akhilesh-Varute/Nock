@@ -456,7 +456,7 @@
     $$('[data-dl="targz"]').forEach(function (a) { if (targz) a.href = targz; else a.style.display = 'none'; });
     var v = rel.tag_name || '';
     if (v) {
-      $('#verLine').textContent = 'Latest: ' + v + '. Free, MIT licensed. Installer or one portable .exe.';
+      $('#verLine').textContent = 'Latest: ' + v + '. Free, MIT licensed. Windows installer or portable .exe, Linux .deb or tarball (preview).';
       $('#verLine2').textContent = 'Latest: ' + v + '. Free. Windows 10/11. The installer adds a Start menu entry; the portable file is just the app. Linux is a preview for X11 or XWayland: fewer features, less tested.';
     }
   }
@@ -492,18 +492,7 @@
     }).catch(function () {});
   })();
 
-  if (!/Windows/i.test(navigator.userAgent)) {
-    var ua = navigator.userAgent;
-    // desktop Linux (not Android): point straight at the preview downloads
-    if (/Linux|X11/i.test(ua) && !/Android/i.test(ua)) {
-      // the main button becomes the Linux download; the Windows files stay in the download section
-      var main = $('#dlMain');
-      main.setAttribute('data-dl', 'deb');
-      main.lastChild.textContent = 'Download for Linux (preview)';
-      $('#osNote').innerHTML = 'You are on Linux: Nock has a preview for you (<a href="#get">.deb and tarball</a>, X11 or XWayland). The Windows installer will not run here. The demo works in any browser.';
-    }
-    $('#osNote').style.display = 'block';
-  }
+  if (!/Windows/i.test(navigator.userAgent)) $('#osNote').style.display = 'block';
 
   /* ---------- init ---------- */
   var QDO = { // clicking a quest does the action for you
