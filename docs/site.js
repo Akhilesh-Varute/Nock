@@ -496,7 +496,11 @@
     var ua = navigator.userAgent;
     // desktop Linux (not Android): point straight at the preview downloads
     if (/Linux|X11/i.test(ua) && !/Android/i.test(ua)) {
-      $('#osNote').innerHTML = 'You are on Linux: Nock has a preview for you (<a href="#get">.deb and tarball</a>, X11 or XWayland). The Windows installer above will not run here. The demo works in any browser.';
+      // the main button becomes the Linux download; the Windows files stay in the download section
+      var main = $('#dlMain');
+      main.setAttribute('data-dl', 'deb');
+      main.lastChild.textContent = 'Download for Linux (preview)';
+      $('#osNote').innerHTML = 'You are on Linux: Nock has a preview for you (<a href="#get">.deb and tarball</a>, X11 or XWayland). The Windows installer will not run here. The demo works in any browser.';
     }
     $('#osNote').style.display = 'block';
   }
