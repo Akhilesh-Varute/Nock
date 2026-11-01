@@ -41,6 +41,7 @@ const C_FOC: Color = Color(1.0, 0.58, 0.42, 1.0);
 
 const TAB_LABELS: [&str; 9] =
     ["Media", "Controls", "Today", "Stats", "Clipboard", "Shelf", "Apps", "Games", "Power"];
+const CONTROLS: usize = 1;
 const TODAY: usize = 2;
 const STATS: usize = 3;
 const POWER: usize = 8;
@@ -106,6 +107,8 @@ enum Act {
     TodoDel(usize),
     TodoFocus(usize),
     TodoAdd,
+    Screenshot,
+    Settings(u8),
     Lock,
     Sleep,
     Restart,
@@ -260,6 +263,12 @@ impl Panel {
                 self.entering = Some(String::new());
                 self.entry_timer = false;
             }
+            Act::Screenshot => {
+                sys::screenshot();
+            }
+            Act::Settings(i) => {
+                sys::open_settings(i);
+            }
             Act::Lock => sys::lock_pc(),
             Act::Sleep => sys::sleep_pc(),
             Act::Restart => self.power_press(1),
@@ -328,6 +337,7 @@ impl Panel {
 
         let start = hits.len();
         g.shifted(0.0, CONTENT_Y, || match self.page {
+            CONTROLS => self.page_controls(g, hits),
             TODAY => self.page_today(g, hits),
             STATS => page_stats(g),
             POWER => self.page_power(g, hits),
@@ -339,6 +349,34 @@ impl Panel {
         for h in &mut hits[start..] {
             h.r.y += CONTENT_Y;
         }
+    }
+
+    /// One rounded tile: round icon, title, small state line.
+    #[allow(clippy::too_many_arguments)]
+    fn tile(&self, g: &Gfx, hits: &mut Vec<Hit>, r: Rect, act: Act, glyph: char, tint: Color, title: &str, sub: &str) {
+        let f = &g.fonts;
+        hits.push(Hit { r, act });
+        g.fill_rrect(r, 18.0, if self.hot(act) { HOVER } else { SURF });
+        let ic = Rect::new(r.x + 12.0, r.y + (r.h - 34.0) / 2.0, 34.0, 34.0);
+        g.fill_circle(ic.cx(), ic.cy(), 17.0, tint.fade(0.16));
+        g.icon(glyph, ic, &f.icon14, tint);
+        let ty = r.y + (r.h - 44.0) / 2.0;
+        g.text(title, Rect::new(r.x + 56.0, ty, r.w - 64.0, 22.0), &f.body, T1, Align::Left);
+        g.text(sub, Rect::new(r.x + 56.0, ty + 24.0, r.w - 64.0, 18.0), &f.tiny, T3, Align::Left);
+    }
+
+    /// Shortcuts to the screenshot tool and the settings pages people go looking for.
+    fn page_controls(&self, g: &Gfx, hits: &mut Vec<Hit>) {
+        let (w, h, gap) = (270.0, 54.0, 12.0);
+        let (x0, y0) = (24.0, 6.0);
+        let at = |col: f32, row: f32| Rect::new(x0 + col * (w + gap), y0 + row * (h + 8.0), w, h);
+        let pink = Color(0.98, 0.45, 0.55, 1.0);
+        self.tile(g, hits, at(0.0, 0.0), Act::Screenshot, '\u{2702}', pink, "Screenshot", "Snip a region");
+        self.tile(g, hits, at(1.0, 0.0), Act::Settings(0), '\u{25A3}', C_MEM, "Display", "Resolution, scale, night light");
+        self.tile(g, hits, at(0.0, 1.0), Act::Settings(1), '\u{266A}', C_UP, "Sound", "Output, devices, volume");
+        self.tile(g, hits, at(1.0, 1.0), Act::Settings(2), '\u{21C4}', C_CPU, "Network", "Wi-Fi, Ethernet, VPN");
+        self.tile(g, hits, at(0.0, 2.0), Act::Settings(3), '\u{26A1}', C_BAT, "Power & battery", "Sleep, plan, battery saver");
+        self.tile(g, hits, at(1.0, 2.0), Act::Settings(4), '\u{2699}', T1, "All settings", "Open system settings");
     }
 
     fn page_power(&self, g: &Gfx, hits: &mut Vec<Hit>) {
@@ -746,7 +784,7 @@ mod tests {
             Todo { done: true, text: "Ship Nock 0.12.10".into() },
         ];
         p.timer_task = Some("Linux port".into());
-        for page in [TODAY, STATS, POWER] {
+        for page in [CONTROLS, TODAY, STATS, POWER] {
             p.page = page;
             p.hover = Some(Act::Tab(0));
             let _ = g.begin(EXP_W as i32, EXP_H as i32);
