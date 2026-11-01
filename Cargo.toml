@@ -60,6 +60,8 @@ windows = { version = "0.62.2", features = [
 tiny-skia = "0.11"
 fontdue = "0.9"
 libc = "0.2"
+winit = "0.30"
+softbuffer = "0.4"
 
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"

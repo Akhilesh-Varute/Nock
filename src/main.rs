@@ -40,4 +40,9 @@ mod gfx_linux;
 include!("win_main.rs");
 
 #[cfg(not(windows))]
-fn main() {}
+mod linux_main;
+
+#[cfg(not(windows))]
+fn main() {
+    linux_main::run();
+}
