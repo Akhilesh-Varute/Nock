@@ -309,8 +309,29 @@ impl Gfx {
     // ------------------------------------------------------------ images ----
 
     /// Decode encoded image bytes into a bitmap plus its average colour.
-    pub fn decode_image(&self, _bytes: &[u8]) -> Result<(Bitmap, Color)> {
-        // ponytail: needs an image decoder crate (png/jpeg); add with the media tab
-        Err("image decoding not implemented on Linux yet".into())
+    pub fn decode_image(&self, bytes: &[u8]) -> Result<(Bitmap, Color)> {
+        let img = image::load_from_memory(bytes).map_err(|e| e.to_string())?.to_rgba8();
+        let (w, h) = img.dimensions();
+        let mut pix = Pixmap::new(w, h).ok_or("empty image")?;
+        let (mut r, mut g, mut b, mut n) = (0f32, 0f32, 0f32, 0f32);
+        for (i, (src, dst)) in img.as_raw().chunks_exact(4).zip(pix.data_mut().chunks_exact_mut(4)).enumerate() {
+            let a = src[3] as u32;
+            // tiny-skia wants premultiplied pixels
+            dst.copy_from_slice(&[
+                (src[0] as u32 * a / 255) as u8,
+                (src[1] as u32 * a / 255) as u8,
+                (src[2] as u32 * a / 255) as u8,
+                src[3],
+            ]);
+            // average colour from a sparse sample of the pixels
+            if i % 97 == 0 && src[3] > 8 {
+                r += src[0] as f32 / 255.0;
+                g += src[1] as f32 / 255.0;
+                b += src[2] as f32 / 255.0;
+                n += 1.0;
+            }
+        }
+        let col = if n > 0.0 { Color(r / n, g / n, b / n, 1.0) } else { Color(0.4, 0.6, 1.0, 1.0) };
+        Ok((Bitmap(Rc::new(pix)), col))
     }
 }

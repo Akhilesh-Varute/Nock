@@ -5,6 +5,7 @@
 
 use std::num::NonZeroU32;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
@@ -18,6 +19,7 @@ use winit::window::{Window, WindowId, WindowLevel};
 use crate::cal::{days_in_month, first_weekday, fmt_time};
 use crate::gfx::*;
 use crate::store::{self, clip_kind_of, preview, AppEntry, ClipKind, Todo};
+use crate::media_linux::{fetch_art, Mpris, Track};
 use crate::sys;
 
 const PILL_W: f32 = 176.0;
@@ -44,8 +46,11 @@ const C_GOLD: Color = Color(1.0, 0.82, 0.28, 1.0);
 const C_PINK: Color = Color(1.0, 0.50, 0.62, 1.0);
 const C_FOC: Color = Color(1.0, 0.58, 0.42, 1.0);
 
+const MEDIA_BAR: Rect = Rect::new(182.0, 104.0, EXP_W - 182.0 - 28.0, 18.0);
+
 const TAB_LABELS: [&str; 9] =
     ["Media", "Controls", "Today", "Stats", "Clipboard", "Shelf", "Apps", "Games", "Power"];
+const MEDIA: usize = 0;
 const CONTROLS: usize = 1;
 const CLIPBOARD: usize = 4;
 const SHELF: usize = 5;
@@ -115,6 +120,10 @@ enum Act {
     TodoDel(usize),
     TodoFocus(usize),
     TodoAdd,
+    PlayPause,
+    Prev,
+    Next,
+    Seek,
     ShelfItem(usize),
     ShelfDel(usize),
     ShelfClear,
@@ -178,6 +187,17 @@ struct Panel {
     /// Shelf tab: kept files, and whether a file is being dragged over the notch
     shelf: Vec<String>,
     shelf_hover: bool,
+    /// Media tab: the player shown, when it was read, its cover art and the colour taken from it
+    mpris: Mpris,
+    track: Option<Track>,
+    track_at: Instant,
+    last_media_poll: Instant,
+    art: Option<Bitmap>,
+    art_wanted: String,
+    art_slot: Arc<Mutex<Option<(String, Vec<u8>)>>>,
+    accent: Color,
+    /// pointer in logical coordinates (a seek click needs where on the bar it landed)
+    cursor: (f32, f32),
 }
 
 impl Panel {
@@ -210,6 +230,15 @@ impl Panel {
             ignore_clip: None,
             shelf: store::load_shelf(),
             shelf_hover: false,
+            mpris: Mpris::new(),
+            track: None,
+            track_at: Instant::now(),
+            last_media_poll: Instant::now() - Duration::from_secs(10),
+            art: None,
+            art_wanted: String::new(),
+            art_slot: Arc::new(Mutex::new(None)),
+            accent: ACCENT,
+            cursor: (0.0, 0.0),
         }
     }
 
@@ -250,6 +279,57 @@ impl Panel {
         self.clips.truncate(20);
         self.clip_scroll = 0;
         true
+    }
+
+    /// Position of the playing track now, extrapolated since it was read.
+    fn media_pos(&self) -> f64 {
+        let Some(t) = &self.track else { return 0.0 };
+        let p = t.pos_s + if t.playing { self.track_at.elapsed().as_secs_f64() } else { 0.0 };
+        if t.dur_s > 0.0 { p.clamp(0.0, t.dur_s) } else { p.max(0.0) }
+    }
+
+    fn media_playing(&self) -> bool {
+        self.track.as_ref().is_some_and(|t| t.playing)
+    }
+
+    /// Read the player once a second while the Media tab is open. Returns true if the page changed.
+    fn poll_media(&mut self, gfx: Option<&Gfx>) -> bool {
+        let mut changed = false;
+        if self.last_media_poll.elapsed() >= Duration::from_millis(900) {
+            self.last_media_poll = Instant::now();
+            let t = self.mpris.poll();
+            if t != self.track {
+                changed = true;
+            }
+            if let Some(t) = &t {
+                if t.art_url != self.art_wanted {
+                    self.art_wanted = t.art_url.clone();
+                    self.art = None;
+                    self.accent = ACCENT;
+                    if !t.art_url.is_empty() {
+                        let (url, slot) = (t.art_url.clone(), self.art_slot.clone());
+                        std::thread::spawn(move || {
+                            if let Some(bytes) = fetch_art(&url) {
+                                *slot.lock().unwrap() = Some((url, bytes));
+                            }
+                        });
+                    }
+                }
+            }
+            self.track = t;
+            self.track_at = Instant::now();
+        }
+        let arrived = self.art_slot.lock().unwrap().take();
+        if let (Some((url, bytes)), Some(g)) = (arrived, gfx) {
+            if url == self.art_wanted {
+                if let Ok((bmp, col)) = g.decode_image(&bytes) {
+                    self.art = Some(bmp);
+                    self.accent = col;
+                    changed = true;
+                }
+            }
+        }
+        changed
     }
 
     fn shelf_add(&mut self, paths: impl IntoIterator<Item = String>) {
@@ -378,6 +458,27 @@ impl Panel {
             Act::TodoAdd => {
                 self.entering = Some(String::new());
                 self.entry_timer = false;
+            }
+            Act::PlayPause | Act::Prev | Act::Next => {
+                if let Some(t) = &self.track {
+                    match act {
+                        Act::PlayPause => self.mpris.play_pause(t),
+                        Act::Prev => self.mpris.prev(t),
+                        _ => self.mpris.next(t),
+                    }
+                    // look again soon: players apply the change a moment later
+                    self.last_media_poll = Instant::now() - Duration::from_millis(650);
+                }
+            }
+            Act::Seek => {
+                let frac = ((self.cursor.0 - MEDIA_BAR.x) / MEDIA_BAR.w).clamp(0.0, 1.0) as f64;
+                if let Some(t) = &mut self.track {
+                    if t.can_seek && t.dur_s > 0.0 {
+                        self.mpris.seek_to(t, frac * t.dur_s);
+                        t.pos_s = frac * t.dur_s;
+                        self.track_at = Instant::now();
+                    }
+                }
             }
             Act::ShelfItem(i) => {
                 if let Some(p) = self.shelf.get(i).cloned() {
@@ -580,6 +681,7 @@ impl Panel {
 
         let start = hits.len();
         g.shifted(0.0, CONTENT_Y, || match self.page {
+            MEDIA => self.page_media(g, hits),
             CONTROLS => self.page_controls(g, hits),
             APPS => self.page_apps(g, hits),
             CLIPBOARD => self.page_clipboard(g, hits),
@@ -594,6 +696,86 @@ impl Panel {
         });
         for h in &mut hits[start..] {
             h.r.y += CONTENT_Y;
+        }
+    }
+
+    fn page_media(&self, g: &Gfx, hits: &mut Vec<Hit>) {
+        let f = &g.fonts;
+        let Some(m) = &self.track else {
+            g.text("\u{266A}", Rect::new(0.0, 50.0, EXP_W, 50.0), &f.big, T3, Align::Center);
+            g.text("Nothing playing", Rect::new(0.0, 98.0, EXP_W, 24.0), &f.body, T2, Align::Center);
+            g.text("Start music or a video and it shows up here", Rect::new(0.0, 122.0, EXP_W, 20.0), &f.small, T3, Align::Center);
+            return;
+        };
+        let ar = Rect::new(28.0, 22.0, 132.0, 132.0);
+        match &self.art {
+            Some(bmp) => g.draw_bitmap(bmp, ar, 16.0, 1.0),
+            None => {
+                g.fill_rrect(ar, 16.0, Color::white(0.10));
+                g.text("\u{266A}", ar, &f.big, T3, Align::Center);
+            }
+        }
+        let tx = 182.0;
+        let tw = EXP_W - tx - 56.0;
+        let title = if m.title.is_empty() { "Unknown title" } else { &m.title };
+        g.text(title, Rect::new(tx, 22.0, tw, 26.0), &f.title, T1, Align::Left);
+        let sub = if m.artist.is_empty() { &m.album } else { &m.artist };
+        g.text(sub, Rect::new(tx, 49.0, tw, 22.0), &f.body, T2, Align::Left);
+        if !m.app.is_empty() {
+            g.text(&m.app, Rect::new(tx, 72.0, tw, 18.0), &f.tiny, T3, Align::Left);
+        }
+
+        // progress
+        let (pos, dur) = (self.media_pos(), m.dur_s);
+        let frac = if dur > 0.0 { (pos / dur) as f32 } else { 0.0 };
+        let bar = MEDIA_BAR;
+        let track = Rect::new(bar.x, bar.cy() - 3.0, bar.w, 6.0);
+        g.fill_rrect(track, 3.0, Color::white(0.16));
+        let fw = bar.w * frac.clamp(0.0, 1.0);
+        if fw > 0.5 {
+            g.fill_rrect(Rect::new(bar.x, track.y, fw, 6.0), 3.0, self.accent);
+        }
+        if dur > 0.0 && m.can_seek {
+            hits.push(Hit { r: bar, act: Act::Seek });
+            if self.hot(Act::Seek) {
+                g.fill_circle(bar.x + fw, bar.cy(), 7.0, Color::white(1.0));
+            }
+        }
+        g.text(&fmt_time(pos), Rect::new(tx, 122.0, 70.0, 16.0), &f.tiny, T3, Align::Left);
+        if dur > 0.0 {
+            g.text(&fmt_time(dur), Rect::new(bar.x + bar.w - 70.0, 122.0, 70.0, 16.0), &f.tiny, T3, Align::Right);
+        }
+
+        // transport, drawn as shapes (no icon font)
+        let cx = tx + (EXP_W - tx - 28.0) / 2.0;
+        let cy = 168.0;
+        let prev = Rect::new(cx - 92.0, cy - 20.0, 40.0, 40.0);
+        let play = Rect::new(cx - 26.0, cy - 26.0, 52.0, 52.0);
+        let next = Rect::new(cx + 52.0, cy - 20.0, 40.0, 40.0);
+        for (r, act, ok) in [(prev, Act::Prev, m.can_prev), (next, Act::Next, m.can_next)] {
+            hits.push(Hit { r, act });
+            if self.hot(act) {
+                g.fill_rrect(r, 20.0, Color::white(0.10));
+            }
+            let c = if ok { T1 } else { T3 };
+            let (x, y) = (r.cx(), r.cy());
+            if act == Act::Prev {
+                g.fill_rrect(Rect::new(x - 8.0, y - 7.0, 2.5, 14.0), 1.0, c);
+                g.fill_poly(&[(x + 7.0, y - 7.0), (x + 7.0, y + 7.0), (x - 4.0, y)], c);
+            } else {
+                g.fill_rrect(Rect::new(x + 5.5, y - 7.0, 2.5, 14.0), 1.0, c);
+                g.fill_poly(&[(x - 7.0, y - 7.0), (x - 7.0, y + 7.0), (x + 4.0, y)], c);
+            }
+        }
+        hits.push(Hit { r: play, act: Act::PlayPause });
+        g.fill_circle(play.cx(), play.cy(), 24.0, Color::white(if self.hot(Act::PlayPause) { 1.0 } else { 0.92 }));
+        let (x, y) = (play.cx(), play.cy());
+        let black = Color(0.0, 0.0, 0.0, 1.0);
+        if m.playing {
+            g.fill_rrect(Rect::new(x - 7.0, y - 8.0, 4.5, 16.0), 1.5, black);
+            g.fill_rrect(Rect::new(x + 2.5, y - 8.0, 4.5, 16.0), 1.5, black);
+        } else {
+            g.fill_poly(&[(x - 6.0, y - 9.0), (x - 6.0, y + 9.0), (x + 9.0, y)], black);
         }
     }
 
@@ -1151,6 +1333,7 @@ impl App {
     }
 
     fn click(&mut self) {
+        self.panel.cursor = self.cursor;
         if !self.expanded {
             self.expanded = true;
         } else if let Some(act) = self.act_at_cursor() {
@@ -1268,7 +1451,17 @@ impl ApplicationHandler for App {
         // ponytail: X11 has no cheap clipboard-change event here, so look once a second
         // (event-driven XFixes selection notify would be the zero-idle upgrade)
         let clip_changed = self.panel.poll_clipboard();
-        if self.panel.animating() {
+        let media_on = self.expanded && self.panel.page == MEDIA;
+        if media_on && self.panel.poll_media(self.gfx.as_ref()) {
+            self.redraw();
+        }
+        if media_on {
+            // the progress bar moves while a track plays, and the player may change by itself
+            if self.panel.media_playing() {
+                self.redraw();
+            }
+            el.set_control_flow(ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(500)));
+        } else if self.panel.animating() {
             self.panel.tick();
             self.redraw();
             el.set_control_flow(ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(500)));
@@ -1321,6 +1514,7 @@ mod tests {
             Todo { done: true, text: "Ship Nock 0.12.10".into() },
         ];
         p.timer_task = Some("Linux port".into());
+        p.track = Some(Track { title: "Song of the Day".into(), artist: "The Band".into(), app: "Player".into(), playing: true, can_seek: true, can_prev: true, can_next: true, pos_s: 83.0, dur_s: 215.0, ..Track::default() });
         p.shelf = vec!["/etc".into(), "/etc/hostname".into(), "/home/akhil/report-final-v2.pdf".into()];
         p.pins = vec!["ssh dev@example.com".into()];
         p.clips = vec![
@@ -1331,7 +1525,7 @@ mod tests {
             "akhil@example.com".into(),
             "one more".into(),
         ];
-        for page in [CONTROLS, APPS, CLIPBOARD, SHELF, TODAY, STATS, POWER] {
+        for page in [MEDIA, CONTROLS, APPS, CLIPBOARD, SHELF, TODAY, STATS, POWER] {
             p.page = page;
             p.hover = Some(Act::Tab(0));
             let _ = g.begin(EXP_W as i32, EXP_H as i32);
@@ -1414,6 +1608,18 @@ mod tests {
         p.shelf = vec!["/definitely/not/here".into()];
         assert!(!p.act(Act::ShelfItem(0)));
         assert!(p.shelf.is_empty());
+    }
+
+    #[test]
+    fn cover_art_decodes_with_its_average_colour() {
+        let mut png = Vec::new();
+        image::RgbaImage::from_pixel(8, 8, image::Rgba([255, 0, 0, 255]))
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        let g = Gfx::new(10, 10, 1.0).unwrap();
+        let (_, col) = g.decode_image(&png).unwrap();
+        assert!(col.0 > 0.99 && col.1 < 0.01 && col.2 < 0.01);
+        assert!(g.decode_image(b"not an image").is_err());
     }
 
     #[test]
