@@ -102,7 +102,7 @@ fn headline(g: &Gfx, s: &str, ox: f32, y: f32, f: &IDWriteTextFormatRef, col: Co
 }
 
 // Fonts live in Gfx as IDWriteTextFormat; keep one alias so signatures stay short.
-type IDWriteTextFormatRef = windows::Win32::Graphics::DirectWrite::IDWriteTextFormat;
+type IDWriteTextFormatRef = Font;
 
 // ----------------------------------------------------------------- input ---
 
@@ -1307,8 +1307,9 @@ mod tests {
     #[test]
     #[ignore]
     fn preview_frames() {
-        use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
+        #[cfg(windows)]
         unsafe {
+            use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
             let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
         }
         let dir = std::env::var("PREVIEW_DIR").expect("PREVIEW_DIR");

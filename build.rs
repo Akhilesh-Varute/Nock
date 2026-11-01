@@ -7,6 +7,12 @@ fn main() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
     }
+    #[cfg(windows)]
+    windows_icon();
+}
+
+#[cfg(windows)]
+fn windows_icon() {
     let mut res = winresource::WindowsResource::new();
     res.set_icon("assets/notch.ico");
     res.set("ProductName", "Nock");
