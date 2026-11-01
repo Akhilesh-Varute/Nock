@@ -192,12 +192,84 @@ pub fn paste_soon() {
     });
 }
 
+fn output(cmd: &str, args: &[&str]) -> Option<String> {
+    let o = std::process::Command::new(cmd)
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    o.status.success().then(|| String::from_utf8_lossy(&o.stdout).into_owned())
+}
+
+/// (percent, plugged in) of the first battery, if there is one.
+pub fn battery_info() -> Option<(u8, bool)> {
+    let mut dirs: Vec<_> = std::fs::read_dir("/sys/class/power_supply")
+        .ok()?
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().starts_with("BAT"))
+        .collect();
+    dirs.sort_by_key(|e| e.file_name());
+    let d = dirs.first()?.path();
+    let pct = std::fs::read_to_string(d.join("capacity")).ok()?.trim().parse().ok()?;
+    let status = std::fs::read_to_string(d.join("status")).unwrap_or_default();
+    Some((pct, status.trim() != "Discharging"))
+}
+
+/// "Volume: 0.50 [MUTED]" from `wpctl get-volume`.
+pub fn parse_wpctl(s: &str) -> Option<(u8, bool)> {
+    let v: f32 = s.split_whitespace().nth(1)?.parse().ok()?;
+    Some(((v * 100.0).round() as u8, s.contains("[MUTED]")))
+}
+
+/// First percentage in `pactl get-sink-volume` output.
+pub fn parse_pactl_volume(s: &str) -> Option<u8> {
+    s.split_whitespace().find_map(|t| t.strip_suffix('%')?.parse().ok())
+}
+
+/// (percent, muted) of the default output, through PipeWire or PulseAudio.
+pub fn volume() -> Option<(u8, bool)> {
+    if let Some(v) = output("wpctl", &["get-volume", "@DEFAULT_AUDIO_SINK@"]).and_then(|s| parse_wpctl(&s)) {
+        return Some(v);
+    }
+    let vol = parse_pactl_volume(&output("pactl", &["get-sink-volume", "@DEFAULT_SINK@"])?)?;
+    let muted = output("pactl", &["get-sink-mute", "@DEFAULT_SINK@"]).is_some_and(|m| m.contains("yes"));
+    Some((vol, muted))
+}
+
+/// Network name from `nmcli -t -f ACTIVE,SSID dev wifi` ("yes:Name", colons inside names escaped).
+pub fn parse_nmcli_wifi(s: &str) -> Option<String> {
+    let line = s.lines().find_map(|l| l.strip_prefix("yes:"))?;
+    Some(line.replace("\\:", ":"))
+}
+
+pub fn wifi_name() -> Option<String> {
+    parse_nmcli_wifi(&output("nmcli", &["-t", "-f", "ACTIVE,SSID", "dev", "wifi"])?)
+}
+
+/// Class name of the focused window ("firefox" -> "Firefox"); empty without xdotool.
+pub fn active_app() -> String {
+    let raw = output("xdotool", &["getactivewindow", "getwindowclassname"]).unwrap_or_default();
+    let name = raw.trim();
+    let mut c = name.chars();
+    c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
     fn missing_tools_are_skipped() {
         assert!(!super::run_first(&[("nock-no-such-tool", &[]), ("nock-no-such-tool-2", &["x"])]));
         assert!(super::run_first(&[("nock-no-such-tool", &[]), ("true", &[])]));
+    }
+
+    #[test]
+    fn status_parsers() {
+        assert_eq!(super::parse_wpctl("Volume: 0.50\n"), Some((50, false)));
+        assert_eq!(super::parse_wpctl("Volume: 0.35 [MUTED]\n"), Some((35, true)));
+        assert_eq!(super::parse_pactl_volume("Volume: front-left: 42598 /  65% / -11.26 dB,   front-right: 42598 /  65% / -11.26 dB"), Some(65));
+        assert_eq!(super::parse_nmcli_wifi("no:Other\nyes:Home\\:5G\n"), Some("Home:5G".to_string()));
+        assert_eq!(super::parse_nmcli_wifi("no:Other\n"), None);
     }
 
     #[test]

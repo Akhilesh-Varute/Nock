@@ -260,6 +260,11 @@ impl Gfx {
         }
     }
 
+    /// Width of `s` in DIPs.
+    pub fn text_width(&self, s: &str, f: &Font) -> f32 {
+        s.chars().map(|c| f.face.metrics(c, f.size).advance_width).sum()
+    }
+
     /// Draw a glyph from the icon font, centred in `r`.
     pub fn icon(&self, glyph: char, r: Rect, f: &Font, c: Color) {
         let mut buf = [0u8; 4];

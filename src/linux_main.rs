@@ -16,6 +16,10 @@ use winit::keyboard::{Key, NamedKey};
 use winit::platform::x11::{EventLoopBuilderExtX11, WindowAttributesExtX11, WindowType};
 use winit::window::{Window, WindowId, WindowLevel};
 
+const BAR_H: f32 = 30.0;
+const DAYS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 use crate::cal::{days_in_month, first_weekday, fmt_time};
 use crate::gfx::*;
 use crate::store::{self, clip_kind_of, preview, AppEntry, ClipKind, Todo};
@@ -288,14 +292,81 @@ impl Panel {
         if t.dur_s > 0.0 { p.clamp(0.0, t.dur_s) } else { p.max(0.0) }
     }
 
+    /// Width of the collapsed notch: wide for a track, narrow for the timer, medium for the clock.
+    fn pill_w(&self) -> f32 {
+        if self.has_track() { 296.0 } else if self.running() { 132.0 } else { PILL_W }
+    }
+
+    fn has_track(&self) -> bool {
+        self.track.as_ref().is_some_and(|t| !(t.title.is_empty() && t.artist.is_empty()))
+    }
+
+    /// The collapsed notch: what is playing, else the focus timer, else the date and time.
+    fn draw_pill(&self, g: &Gfx, w: f32, h: f32, clock_24h: bool) {
+        let f = &g.fonts;
+        g.fill_rrect(Rect::new(0.0, -20.0, w, h + 20.0), 17.0, Color::rgb(0, 0, 0));
+        let timer = fmt_time(self.left_ms() as f64 / 1000.0);
+        match &self.track {
+            Some(m) if self.has_track() => {
+                let ar = Rect::new(8.0, (h - 22.0) / 2.0, 22.0, 22.0);
+                match &self.art {
+                    Some(bmp) => g.draw_bitmap(bmp, ar, 6.0, 1.0),
+                    None => {
+                        g.fill_rrect(ar, 6.0, Color::white(0.14));
+                        g.text("\u{266A}", ar, &f.small, T2, Align::Center);
+                    }
+                }
+                // equaliser bars on the right: they dance while the track plays
+                let bx = w - 10.0 - 20.0;
+                let t = self.track_at.elapsed().as_secs_f32() + self.last_media_poll.elapsed().as_secs_f32() * 0.0;
+                for i in 0..4 {
+                    let k = if m.playing { 0.5 + 0.5 * (t * 3.1 + i as f32 * 1.7).sin() } else { 0.25 };
+                    let bh = 3.0 + 11.0 * k;
+                    g.fill_rrect(Rect::new(bx + i as f32 * 5.0, h / 2.0 - bh / 2.0, 3.0, bh), 1.5, self.accent);
+                }
+                let mut right = bx - 8.0;
+                if self.running() {
+                    g.text(&timer, Rect::new(right - 50.0, 0.0, 50.0, h), &f.small, T1, Align::Right);
+                    right -= 58.0;
+                }
+                let title = if m.title.is_empty() { "Unknown" } else { &m.title };
+                let label = if m.artist.is_empty() { title.to_string() } else { format!("{title}  \u{00B7}  {}", m.artist) };
+                g.text(&label, Rect::new(38.0, 0.0, (right - 42.0).max(10.0), h), &f.small, T1, Align::Left);
+            }
+            _ if self.running() => {
+                g.text(&timer, Rect::new(0.0, 0.0, w, h), &f.small, T1, Align::Center);
+            }
+            _ => {
+                let (_, _, day, wday, hh, mm, ..) = sys::local_time();
+                let label = if clock_24h {
+                    format!("{hh:02}:{mm:02}")
+                } else {
+                    let (h12, ampm) = match hh {
+                        0 => (12, "AM"),
+                        1..=11 => (hh, "AM"),
+                        12 => (12, "PM"),
+                        _ => (hh - 12, "PM"),
+                    };
+                    format!("{h12}:{mm:02} {ampm}")
+                };
+                // date | time, centred as a pair; the time is the bold part
+                let (dw, tw) = (50.0, if clock_24h { 44.0 } else { 70.0 });
+                let x0 = (w - (dw + 15.0 + tw)) / 2.0;
+                g.text(&format!("{} {day}", DAYS[(wday as usize).min(6)]), Rect::new(x0, 0.0, dw, h), &f.small, T3, Align::Right);
+                g.fill_rrect(Rect::new(x0 + dw + 7.0, h / 2.0 - 7.0, 1.0, 14.0), 0.5, Color::white(0.18));
+                g.text(&label, Rect::new(x0 + dw + 15.0, 0.0, tw, h), &f.menu, T1, Align::Left);
+            }
+        }
+    }
+
     fn media_playing(&self) -> bool {
         self.track.as_ref().is_some_and(|t| t.playing)
     }
 
     /// Read the player once a second while the Media tab is open. Returns true if the page changed.
-    fn poll_media(&mut self, gfx: Option<&Gfx>) -> bool {
+    fn poll_media(&mut self, gfx: Option<&Gfx>, every: Duration) -> bool {
         let mut changed = false;
-        if self.last_media_poll.elapsed() >= Duration::from_millis(900) {
+        if self.last_media_poll.elapsed() >= every {
             self.last_media_poll = Instant::now();
             let t = self.mpris.poll();
             if t != self.track {
@@ -1280,11 +1351,16 @@ struct App {
     cursor: (f32, f32),
     /// the drag itself opened the panel
     shelf_auto_open: bool,
+    clock_24h: bool,
+    /// the collapsed width last applied, and the minute last drawn
+    last_pill_w: f32,
+    last_minute: u32,
+    bar: Option<BarWin>,
 }
 
 impl App {
     fn size(&self) -> (f32, f32) {
-        if self.expanded { (EXP_W, EXP_H) } else { (PILL_W, PILL_H) }
+        if self.expanded { (EXP_W, EXP_H) } else { (self.panel.pill_w(), PILL_H) }
     }
 
     fn redraw(&self) {
@@ -1298,12 +1374,19 @@ impl App {
         let Some(win) = &self.window else { return };
         let (w, h) = self.size();
         let _ = win.request_inner_size(LogicalSize::new(w as f64, h as f64));
-        if let Some(m) = win.current_monitor() {
-            let (mp, ms) = (m.position(), m.size());
-            let pw = (w * win.scale_factor() as f32) as i32;
-            win.set_outer_position(PhysicalPosition::new(mp.x + (ms.width as i32 - pw) / 2, mp.y));
+        if let Some(p) = self.home() {
+            win.set_outer_position(p);
         }
         win.request_redraw();
+    }
+
+    /// Where the notch belongs: top centre of its monitor.
+    fn home(&self) -> Option<PhysicalPosition<i32>> {
+        let win = self.window.as_ref()?;
+        let m = win.current_monitor()?;
+        let (mp, ms) = (m.position(), m.size());
+        let pw = (self.size().0 * win.scale_factor() as f32) as i32;
+        Some(PhysicalPosition::new(mp.x + (ms.width as i32 - pw) / 2, mp.y))
     }
 
     fn act_at_cursor(&self) -> Option<Act> {
@@ -1364,26 +1447,241 @@ impl App {
         if expanded {
             self.panel.draw(g, &mut self.hits);
         } else {
-            g.fill_rrect(Rect::new(0.0, -20.0, w, h + 20.0), 17.0, Color::rgb(0, 0, 0));
-            let label = if self.panel.running() { fmt_time(self.panel.left_ms() as f64 / 1000.0) } else { "Nock".into() };
-            g.text(&label, Rect::new(0.0, 0.0, w, h), &g.fonts.menu, Color::white(0.9), Align::Center);
+            self.panel.draw_pill(g, w, h, self.clock_24h);
         }
         let _ = g.end();
+        blit(surface, g, pw, ph);
+    }
 
-        let (gw, _gh, rgba) = g.pixels();
-        let (Some(nw), Some(nh)) = (NonZeroU32::new(pw), NonZeroU32::new(ph)) else { return };
-        if surface.resize(nw, nh).is_err() {
-            return;
-        }
-        let Ok(mut buf) = surface.buffer_mut() else { return };
-        for y in 0..nh.get() {
-            for x in 0..nw.get() {
-                let s = ((y * gw + x) * 4) as usize;
-                let (r, gr, b, a) = (rgba[s] as u32, rgba[s + 1] as u32, rgba[s + 2] as u32, rgba[s + 3] as u32);
-                buf[(y * nw.get() + x) as usize] = a << 24 | r << 16 | gr << 8 | b;
+    // ------------------------------------------------------------ top bar ----
+
+    fn bar_event(&mut self, ev: WindowEvent) {
+        let Some(bar) = &mut self.bar else { return };
+        match ev {
+            WindowEvent::RedrawRequested => {
+                let data = bar.data.lock().unwrap().clone();
+                bar.draw(&data, self.clock_24h);
             }
+            WindowEvent::CursorMoved { position, .. } => {
+                let k = bar.window.scale_factor() as f32;
+                let (x, y) = (position.x as f32 / k, position.y as f32 / k);
+                let hover = bar.hits.iter().find(|(r, _)| r.contains(x, y)).map(|(_, a)| *a);
+                if hover != bar.hover {
+                    bar.hover = hover;
+                    bar.window.request_redraw();
+                }
+            }
+            WindowEvent::CursorLeft { .. } => {
+                bar.hover = None;
+                bar.window.request_redraw();
+            }
+            // the items open the matching system settings page
+            WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => match bar.hover {
+                Some(BarAct::Wifi) => drop(sys::open_settings(2)),
+                Some(BarAct::Volume) => drop(sys::open_settings(1)),
+                Some(BarAct::Battery) => drop(sys::open_settings(3)),
+                _ => {}
+            },
+            _ => {}
         }
-        let _ = buf.present();
+    }
+
+    /// Refresh what the bar shows: the focused app every couple of seconds, the rest
+    /// every ten, all read on a worker thread so the window never waits for a process.
+    fn bar_tick(&mut self, now_minute: u32) {
+        let Some(bar) = &mut self.bar else { return };
+        let mut redraw = bar.last_minute != now_minute;
+        bar.last_minute = now_minute;
+        if bar.last_fetch.elapsed() >= Duration::from_secs(2) && !bar.fetching.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            let full = bar.last_full.elapsed() >= Duration::from_secs(10);
+            bar.last_fetch = Instant::now();
+            if full {
+                bar.last_full = Instant::now();
+            }
+            let (data, busy) = (bar.data.clone(), bar.fetching.clone());
+            std::thread::spawn(move || {
+                let app = sys::active_app();
+                let mut d = data.lock().unwrap().clone();
+                d.app = app;
+                if full {
+                    d.wifi = sys::wifi_name();
+                    d.volume = sys::volume();
+                    d.battery = sys::battery_info();
+                }
+                *data.lock().unwrap() = d;
+                busy.store(false, std::sync::atomic::Ordering::SeqCst);
+            });
+        }
+        if *bar.data.lock().unwrap() != bar.shown {
+            redraw = true;
+        }
+        if redraw {
+            bar.window.request_redraw();
+        }
+    }
+}
+
+/// Copy the drawn frame (premultiplied RGBA) into the window's buffer.
+fn blit(surface: &mut softbuffer::Surface<Rc<Window>, Rc<Window>>, g: &Gfx, pw: u32, ph: u32) {
+    let (gw, _gh, rgba) = g.pixels();
+    let (Some(nw), Some(nh)) = (NonZeroU32::new(pw), NonZeroU32::new(ph)) else { return };
+    if surface.resize(nw, nh).is_err() {
+        return;
+    }
+    let Ok(mut buf) = surface.buffer_mut() else { return };
+    for y in 0..nh.get() {
+        for x in 0..nw.get() {
+            let s = ((y * gw + x) * 4) as usize;
+            let (r, gr, b, a) = (rgba[s] as u32, rgba[s + 1] as u32, rgba[s + 2] as u32, rgba[s + 3] as u32);
+            buf[(y * nw.get() + x) as usize] = a << 24 | r << 16 | gr << 8 | b;
+        }
+    }
+    let _ = buf.present();
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum BarAct {
+    Wifi,
+    Volume,
+    Battery,
+    Clock,
+}
+
+#[derive(Clone, Default, PartialEq)]
+struct BarData {
+    app: String,
+    wifi: Option<String>,
+    volume: Option<(u8, bool)>,
+    battery: Option<(u8, bool)>,
+}
+
+/// The thin full-width strip at the top of the screen.
+struct BarWin {
+    window: Rc<Window>,
+    surface: softbuffer::Surface<Rc<Window>, Rc<Window>>,
+    gfx: Option<Gfx>,
+    hits: Vec<(Rect, BarAct)>,
+    hover: Option<BarAct>,
+    data: Arc<Mutex<BarData>>,
+    /// what the last frame showed, to redraw only on change
+    shown: BarData,
+    fetching: Arc<std::sync::atomic::AtomicBool>,
+    last_fetch: Instant,
+    last_full: Instant,
+    last_minute: u32,
+}
+
+impl BarWin {
+    fn new(el: &ActiveEventLoop) -> Option<BarWin> {
+        let mon = el.primary_monitor()?;
+        let scale = mon.scale_factor();
+        let attrs = Window::default_attributes()
+            .with_title("Nock bar")
+            .with_decorations(false)
+            .with_transparent(true)
+            .with_window_level(WindowLevel::AlwaysOnTop)
+            .with_x11_window_type(vec![WindowType::Dock])
+            .with_position(mon.position())
+            .with_inner_size(LogicalSize::new(mon.size().width as f64 / scale, BAR_H as f64));
+        let window = Rc::new(el.create_window(attrs).ok()?);
+        let ctx = softbuffer::Context::new(window.clone()).ok()?;
+        let surface = softbuffer::Surface::new(&ctx, window.clone()).ok()?;
+        Some(BarWin {
+            window,
+            surface,
+            gfx: None,
+            hits: Vec::new(),
+            hover: None,
+            data: Arc::new(Mutex::new(BarData::default())),
+            shown: BarData::default(),
+            fetching: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            last_fetch: Instant::now() - Duration::from_secs(60),
+            last_full: Instant::now() - Duration::from_secs(60),
+            last_minute: 99,
+        })
+    }
+
+    fn draw(&mut self, d: &BarData, clock_24h: bool) {
+        let k = self.window.scale_factor() as f32;
+        let size = self.window.inner_size();
+        let (pw, ph) = (size.width.max(1), size.height.max(1));
+        let w = pw as f32 / k;
+        if self.gfx.is_none() {
+            self.gfx = Gfx::new(pw as i32, ph as i32, k).ok();
+        }
+        let Some(g) = &self.gfx else { return };
+        let _ = g.begin(pw as i32, ph as i32);
+        paint_bar(g, w, d, self.hover, clock_24h, &mut self.hits);
+        let _ = g.end();
+        blit(&mut self.surface, g, pw, ph);
+        self.shown = d.clone();
+    }
+}
+
+/// Everything the bar shows, drawn into `g`; fills `hits` with where the items are.
+fn paint_bar(g: &Gfx, w: f32, d: &BarData, hover: Option<BarAct>, clock_24h: bool, hits: &mut Vec<(Rect, BarAct)>) {
+    let f = &g.fonts;
+    g.fill_rrect(Rect::new(0.0, -10.0, w, BAR_H + 10.0), 0.0, Color(0.05, 0.05, 0.06, 0.62));
+    g.fill_rrect(Rect::new(0.0, BAR_H - 1.0, w, 1.0), 0.0, Color::white(0.10));
+
+    let bar = Rect::new(0.0, 0.0, w, BAR_H);
+    if !d.app.is_empty() {
+        g.text(&d.app, Rect::new(14.0, 0.0, w / 2.0 - 160.0, BAR_H), &f.menu, T1, Align::Left);
+    }
+
+    // right side, built from the edge inwards
+    hits.clear();
+    let mut x = w - 14.0;
+    let hot = hover;
+    let mut item = |g: &Gfx, act: BarAct, text: &str, extra: f32, hits: &mut Vec<(Rect, BarAct)>| -> Rect {
+        let tw = g.text_width(text, &g.fonts.small);
+        let r = Rect::new(x - tw - extra - 8.0, 3.0, tw + extra + 8.0, BAR_H - 6.0);
+        hits.push((r, act));
+        if hot == Some(act) {
+            g.fill_rrect(r, 8.0, Color::white(0.16));
+        }
+        x = r.x - 6.0;
+        Rect::new(r.x + 4.0, bar.y, r.w - 8.0, BAR_H)
+    };
+
+    let (_, month, day, wday, hh, mm, ..) = sys::local_time();
+    let clock = if clock_24h {
+        format!("{hh:02}:{mm:02}")
+    } else {
+        let (h12, ampm) = match hh {
+            0 => (12, "AM"),
+            1..=11 => (hh, "AM"),
+            12 => (12, "PM"),
+            _ => (hh - 12, "PM"),
+        };
+        format!("{h12}:{mm:02} {ampm}")
+    };
+    let text = format!("{} {} {}   {clock}", DAYS[(wday as usize).min(6)], day, MONTHS[(month as usize - 1).min(11)]);
+    let r = item(g, BarAct::Clock, &text, 0.0, hits);
+    g.text(&text, r, &f.small, T1, Align::Right);
+
+    if let Some((pct, plugged)) = d.battery {
+        let label = format!("{pct}%");
+        let r = item(g, BarAct::Battery, &label, 24.0, hits);
+        g.text(&label, r, &f.small, T1, Align::Right);
+        // a drawn battery: outline, fill by charge (amber when low), a nub
+        let (bx, by) = (r.x, BAR_H / 2.0 - 5.0);
+        g.stroke_rrect(Rect::new(bx, by, 18.0, 10.0), 2.5, T2, 1.0);
+        g.fill_rrect(Rect::new(bx + 18.5, by + 3.0, 1.8, 4.0), 0.9, T2);
+        let col = if plugged { C_BAT } else if pct <= 20 { Color(1.0, 0.72, 0.2, 1.0) } else { T1 };
+        g.fill_rrect(Rect::new(bx + 2.0, by + 2.0, 14.0 * pct as f32 / 100.0, 6.0), 1.2, col);
+    }
+    if let Some((pct, muted)) = d.volume {
+        let label = if muted { "Muted".to_string() } else { format!("{pct}%") };
+        let r = item(g, BarAct::Volume, &label, 16.0, hits);
+        g.text("\u{266A}", Rect::new(r.x, 0.0, 14.0, BAR_H), &f.small, if muted { T3 } else { T2 }, Align::Left);
+        g.text(&label, r, &f.small, if muted { T3 } else { T1 }, Align::Right);
+    }
+    if let Some(name) = &d.wifi {
+        let name: String = name.chars().take(18).collect();
+        let r = item(g, BarAct::Wifi, &name, 16.0, hits);
+        g.text("\u{21C4}", Rect::new(r.x, 0.0, 14.0, BAR_H), &f.small, T2, Align::Left);
+        g.text(&name, r, &f.small, T1, Align::Right);
     }
 }
 
@@ -1396,6 +1694,7 @@ impl ApplicationHandler for App {
             .with_window_level(WindowLevel::AlwaysOnTop)
             .with_x11_window_type(vec![WindowType::Dock])
             .with_inner_size(LogicalSize::new(PILL_W as f64, PILL_H as f64));
+        self.bar = BarWin::new(el);
         let Ok(win) = el.create_window(attrs) else { return };
         let win = Rc::new(win);
         if let Ok(ctx) = softbuffer::Context::new(win.clone()) {
@@ -1405,7 +1704,11 @@ impl ApplicationHandler for App {
         self.apply_size();
     }
 
-    fn window_event(&mut self, el: &ActiveEventLoop, _id: WindowId, ev: WindowEvent) {
+    fn window_event(&mut self, el: &ActiveEventLoop, id: WindowId, ev: WindowEvent) {
+        if self.bar.as_ref().is_some_and(|b| b.window.id() == id) {
+            self.bar_event(ev);
+            return;
+        }
         match ev {
             WindowEvent::CloseRequested => el.exit(),
             WindowEvent::RedrawRequested => self.draw(),
@@ -1419,6 +1722,14 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => self.click(),
+            // the window manager may place a new window itself: put the notch back
+            WindowEvent::Moved(pos) => {
+                if let (Some(home), Some(win)) = (self.home(), &self.window) {
+                    if pos != home && pos.y != home.y {
+                        win.set_outer_position(home);
+                    }
+                }
+            }
             WindowEvent::HoveredFile(_) => self.shelf_enter(),
             WindowEvent::HoveredFileCancelled => self.shelf_leave(),
             WindowEvent::DroppedFile(path) => {
@@ -1452,8 +1763,28 @@ impl ApplicationHandler for App {
         // (event-driven XFixes selection notify would be the zero-idle upgrade)
         let clip_changed = self.panel.poll_clipboard();
         let media_on = self.expanded && self.panel.page == MEDIA;
-        if media_on && self.panel.poll_media(self.gfx.as_ref()) {
+        // ponytail: polled (1 s on the Media tab, 2 s otherwise); subscribing to the
+        // MPRIS PropertiesChanged signal would make this event-driven
+        let every = Duration::from_millis(if media_on { 900 } else { 2000 });
+        if self.panel.poll_media(self.gfx.as_ref(), every) {
             self.redraw();
+        }
+        let (_, _, _, _, hh, mm, ..) = sys::local_time();
+        let minute = hh * 60 + mm;
+        if minute != self.last_minute {
+            self.last_minute = minute;
+            self.redraw();
+        }
+        let pw = self.panel.pill_w();
+        if pw != self.last_pill_w {
+            self.last_pill_w = pw;
+            if !self.expanded {
+                self.apply_size();
+            }
+        }
+        self.bar_tick(minute);
+        if !self.expanded && self.panel.media_playing() {
+            self.redraw(); // equaliser bars
         }
         if media_on {
             // the progress bar moves while a track plays, and the player may change by itself
@@ -1486,6 +1817,10 @@ pub fn run() {
         hits: Vec::new(),
         cursor: (0.0, 0.0),
         shelf_auto_open: false,
+        clock_24h: store::load_config().clock_24h,
+        last_pill_w: PILL_W,
+        last_minute: 99,
+        bar: None,
     };
     if let Err(e) = el.run_app(&mut app) {
         eprintln!("nock: {e}");
@@ -1533,6 +1868,25 @@ mod tests {
             let _ = g.end();
             g.save_png(&format!("{dir}/page{page}.png"));
         }
+        // the collapsed notch in each state
+        for (name, track, timer) in [("pill_clock", false, false), ("pill_track", true, false), ("pill_timer", false, true)] {
+            let mut q = Panel::new();
+            q.track = track.then(|| Track { title: "Song of the Day".into(), artist: "The Band".into(), playing: true, ..Track::default() });
+            if timer {
+                q.toggle_timer();
+            }
+            let w = q.pill_w();
+            let _ = g.begin(w as i32, PILL_H as i32);
+            q.draw_pill(&g, w, PILL_H, false);
+            let _ = g.end();
+            g.save_png(&format!("{dir}/{name}.png"));
+        }
+        // the top bar with sample data
+        let d = BarData { app: "Firefox".into(), wifi: Some("Home Network".into()), volume: Some((65, false)), battery: Some((82, false)) };
+        let _ = g.begin(EXP_W as i32, BAR_H as i32);
+        paint_bar(&g, EXP_W, &d, Some(BarAct::Volume), false, &mut Vec::new());
+        let _ = g.end();
+        g.save_png(&format!("{dir}/bar.png"));
         // the app picker, with a fake list so the render does not depend on this machine
         p.page = APPS;
         p.picking = true;
