@@ -43,6 +43,8 @@ include!("win_main.rs");
 mod linux_main;
 #[cfg(not(windows))]
 mod media_linux;
+#[cfg(not(windows))]
+mod linux_pop;
 
 #[cfg(not(windows))]
 fn main() {

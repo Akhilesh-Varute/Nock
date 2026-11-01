@@ -24,6 +24,7 @@ use crate::cal::{days_in_month, first_weekday, fmt_time};
 use crate::gfx::*;
 use crate::store::{self, clip_kind_of, preview, AppEntry, ClipKind, Todo};
 use crate::media_linux::{fetch_art, Mpris, Track};
+use crate::linux_pop::{self, Act as PopAct, Dev, Kind as PopKind, Net, PopData, PopState, Pw, POP_MAX_H, POP_W};
 use crate::sys;
 
 const PILL_W: f32 = 176.0;
@@ -1356,6 +1357,7 @@ struct App {
     last_pill_w: f32,
     last_minute: u32,
     bar: Option<BarWin>,
+    pop: Option<PopWin>,
 }
 
 impl App {
@@ -1455,7 +1457,7 @@ impl App {
 
     // ------------------------------------------------------------ top bar ----
 
-    fn bar_event(&mut self, ev: WindowEvent) {
+    fn bar_event(&mut self, el: &ActiveEventLoop, ev: WindowEvent) {
         let Some(bar) = &mut self.bar else { return };
         match ev {
             WindowEvent::RedrawRequested => {
@@ -1475,13 +1477,24 @@ impl App {
                 bar.hover = None;
                 bar.window.request_redraw();
             }
-            // the items open the matching system settings page
-            WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => match bar.hover {
-                Some(BarAct::Wifi) => drop(sys::open_settings(2)),
-                Some(BarAct::Volume) => drop(sys::open_settings(1)),
-                Some(BarAct::Battery) => drop(sys::open_settings(3)),
-                _ => {}
-            },
+            // an item opens its dropdown; clicking it again closes it
+            WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => {
+                let Some(act) = bar.hover else { return };
+                let Some(anchor) = bar.hits.iter().find(|(_, a)| *a == act).map(|(r, _)| *r) else { return };
+                let kind = match act {
+                    BarAct::Wifi => PopKind::Wifi,
+                    BarAct::Bluetooth => PopKind::Bluetooth,
+                    BarAct::Volume => PopKind::Volume,
+                    BarAct::Brightness => PopKind::Brightness,
+                    BarAct::Battery => PopKind::Battery,
+                    BarAct::Clock => PopKind::Clock,
+                };
+                if self.pop.as_ref().is_some_and(|p| p.kind == kind) {
+                    self.pop = None;
+                } else {
+                    self.open_pop(el, kind, anchor);
+                }
+            }
             _ => {}
         }
     }
@@ -1504,8 +1517,11 @@ impl App {
                 let mut d = data.lock().unwrap().clone();
                 d.app = app;
                 if full {
+                    d.wifi_on = sys::wifi_present().then(sys::wifi_enabled);
                     d.wifi = sys::wifi_name();
+                    d.bt = sys::bt_powered();
                     d.volume = sys::volume();
+                    d.brightness = sys::brightness();
                     d.battery = sys::battery_info();
                 }
                 *data.lock().unwrap() = d;
@@ -1542,7 +1558,9 @@ fn blit(surface: &mut softbuffer::Surface<Rc<Window>, Rc<Window>>, g: &Gfx, pw: 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum BarAct {
     Wifi,
+    Bluetooth,
     Volume,
+    Brightness,
     Battery,
     Clock,
 }
@@ -1550,8 +1568,13 @@ enum BarAct {
 #[derive(Clone, Default, PartialEq)]
 struct BarData {
     app: String,
+    /// Wi-Fi radio (None without NetworkManager) and the network joined
+    wifi_on: Option<bool>,
     wifi: Option<String>,
+    /// Bluetooth power (None without BlueZ)
+    bt: Option<bool>,
     volume: Option<(u8, bool)>,
+    brightness: Option<u8>,
     battery: Option<(u8, bool)>,
 }
 
@@ -1671,17 +1694,405 @@ fn paint_bar(g: &Gfx, w: f32, d: &BarData, hover: Option<BarAct>, clock_24h: boo
         let col = if plugged { C_BAT } else if pct <= 20 { Color(1.0, 0.72, 0.2, 1.0) } else { T1 };
         g.fill_rrect(Rect::new(bx + 2.0, by + 2.0, 14.0 * pct as f32 / 100.0, 6.0), 1.2, col);
     }
+    if let Some(pct) = d.brightness {
+        let label = format!("{pct}%");
+        let r = item(g, BarAct::Brightness, &label, 16.0, hits);
+        g.text("\u{263C}", Rect::new(r.x, 0.0, 14.0, BAR_H), &f.small, T2, Align::Left);
+        g.text(&label, r, &f.small, T1, Align::Right);
+    }
     if let Some((pct, muted)) = d.volume {
         let label = if muted { "Muted".to_string() } else { format!("{pct}%") };
         let r = item(g, BarAct::Volume, &label, 16.0, hits);
         g.text("\u{266A}", Rect::new(r.x, 0.0, 14.0, BAR_H), &f.small, if muted { T3 } else { T2 }, Align::Left);
         g.text(&label, r, &f.small, if muted { T3 } else { T1 }, Align::Right);
     }
-    if let Some(name) = &d.wifi {
-        let name: String = name.chars().take(18).collect();
-        let r = item(g, BarAct::Wifi, &name, 16.0, hits);
+    if let Some(on) = d.bt {
+        let label = if on { "BT" } else { "BT off" };
+        let r = item(g, BarAct::Bluetooth, label, 0.0, hits);
+        g.text(label, r, &f.small, if on { T1 } else { T3 }, Align::Right);
+    }
+    if let Some(on) = d.wifi_on {
+        let label: String = match (&d.wifi, on) {
+            (Some(name), true) => name.chars().take(18).collect(),
+            (None, true) => "Not connected".into(),
+            _ => "Wi-Fi off".into(),
+        };
+        let r = item(g, BarAct::Wifi, &label, 16.0, hits);
         g.text("\u{21C4}", Rect::new(r.x, 0.0, 14.0, BAR_H), &f.small, T2, Align::Left);
-        g.text(&name, r, &f.small, T1, Align::Right);
+        g.text(&label, r, &f.small, if on && d.wifi.is_some() { T1 } else { T3 }, Align::Right);
+    }
+}
+
+/// A dropdown under a bar item. Closes when the pointer leaves it, on Esc, or when its item is clicked again.
+struct PopWin {
+    window: Rc<Window>,
+    surface: softbuffer::Surface<Rc<Window>, Rc<Window>>,
+    gfx: Gfx,
+    kind: PopKind,
+    data: Arc<Mutex<PopData>>,
+    state: PopState,
+    hits: Vec<(Rect, PopAct)>,
+    /// height last drawn, in DIPs
+    h: f32,
+    home: PhysicalPosition<i32>,
+    moves: u8,
+    entered: bool,
+    opened: Instant,
+    cursor: (f32, f32),
+    /// slider being dragged, the value waiting to be sent and when one was last sent
+    drag: Option<Rect>,
+    pending: Option<u8>,
+    last_send: Instant,
+    last_spin: Instant,
+    msg_at: Option<Instant>,
+}
+
+/// Read everything `kind` shows from the system (runs on a worker thread).
+fn refresh_pop(kind: PopKind, data: &Arc<Mutex<PopData>>) {
+    match kind {
+        PopKind::Wifi => {
+            let on = sys::wifi_enabled();
+            let saved = sys::saved_connections();
+            let nets = if on {
+                sys::wifi_networks()
+                    .into_iter()
+                    .map(|(active, ssid, signal, secure)| Net { known: saved.contains(&ssid), ssid, signal, secure, active })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            let mut d = data.lock().unwrap();
+            (d.wifi_on, d.nets, d.wifi_loaded) = (on, nets, true);
+        }
+        PopKind::Bluetooth => {
+            let on = sys::bt_powered().unwrap_or(false);
+            let devs = if on { sys::bt_devices().into_iter().map(|(mac, name, connected)| Dev { mac, name, connected }).collect() } else { Vec::new() };
+            let mut d = data.lock().unwrap();
+            (d.bt_on, d.devs, d.bt_loaded) = (on, devs, true);
+        }
+        PopKind::Volume => data.lock().unwrap().volume = sys::volume(),
+        PopKind::Brightness => data.lock().unwrap().brightness = sys::brightness(),
+        PopKind::Battery => data.lock().unwrap().battery = sys::battery_info(),
+        PopKind::Clock => {}
+    }
+}
+
+impl App {
+    fn open_pop(&mut self, el: &ActiveEventLoop, kind: PopKind, anchor: Rect) {
+        self.pop = None;
+        let Some(bar) = &self.bar else { return };
+        let Some(mon) = bar.window.current_monitor().or_else(|| el.primary_monitor()) else { return };
+        let k = mon.scale_factor();
+        let Ok(gfx) = Gfx::new((POP_W * k as f32).ceil() as i32, (POP_MAX_H * k as f32).ceil() as i32, k as f32) else { return };
+        let data = Arc::new(Mutex::new(PopData::default()));
+        let state = PopState::default();
+        let _ = gfx.begin((POP_W * k as f32).ceil() as i32, (POP_MAX_H * k as f32).ceil() as i32);
+        let h = linux_pop::paint(&gfx, kind, &data.lock().unwrap(), &state, &mut Vec::new(), self.clock_24h);
+        let _ = gfx.end();
+
+        let mon_w = mon.size().width as f64 / k;
+        let x = (anchor.cx() as f64 - POP_W as f64 / 2.0).clamp(4.0, (mon_w - POP_W as f64 - 4.0).max(4.0));
+        let home = PhysicalPosition::new(mon.position().x + (x * k) as i32, mon.position().y + ((BAR_H + 4.0) as f64 * k) as i32);
+        let attrs = Window::default_attributes()
+            .with_title("Nock dropdown")
+            .with_decorations(false)
+            .with_transparent(true)
+            .with_window_level(WindowLevel::AlwaysOnTop)
+            .with_x11_window_type(vec![WindowType::Dock])
+            .with_position(home)
+            .with_inner_size(LogicalSize::new(POP_W as f64, h as f64));
+        let Ok(window) = el.create_window(attrs).map(Rc::new) else { return };
+        let Ok(ctx) = softbuffer::Context::new(window.clone()) else { return };
+        let Ok(surface) = softbuffer::Surface::new(&ctx, window.clone()) else { return };
+        window.focus_window();
+
+        let d2 = data.clone();
+        std::thread::spawn(move || refresh_pop(kind, &d2));
+        self.pop = Some(PopWin {
+            window,
+            surface,
+            gfx,
+            kind,
+            data,
+            state,
+            hits: Vec::new(),
+            h,
+            home,
+            moves: 0,
+            entered: false,
+            opened: Instant::now(),
+            cursor: (0.0, 0.0),
+            drag: None,
+            pending: None,
+            last_send: Instant::now(),
+            last_spin: Instant::now(),
+            msg_at: None,
+        });
+    }
+
+    /// Housekeeping while a dropdown is open. Returns true if one is.
+    fn pop_tick(&mut self) -> bool {
+        let Some(p) = &mut self.pop else { return false };
+        // never entered: the pointer went elsewhere, so let it go
+        if !p.entered && p.opened.elapsed() > Duration::from_millis(2500) {
+            self.pop = None;
+            return false;
+        }
+        let snap = p.data.lock().unwrap().clone();
+        let spinning = snap.busy.is_some() || (!snap.wifi_loaded && p.kind == PopKind::Wifi && snap.wifi_on != false) || (!snap.bt_loaded && p.kind == PopKind::Bluetooth);
+        let mut redraw = false;
+        if spinning && p.last_spin.elapsed() >= Duration::from_millis(110) {
+            p.last_spin = Instant::now();
+            p.state.spin = (p.state.spin + 1) % 8;
+            redraw = true;
+        }
+        match (&snap.msg, p.msg_at) {
+            (Some(_), None) => p.msg_at = Some(Instant::now()),
+            (Some(_), Some(t)) if t.elapsed() > Duration::from_secs(4) => {
+                p.data.lock().unwrap().msg = None;
+                p.msg_at = None;
+                redraw = true;
+            }
+            (None, Some(_)) => p.msg_at = None,
+            _ => {}
+        }
+        if let Some(v) = p.pending {
+            if p.last_send.elapsed() >= Duration::from_millis(80) {
+                p.pending = None;
+                p.last_send = Instant::now();
+                Self::send_level(p.kind, v);
+            }
+        }
+        if redraw {
+            p.window.request_redraw();
+        }
+        true
+    }
+
+    fn send_level(kind: PopKind, pct: u8) {
+        std::thread::spawn(move || match kind {
+            PopKind::Volume => sys::set_volume(pct),
+            _ => sys::set_brightness(pct),
+        });
+    }
+
+    fn pop_event(&mut self, ev: WindowEvent) {
+        let Some(p) = &mut self.pop else { return };
+        match ev {
+            WindowEvent::RedrawRequested => {
+                let snap = p.data.lock().unwrap().clone();
+                let k = p.window.scale_factor() as f32;
+                let (cw, ch) = ((POP_W * k).ceil() as i32, (POP_MAX_H * k).ceil() as i32);
+                let _ = p.gfx.begin(cw, ch);
+                let h = linux_pop::paint(&p.gfx, p.kind, &snap, &p.state, &mut p.hits, self.clock_24h);
+                let _ = p.gfx.end();
+                if (h - p.h).abs() > 0.5 {
+                    p.h = h;
+                    let _ = p.window.request_inner_size(LogicalSize::new(POP_W as f64, h as f64));
+                }
+                blit(&mut p.surface, &p.gfx, cw as u32, (h * k).ceil() as u32);
+            }
+            // the window manager may place a new window itself: put it back (a few tries)
+            WindowEvent::Moved(pos) => {
+                if pos != p.home && p.moves < 3 {
+                    p.moves += 1;
+                    p.window.set_outer_position(p.home);
+                }
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                p.entered = true;
+                let k = p.window.scale_factor();
+                p.cursor = (position.x as f32 / k as f32, position.y as f32 / k as f32);
+                if let Some(r) = p.drag {
+                    Self::slide(p, r);
+                }
+                let hover = p.hits.iter().position(|(r, _)| r.contains(p.cursor.0, p.cursor.1));
+                if hover != p.state.hover {
+                    p.state.hover = hover;
+                    p.window.request_redraw();
+                }
+            }
+            WindowEvent::CursorEntered { .. } => p.entered = true,
+            WindowEvent::CursorLeft { .. } if p.entered && p.drag.is_none() => self.pop = None,
+            WindowEvent::MouseInput { state: ElementState::Released, button: MouseButton::Left, .. } => {
+                p.drag = None;
+                if let Some(v) = p.pending.take() {
+                    Self::send_level(p.kind, v);
+                }
+            }
+            WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => {
+                let Some(act) = p.hits.iter().find(|(r, _)| r.contains(p.cursor.0, p.cursor.1)).map(|(_, a)| *a) else { return };
+                self.pop_act(act);
+            }
+            WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
+                let Some(pw) = &mut p.state.pw else {
+                    if matches!(event.logical_key, Key::Named(NamedKey::Escape)) {
+                        self.pop = None;
+                    }
+                    return;
+                };
+                match &event.logical_key {
+                    Key::Named(NamedKey::Escape) => p.state.pw = None,
+                    Key::Named(NamedKey::Enter) => self.pop_act(PopAct::PwJoin),
+                    Key::Named(NamedKey::Backspace) => {
+                        pw.buf.pop();
+                    }
+                    _ => {
+                        if let Some(t) = event.text.as_deref().filter(|t| t.chars().all(|c| !c.is_control())) {
+                            if pw.buf.chars().count() < 63 {
+                                pw.buf.push_str(t);
+                            }
+                        }
+                    }
+                }
+                if let Some(p) = &self.pop {
+                    p.window.request_redraw();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Move a slider to the pointer; the value goes to the system at most every 80 ms.
+    fn slide(p: &mut PopWin, r: Rect) {
+        let pct = (((p.cursor.0 - r.x) / r.w).clamp(0.0, 1.0) * 100.0).round() as u8;
+        {
+            let mut d = p.data.lock().unwrap();
+            match p.kind {
+                PopKind::Volume => d.volume = Some((pct, d.volume.is_some_and(|v| v.1) && pct == 0)),
+                _ => d.brightness = Some(pct),
+            }
+        }
+        p.pending = Some(pct);
+        p.window.request_redraw();
+    }
+
+    fn pop_act(&mut self, act: PopAct) {
+        let Some(p) = &mut self.pop else { return };
+        let (kind, data) = (p.kind, p.data.clone());
+        let again = |f: Box<dyn FnOnce() + Send>| {
+            let d = data.clone();
+            std::thread::spawn(move || {
+                f();
+                refresh_pop(kind, &d);
+            });
+        };
+        match act {
+            PopAct::Toggle(0) => {
+                let on = !data.lock().unwrap().wifi_on;
+                {
+                    let mut d = data.lock().unwrap();
+                    d.wifi_on = on;
+                    d.wifi_loaded = !on;
+                    d.nets.clear();
+                }
+                again(Box::new(move || sys::set_wifi(on)));
+            }
+            PopAct::Toggle(_) => {
+                let on = !data.lock().unwrap().bt_on;
+                {
+                    let mut d = data.lock().unwrap();
+                    d.bt_on = on;
+                    d.bt_loaded = !on;
+                    d.devs.clear();
+                }
+                again(Box::new(move || sys::set_bt(on)));
+            }
+            PopAct::Mute => {
+                {
+                    let mut d = data.lock().unwrap();
+                    if let Some(v) = &mut d.volume {
+                        v.1 = !v.1;
+                    }
+                }
+                again(Box::new(sys::toggle_mute));
+            }
+            PopAct::Vol(r) | PopAct::Bri(r) => {
+                p.drag = Some(r);
+                Self::slide(p, r);
+            }
+            PopAct::Wifi(i) => {
+                let Some(n) = data.lock().unwrap().nets.get(i).cloned() else { return };
+                if n.active || data.lock().unwrap().busy.is_some() {
+                    return;
+                }
+                if n.secure && !n.known {
+                    p.state.pw = Some(Pw { ssid: n.ssid, ..Pw::default() });
+                } else {
+                    Self::join(&data, n.ssid, None);
+                }
+            }
+            PopAct::PwShow => {
+                if let Some(pw) = &mut p.state.pw {
+                    pw.show = !pw.show;
+                }
+            }
+            PopAct::PwCancel => p.state.pw = None,
+            PopAct::PwJoin => {
+                if let Some(pw) = p.state.pw.take() {
+                    if !pw.buf.is_empty() {
+                        Self::join(&data, pw.ssid, Some(pw.buf));
+                    }
+                }
+            }
+            PopAct::Bt(i) => {
+                let Some(dev) = data.lock().unwrap().devs.get(i).cloned() else { return };
+                if data.lock().unwrap().busy.is_some() {
+                    return;
+                }
+                {
+                    let mut d = data.lock().unwrap();
+                    d.busy = Some(dev.name.clone());
+                    d.msg = None;
+                }
+                let d2 = data.clone();
+                std::thread::spawn(move || {
+                    let ok = sys::bt_connect(&dev.mac, !dev.connected);
+                    {
+                        let mut d = d2.lock().unwrap();
+                        d.busy = None;
+                        d.msg = Some((
+                            match (ok, dev.connected) {
+                                (true, false) => format!("Connected to {}", dev.name),
+                                (true, true) => format!("Disconnected from {}", dev.name),
+                                _ => format!("Couldn't connect to {}", dev.name),
+                            },
+                            ok,
+                        ));
+                    }
+                    refresh_pop(PopKind::Bluetooth, &d2);
+                });
+            }
+            PopAct::Link(page) => {
+                sys::open_settings(page);
+                self.pop = None;
+                return;
+            }
+            PopAct::CalMonth(n) => p.state.cal_off += n,
+            PopAct::CalToday => p.state.cal_off = 0,
+        }
+        if let Some(p) = &self.pop {
+            p.window.request_redraw();
+        }
+    }
+
+    /// Join a Wi-Fi network on a worker thread, showing a spinner on its row meanwhile.
+    fn join(data: &Arc<Mutex<PopData>>, ssid: String, password: Option<String>) {
+        {
+            let mut d = data.lock().unwrap();
+            d.busy = Some(ssid.clone());
+            d.msg = None;
+        }
+        let d2 = data.clone();
+        std::thread::spawn(move || {
+            let ok = sys::wifi_connect(&ssid, password.as_deref());
+            {
+                let mut d = d2.lock().unwrap();
+                d.busy = None;
+                d.msg = Some((if ok { format!("Connected to {ssid}") } else { format!("Couldn't connect to {ssid}") }, ok));
+            }
+            refresh_pop(PopKind::Wifi, &d2);
+        });
     }
 }
 
@@ -1706,7 +2117,11 @@ impl ApplicationHandler for App {
 
     fn window_event(&mut self, el: &ActiveEventLoop, id: WindowId, ev: WindowEvent) {
         if self.bar.as_ref().is_some_and(|b| b.window.id() == id) {
-            self.bar_event(ev);
+            self.bar_event(el, ev);
+            return;
+        }
+        if self.pop.as_ref().is_some_and(|p| p.window.id() == id) {
+            self.pop_event(ev);
             return;
         }
         match ev {
@@ -1783,6 +2198,7 @@ impl ApplicationHandler for App {
             }
         }
         self.bar_tick(minute);
+        let pop_open = self.pop_tick();
         if !self.expanded && self.panel.media_playing() {
             self.redraw(); // equaliser bars
         }
@@ -1801,6 +2217,10 @@ impl ApplicationHandler for App {
                 self.redraw();
             }
             el.set_control_flow(ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(1000)));
+        }
+        if pop_open {
+            // spinners and slow connects: look again soon
+            el.set_control_flow(ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(120)));
         }
     }
 }
@@ -1821,6 +2241,7 @@ pub fn run() {
         last_pill_w: PILL_W,
         last_minute: 99,
         bar: None,
+        pop: None,
     };
     if let Err(e) = el.run_app(&mut app) {
         eprintln!("nock: {e}");
@@ -1882,7 +2303,7 @@ mod tests {
             g.save_png(&format!("{dir}/{name}.png"));
         }
         // the top bar with sample data
-        let d = BarData { app: "Firefox".into(), wifi: Some("Home Network".into()), volume: Some((65, false)), battery: Some((82, false)) };
+        let d = BarData { app: "Firefox".into(), wifi_on: Some(true), wifi: Some("Home Network".into()), bt: Some(true), volume: Some((65, false)), brightness: Some(70), battery: Some((82, false)) };
         let _ = g.begin(EXP_W as i32, BAR_H as i32);
         paint_bar(&g, EXP_W, &d, Some(BarAct::Volume), false, &mut Vec::new());
         let _ = g.end();

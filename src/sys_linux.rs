@@ -255,6 +255,150 @@ pub fn active_app() -> String {
     c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
 }
 
+/// Split one `nmcli -t` line into fields; a colon inside a value is written `\:`.
+pub fn split_nmcli(line: &str) -> Vec<String> {
+    let (mut out, mut cur, mut esc) = (Vec::new(), String::new(), false);
+    for c in line.chars() {
+        match (esc, c) {
+            (true, c) => {
+                cur.push(c);
+                esc = false;
+            }
+            (false, '\\') => esc = true,
+            (false, ':') => out.push(std::mem::take(&mut cur)),
+            (false, c) => cur.push(c),
+        }
+    }
+    out.push(cur);
+    out
+}
+
+/// Networks from `nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi list`:
+/// (in use, name, signal %, secured). One entry per name, strongest first, the current one on top.
+pub fn parse_wifi_list(s: &str) -> Vec<(bool, String, u8, bool)> {
+    let mut nets: Vec<(bool, String, u8, bool)> = Vec::new();
+    for f in s.lines().map(split_nmcli) {
+        let [in_use, ssid, signal, security] = &f[..] else { continue };
+        if ssid.is_empty() {
+            continue;
+        }
+        let net = (in_use == "*", ssid.clone(), signal.parse().unwrap_or(0), !security.is_empty() && security != "--");
+        match nets.iter_mut().find(|n| n.1 == *ssid) {
+            Some(old) => {
+                if net.0 || (!old.0 && net.2 > old.2) {
+                    *old = net;
+                }
+            }
+            None => nets.push(net),
+        }
+    }
+    nets.sort_by(|a, b| b.0.cmp(&a.0).then(b.2.cmp(&a.2)));
+    nets
+}
+
+/// NetworkManager answers (so the bar shows a Wi-Fi item at all).
+pub fn wifi_present() -> bool {
+    output("nmcli", &["radio", "wifi"]).is_some()
+}
+
+pub fn wifi_enabled() -> bool {
+    output("nmcli", &["radio", "wifi"]).is_some_and(|s| s.trim() == "enabled")
+}
+
+pub fn set_wifi(on: bool) {
+    let _ = output("nmcli", &["radio", "wifi", if on { "on" } else { "off" }]);
+}
+
+pub fn wifi_networks() -> Vec<(bool, String, u8, bool)> {
+    output("nmcli", &["-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", "dev", "wifi", "list"]).map(|s| parse_wifi_list(&s)).unwrap_or_default()
+}
+
+/// Names of saved connections (a saved Wi-Fi network joins without asking for the password).
+pub fn saved_connections() -> Vec<String> {
+    output("nmcli", &["-t", "-f", "NAME", "connection", "show"])
+        .map(|s| s.lines().map(|l| split_nmcli(l).concat()).collect())
+        .unwrap_or_default()
+}
+
+/// Join a network. The password goes in through stdin, not the command line, so it
+/// does not show up in the process list.
+pub fn wifi_connect(ssid: &str, password: Option<&str>) -> bool {
+    use std::io::Write;
+    let mut cmd = std::process::Command::new("nmcli");
+    if password.is_some() {
+        cmd.arg("--ask");
+    }
+    cmd.args(["dev", "wifi", "connect", ssid]);
+    let Ok(mut child) = cmd.stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn() else {
+        return false;
+    };
+    if let (Some(pw), Some(mut stdin)) = (password, child.stdin.take()) {
+        let _ = writeln!(stdin, "{pw}");
+    }
+    child.wait().is_ok_and(|s| s.success())
+}
+
+/// "Device AA:BB:CC:DD:EE:FF Some Name" lines from `bluetoothctl devices`.
+pub fn parse_bt_devices(s: &str) -> Vec<(String, String)> {
+    s.lines()
+        .filter_map(|l| {
+            let rest = l.trim().strip_prefix("Device ")?;
+            let (mac, name) = rest.split_once(' ')?;
+            Some((mac.to_string(), name.trim().to_string()))
+        })
+        .collect()
+}
+
+pub fn bt_powered() -> Option<bool> {
+    Some(output("bluetoothctl", &["show"])?.contains("Powered: yes"))
+}
+
+/// Paired devices as (address, name, connected).
+pub fn bt_devices() -> Vec<(String, String, bool)> {
+    let paired = output("bluetoothctl", &["devices", "Paired"]).or_else(|| output("bluetoothctl", &["devices"])).unwrap_or_default();
+    parse_bt_devices(&paired)
+        .into_iter()
+        .map(|(mac, name)| {
+            let on = output("bluetoothctl", &["info", &mac]).is_some_and(|i| i.contains("Connected: yes"));
+            (mac, name, on)
+        })
+        .collect()
+}
+
+pub fn set_bt(on: bool) {
+    let _ = output("bluetoothctl", &["power", if on { "on" } else { "off" }]);
+}
+
+pub fn bt_connect(mac: &str, connect: bool) -> bool {
+    output("bluetoothctl", &[if connect { "connect" } else { "disconnect" }, mac]).is_some()
+}
+
+/// Percent from `brightnessctl -m` ("intel_backlight,backlight,2400,50%,4800").
+pub fn parse_brightnessctl(s: &str) -> Option<u8> {
+    s.trim().split(',').nth(3)?.trim_end_matches('%').parse().ok()
+}
+
+pub fn brightness() -> Option<u8> {
+    parse_brightnessctl(&output("brightnessctl", &["-m"])?)
+}
+
+pub fn set_brightness(pct: u8) {
+    let _ = output("brightnessctl", &["set", &format!("{}%", pct.clamp(1, 100))]);
+}
+
+pub fn set_volume(pct: u8) {
+    let v = pct.min(100);
+    if output("wpctl", &["set-volume", "@DEFAULT_AUDIO_SINK@", &format!("{}", v as f32 / 100.0)]).is_none() {
+        let _ = output("pactl", &["set-sink-volume", "@DEFAULT_SINK@", &format!("{v}%")]);
+    }
+}
+
+pub fn toggle_mute() {
+    if output("wpctl", &["set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"]).is_none() {
+        let _ = output("pactl", &["set-sink-mute", "@DEFAULT_SINK@", "toggle"]);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -270,6 +414,21 @@ mod tests {
         assert_eq!(super::parse_pactl_volume("Volume: front-left: 42598 /  65% / -11.26 dB,   front-right: 42598 /  65% / -11.26 dB"), Some(65));
         assert_eq!(super::parse_nmcli_wifi("no:Other\nyes:Home\\:5G\n"), Some("Home:5G".to_string()));
         assert_eq!(super::parse_nmcli_wifi("no:Other\n"), None);
+    }
+
+    #[test]
+    fn network_and_device_parsers() {
+        assert_eq!(super::split_nmcli(r"yes:Home\:5G:80:WPA2"), vec!["yes", "Home:5G", "80", "WPA2"]);
+        let list = " :Cafe:55:\n*:Home:90:WPA2\n :Home:40:WPA2\n :Far:20:WPA2\n :Hidden:90:\n::50:WPA2";
+        let nets = super::parse_wifi_list(list);
+        let names: Vec<_> = nets.iter().map(|n| n.1.as_str()).collect();
+        assert_eq!(names, ["Home", "Hidden", "Cafe", "Far"], "current first, then strongest; unnamed skipped");
+        assert!(nets[0].0 && nets[0].3 && !nets[2].3);
+        assert_eq!(
+            super::parse_bt_devices("Device AA:BB:CC:DD:EE:01 WH-1000XM4\nDevice AA:BB:CC:DD:EE:02 My Keyboard\nnoise"),
+            vec![("AA:BB:CC:DD:EE:01".to_string(), "WH-1000XM4".to_string()), ("AA:BB:CC:DD:EE:02".to_string(), "My Keyboard".to_string())]
+        );
+        assert_eq!(super::parse_brightnessctl("intel_backlight,backlight,2400,50%,4800\n"), Some(50));
     }
 
     #[test]
