@@ -7,9 +7,13 @@ use std::fs;
 use std::path::PathBuf;
 
 pub fn data_dir() -> PathBuf {
-    let base = std::env::var_os("APPDATA")
+    #[cfg(windows)]
+    let base = std::env::var_os("APPDATA").map(PathBuf::from);
+    #[cfg(not(windows))]
+    let base = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")));
+    let base = base.unwrap_or_else(|| PathBuf::from("."));
     let d = base.join("Nock");
     // Settings from earlier working names are carried over once.
     if !d.exists() {

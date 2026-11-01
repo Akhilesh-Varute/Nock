@@ -1,33 +1,45 @@
 //! Linux entry point (work in progress): a borderless X11 winit window that draws
 //! the notch pill and, on click, the tabbed panel through the shared `gfx` API.
-//! Pages are placeholders except Stats; they move over from `ui.rs` as `App`
-//! sheds its Windows types.
+//! Pages are placeholders except Today and Stats; they move over from `ui.rs`
+//! as `App` sheds its Windows types.
 
 use std::num::NonZeroU32;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition};
 use winit::event::{ElementState, MouseButton, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::keyboard::{Key, NamedKey};
 use winit::platform::x11::{EventLoopBuilderExtX11, WindowAttributesExtX11, WindowType};
 use winit::window::{Window, WindowId, WindowLevel};
 
+use crate::cal::{days_in_month, first_weekday, fmt_time};
 use crate::gfx::*;
+use crate::store::{self, Todo};
 
 const PILL_W: f32 = 176.0;
 const PILL_H: f32 = 34.0;
 const EXP_W: f32 = 600.0;
 const EXP_H: f32 = 250.0;
 const CONTENT_Y: f32 = 40.0;
+const MAX_TODO: usize = 5;
 
 const T1: Color = Color::white(0.96);
 const T2: Color = Color::white(0.62);
 const T3: Color = Color::white(0.38);
+const SURF: Color = Color::white(0.09);
+const HOVER: Color = Color::white(0.17);
 const ACCENT: Color = Color(0.40, 0.60, 1.0, 1.0);
+const C_BAT: Color = Color(0.40, 0.85, 0.50, 1.0);
+const C_UP: Color = Color(0.72, 0.58, 1.0, 1.0);
+const C_FOC: Color = Color(1.0, 0.58, 0.42, 1.0);
 
 const TAB_LABELS: [&str; 9] =
     ["Media", "Controls", "Today", "Stats", "Clipboard", "Shelf", "Apps", "Games", "Power"];
+const TODAY: usize = 2;
+const STATS: usize = 3;
 
 /// Where each tab sits in the top row (same layout rule as the Windows panel).
 fn tab_rects() -> Vec<Rect> {
@@ -57,10 +69,6 @@ fn tab_rects() -> Vec<Rect> {
         .collect()
 }
 
-fn collapse_rect() -> Rect {
-    Rect::new(EXP_W - 40.0, 8.0, 28.0, 28.0)
-}
-
 /// (used fraction, total MiB, used MiB) from /proc/meminfo.
 fn mem_info() -> Option<(f32, u64, u64)> {
     let s = std::fs::read_to_string("/proc/meminfo").ok()?;
@@ -80,14 +88,395 @@ fn uptime() -> String {
     format!("{}h {:02}m", secs / 3600, secs / 60 % 60)
 }
 
-#[derive(Default)]
+// ------------------------------------------------------------------ state ----
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Act {
+    Tab(usize),
+    Collapse,
+    TimerPreset(u32),
+    TimerCustom,
+    TimerToggle,
+    TimerReset,
+    TodoToggle(usize),
+    TodoDel(usize),
+    TodoFocus(usize),
+    TodoAdd,
+}
+
+struct Hit {
+    r: Rect,
+    act: Act,
+}
+
+/// Everything the panel shows; no window types, so it is testable and portable.
+struct Panel {
+    page: usize,
+    hover: Option<Act>,
+    timer_total_s: u32,
+    /// time left when not running
+    rem_ms: i64,
+    run_since: Option<Instant>,
+    timer_task: Option<String>,
+    todos: Vec<Todo>,
+    focus_today: u32,
+    done_today: u32,
+    /// text being typed, and whether it is for the timer length (else a new to-do)
+    entering: Option<String>,
+    entry_timer: bool,
+}
+
+impl Panel {
+    fn new() -> Panel {
+        let (focus_today, done_today) = store::load_focus_today();
+        Panel {
+            page: TODAY,
+            hover: None,
+            timer_total_s: 25 * 60,
+            rem_ms: 25 * 60 * 1000,
+            run_since: None,
+            timer_task: None,
+            todos: store::load_todos(),
+            focus_today,
+            done_today,
+            entering: None,
+            entry_timer: false,
+        }
+    }
+
+    fn running(&self) -> bool {
+        self.run_since.is_some()
+    }
+
+    fn left_ms(&self) -> i64 {
+        match self.run_since {
+            Some(t) => (self.rem_ms - t.elapsed().as_millis() as i64).max(0),
+            None => self.rem_ms,
+        }
+    }
+
+    fn set_timer(&mut self, mins: u32) {
+        self.timer_total_s = mins * 60;
+        self.rem_ms = mins as i64 * 60_000;
+        self.run_since = None;
+    }
+
+    fn toggle_timer(&mut self) {
+        if self.running() {
+            self.rem_ms = self.left_ms();
+            self.run_since = None;
+        } else {
+            if self.rem_ms <= 0 {
+                self.rem_ms = self.timer_total_s as i64 * 1000;
+            }
+            self.run_since = Some(Instant::now());
+        }
+    }
+
+    /// Credit a finished session once; returns true when it just ended.
+    fn tick(&mut self) -> bool {
+        if self.running() && self.left_ms() == 0 {
+            self.rem_ms = 0;
+            self.run_since = None;
+            self.focus_today += self.timer_total_s / 60;
+            store::save_focus_today(self.focus_today, self.done_today);
+            return true;
+        }
+        false
+    }
+
+    /// Returns true when the window should collapse.
+    fn act(&mut self, act: Act) -> bool {
+        match act {
+            Act::Tab(i) => self.page = i,
+            Act::Collapse => return true,
+            Act::TimerPreset(m) => self.set_timer(m),
+            Act::TimerCustom => {
+                self.entering = Some(String::new());
+                self.entry_timer = true;
+            }
+            Act::TimerToggle => self.toggle_timer(),
+            Act::TimerReset => {
+                let m = self.timer_total_s / 60;
+                self.set_timer(m);
+                self.timer_task = None;
+            }
+            Act::TodoToggle(i) => {
+                if let Some(t) = self.todos.get_mut(i) {
+                    t.done = !t.done;
+                    self.done_today = if t.done { self.done_today + 1 } else { self.done_today.saturating_sub(1) };
+                    store::save_todos(&self.todos);
+                    store::save_focus_today(self.focus_today, self.done_today);
+                }
+            }
+            Act::TodoDel(i) => {
+                if i < self.todos.len() {
+                    self.todos.remove(i);
+                    store::save_todos(&self.todos);
+                }
+            }
+            Act::TodoFocus(i) => {
+                if let Some(t) = self.todos.get(i) {
+                    self.timer_task = Some(t.text.clone());
+                    let m = self.timer_total_s / 60;
+                    self.set_timer(m);
+                    self.toggle_timer();
+                }
+            }
+            Act::TodoAdd => {
+                self.entering = Some(String::new());
+                self.entry_timer = false;
+            }
+        }
+        false
+    }
+
+    /// Typed text goes to the open entry box. Returns true if the key was used.
+    fn key(&mut self, key: &Key, text: Option<&str>) -> bool {
+        let Some(buf) = &mut self.entering else { return false };
+        match key {
+            Key::Named(NamedKey::Escape) => self.entering = None,
+            Key::Named(NamedKey::Backspace) => {
+                buf.pop();
+            }
+            Key::Named(NamedKey::Enter) => {
+                let s = std::mem::take(buf);
+                self.entering = None;
+                let s = s.trim();
+                if self.entry_timer {
+                    if let Ok(m) = s.parse::<u32>() {
+                        self.set_timer(m.clamp(1, 600));
+                    }
+                } else if !s.is_empty() && self.todos.len() < MAX_TODO {
+                    self.todos.push(Todo { done: false, text: s.chars().take(60).collect() });
+                    store::save_todos(&self.todos);
+                }
+            }
+            _ => {
+                if let Some(t) = text.filter(|t| t.chars().all(|c| !c.is_control())) {
+                    if !(self.entry_timer && !t.chars().all(|c| c.is_ascii_digit())) && buf.chars().count() < 60 {
+                        buf.push_str(t);
+                    }
+                }
+            }
+        }
+        true
+    }
+
+    fn hot(&self, act: Act) -> bool {
+        self.hover == Some(act)
+    }
+
+    // ---------------------------------------------------------------- draw ----
+
+    fn draw(&self, g: &Gfx, hits: &mut Vec<Hit>) {
+        let f = &g.fonts;
+        g.fill_rrect(Rect::new(0.0, -24.0, EXP_W, EXP_H + 24.0), 24.0, Color::rgb(0, 0, 0));
+
+        let chev = Rect::new(EXP_W - 40.0, 8.0, 28.0, 28.0);
+        hits.push(Hit { r: chev, act: Act::Collapse });
+        g.icon('\u{2303}', chev, &f.icon14, if self.hot(Act::Collapse) { T1 } else { T3 });
+
+        let rects = tab_rects();
+        g.fill_rrect(rects[self.page], 14.0, ACCENT.fade(0.20));
+        for (i, r) in rects.iter().enumerate() {
+            hits.push(Hit { r: *r, act: Act::Tab(i) });
+            let hot = self.hot(Act::Tab(i));
+            if i != self.page && hot {
+                g.fill_rrect(*r, 14.0, Color::white(0.07));
+            }
+            let col = if i == self.page { ACCENT } else if hot { T2 } else { T3 };
+            g.text(TAB_LABELS[i], *r, &f.small, col, Align::Center);
+        }
+
+        let start = hits.len();
+        g.shifted(0.0, CONTENT_Y, || match self.page {
+            TODAY => self.page_today(g, hits),
+            STATS => page_stats(g),
+            p => {
+                let r = Rect::new(0.0, 0.0, EXP_W, EXP_H - CONTENT_Y);
+                g.text(&format!("{} is not ported to Linux yet", TAB_LABELS[p]), r, &f.body, T3, Align::Center);
+            }
+        });
+        for h in &mut hits[start..] {
+            h.r.y += CONTENT_Y;
+        }
+    }
+
+    fn page_today(&self, g: &Gfx, hits: &mut Vec<Hit>) {
+        let f = &g.fonts;
+        for (r, c) in [
+            (Rect::new(14.0, 2.0, 208.0, 198.0), C_FOC),
+            (Rect::new(230.0, 2.0, 190.0, 198.0), C_BAT),
+            (Rect::new(428.0, 2.0, 158.0, 198.0), C_UP),
+        ] {
+            g.fill_rrect(r, 20.0, Color::white(0.05));
+            g.fill_rrect(r, 20.0, c.fade(0.07));
+        }
+
+        // ---- focus timer
+        let title = match &self.timer_task {
+            Some(t) => format!("Focus \u{00B7} {}", t.chars().take(20).collect::<String>()),
+            None => "Focus timer".to_string(),
+        };
+        g.text(&title, Rect::new(28.0, 12.0, 185.0, 22.0), &f.small, C_FOC, Align::Left);
+        g.text(
+            &format!("Today: {} min focus \u{00B7} {} done", self.focus_today, self.done_today),
+            Rect::new(28.0, 176.0, 190.0, 16.0),
+            &f.tiny,
+            T3,
+            Align::Left,
+        );
+        let left = self.left_ms();
+        let done = !self.running() && left == 0;
+        let face = match (&self.entering, self.entry_timer) {
+            (Some(buf), true) => format!("{buf}\u{2502} min"),
+            _ => fmt_time(left as f64 / 1000.0),
+        };
+        g.text(&face, Rect::new(28.0, 34.0, 175.0, 52.0), &f.big, if done && !self.entry_timer { C_FOC } else { T1 }, Align::Left);
+        if self.entry_timer {
+            g.text("Enter to start \u{00B7} Esc to cancel", Rect::new(28.0, 76.0, 190.0, 16.0), &f.tiny, T3, Align::Left);
+        }
+        if done {
+            g.text("Time's up", Rect::new(110.0, 12.0, 90.0, 22.0), &f.small, C_FOC, Align::Right);
+        }
+        for (i, mins) in [5u32, 15, 25, 50].iter().enumerate() {
+            let r = Rect::new(28.0 + i as f32 * 38.0, 94.0, 34.0, 26.0);
+            let act = Act::TimerPreset(*mins);
+            hits.push(Hit { r, act });
+            let sel = self.timer_total_s == mins * 60;
+            let bg = if self.hot(act) { HOVER } else if sel { C_FOC.fade(0.28) } else { SURF };
+            g.fill_rrect(r, 13.0, bg);
+            g.text(&format!("{mins}m"), r, &f.small, if sel { C_FOC } else { T2 }, Align::Center);
+        }
+        let cr = Rect::new(28.0 + 4.0 * 38.0, 94.0, 34.0, 26.0);
+        hits.push(Hit { r: cr, act: Act::TimerCustom });
+        g.fill_rrect(cr, 13.0, if self.hot(Act::TimerCustom) || self.entry_timer { HOVER } else { SURF });
+        g.icon('\u{270E}', cr, &f.icon14, T2);
+        let sb = Rect::new(28.0, 130.0, 108.0, 36.0);
+        hits.push(Hit { r: sb, act: Act::TimerToggle });
+        g.fill_rrect(sb, 18.0, C_FOC.fade(if self.hot(Act::TimerToggle) { 1.0 } else { 0.9 }));
+        g.text(if self.running() { "Pause" } else { "Start" }, sb, &f.body, Color(0.0, 0.0, 0.0, 1.0), Align::Center);
+        let rb = Rect::new(144.0, 130.0, 36.0, 36.0);
+        hits.push(Hit { r: rb, act: Act::TimerReset });
+        g.fill_rrect(rb, 18.0, if self.hot(Act::TimerReset) { HOVER } else { SURF });
+        g.icon('\u{21BA}', rb, &f.icon14, T1);
+
+        // ---- to-do
+        let (tx, tw) = (240.0, 170.0);
+        g.text("To-do", Rect::new(tx, 12.0, 100.0, 22.0), &f.small, C_BAT, Align::Left);
+        for (i, t) in self.todos.iter().enumerate() {
+            let y = 38.0 + i as f32 * 28.0;
+            let row = Rect::new(tx, y, tw, 26.0);
+            let cb = Rect::new(tx, y, 26.0, 26.0);
+            let del = Rect::new(tx + tw - 24.0, y, 24.0, 26.0);
+            let fb = Rect::new(tx + tw - 50.0, y, 24.0, 26.0);
+            if !t.done {
+                hits.push(Hit { r: fb, act: Act::TodoFocus(i) });
+            }
+            hits.push(Hit { r: cb, act: Act::TodoToggle(i) });
+            hits.push(Hit { r: del, act: Act::TodoDel(i) });
+            let over = self.hot(Act::TodoToggle(i)) || self.hot(Act::TodoDel(i)) || self.hot(Act::TodoFocus(i));
+            if over {
+                g.fill_rrect(row, 9.0, Color::white(0.07));
+            }
+            g.icon(if t.done { '\u{2611}' } else { '\u{2610}' }, cb, &f.icon14, if t.done { C_BAT } else { T2 });
+            g.text(
+                &t.text,
+                Rect::new(tx + 30.0, y, tw - 30.0 - 26.0, 26.0),
+                &f.small,
+                if t.done { T3 } else { T1 },
+                Align::Left,
+            );
+            if over {
+                g.fill_rrect(Rect::new(tx + tw - 52.0, y + 1.0, 52.0, 24.0), 8.0, Color(0.117, 0.117, 0.117, 1.0));
+                if !t.done {
+                    g.icon('\u{25CE}', fb, &f.icon14, if self.hot(Act::TodoFocus(i)) { ACCENT } else { T3 });
+                }
+                g.icon('\u{2715}', del, &f.icon14, if self.hot(Act::TodoDel(i)) { T1 } else { T3 });
+            }
+        }
+        let y = 38.0 + self.todos.len() as f32 * 28.0;
+        if let (Some(buf), false) = (&self.entering, self.entry_timer) {
+            let r = Rect::new(tx, y, tw, 26.0);
+            g.fill_rrect(r, 9.0, Color::white(0.14));
+            g.text(&format!("{buf}\u{2502}"), Rect::new(r.x + 10.0, r.y, r.w - 16.0, r.h), &f.small, T1, Align::Left);
+            g.text("Enter to add \u{00B7} Esc to cancel", Rect::new(tx, y + 28.0, tw, 18.0), &f.tiny, T3, Align::Left);
+        } else if self.todos.len() < MAX_TODO {
+            let r = Rect::new(tx, y, tw, 26.0);
+            hits.push(Hit { r, act: Act::TodoAdd });
+            if self.hot(Act::TodoAdd) {
+                g.fill_rrect(r, 9.0, Color::white(0.07));
+            }
+            g.icon('+', Rect::new(tx, y, 26.0, 26.0), &f.icon14, C_BAT);
+            g.text("Add task", Rect::new(tx + 30.0, y, 140.0, 26.0), &f.small, T3, Align::Left);
+        }
+
+        draw_calendar(g);
+    }
+}
+
+fn draw_calendar(g: &Gfx) {
+    let f = &g.fonts;
+    let (year, month, day, wday, ..) = crate::sys::local_time();
+    const MONTHS: [&str; 12] = [
+        "January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
+        "November", "December",
+    ];
+    let (x0, cw) = (432.0, 20.0);
+    g.text(
+        &format!("{} {}", MONTHS[(month as usize - 1).min(11)], year),
+        Rect::new(x0 - 4.0, 12.0, cw * 7.0 + 8.0, 22.0),
+        &f.small,
+        C_UP,
+        Align::Center,
+    );
+    for (i, d) in ["S", "M", "T", "W", "T", "F", "S"].iter().enumerate() {
+        g.text(d, Rect::new(x0 + i as f32 * cw, 36.0, cw, 18.0), &f.tiny, C_UP.fade(0.55), Align::Center);
+    }
+    let first = first_weekday(day, wday);
+    for d in 1..=days_in_month(year, month) {
+        let slot = first + d - 1;
+        let (c, r) = (slot % 7, slot / 7);
+        let cell = Rect::new(x0 + c as f32 * cw, 56.0 + r as f32 * 20.0, cw, 20.0);
+        if d == day {
+            g.fill_circle(cell.cx(), cell.cy(), 9.5, C_UP);
+            g.text(&d.to_string(), cell, &f.tiny, Color(0.0, 0.0, 0.0, 1.0), Align::Center);
+        } else {
+            g.text(&d.to_string(), cell, &f.tiny, if c == 0 || c == 6 { T3 } else { T2 }, Align::Center);
+        }
+    }
+}
+
+fn page_stats(g: &Gfx) {
+    let f = &g.fonts;
+    let tile = |x: f32, label: &str, value: &str, frac: Option<f32>| {
+        let r = Rect::new(x, 20.0, 170.0, 96.0);
+        g.fill_rrect(r, 14.0, SURF);
+        g.text(label, Rect::new(r.x + 14.0, r.y + 10.0, r.w - 28.0, 16.0), &f.tiny, T2, Align::Left);
+        g.text(value, Rect::new(r.x + 14.0, r.y + 30.0, r.w - 28.0, 36.0), &f.big, T1, Align::Left);
+        if let Some(k) = frac {
+            let bar = Rect::new(r.x + 14.0, r.y + r.h - 18.0, r.w - 28.0, 5.0);
+            g.fill_rrect(bar, 2.5, Color::white(0.12));
+            g.fill_rrect(Rect::new(bar.x, bar.y, bar.w * k.clamp(0.0, 1.0), bar.h), 2.5, ACCENT);
+        }
+    };
+    let m = mem_info();
+    tile(24.0, "MEMORY", &m.map_or("n/a".into(), |m| format!("{:.0}%", m.0 * 100.0)), m.map(|m| m.0));
+    tile(215.0, "MEMORY USED", &m.map_or("n/a".into(), |m| format!("{:.1} GB", m.2 as f32 / 1024.0)), None);
+    tile(406.0, "UPTIME", &uptime(), None);
+}
+
+// ----------------------------------------------------------------- window ----
+
 struct App {
     window: Option<Rc<Window>>,
     surface: Option<softbuffer::Surface<Rc<Window>, Rc<Window>>>,
     gfx: Option<Gfx>,
     expanded: bool,
-    page: usize,
-    hover: Option<usize>,
+    panel: Panel,
+    /// hit boxes from the last frame (logical coordinates)
+    hits: Vec<Hit>,
     /// pointer in logical (DIP) coordinates
     cursor: (f32, f32),
 }
@@ -95,6 +484,12 @@ struct App {
 impl App {
     fn size(&self) -> (f32, f32) {
         if self.expanded { (EXP_W, EXP_H) } else { (PILL_W, PILL_H) }
+    }
+
+    fn redraw(&self) {
+        if let Some(w) = &self.window {
+            w.request_redraw();
+        }
     }
 
     /// Resize to the pill or the panel and keep the window centred on the top edge.
@@ -110,24 +505,29 @@ impl App {
         win.request_redraw();
     }
 
-    fn click(&mut self) {
+    fn act_at_cursor(&self) -> Option<Act> {
         let (x, y) = self.cursor;
+        self.hits.iter().rev().find(|h| h.r.contains(x, y)).map(|h| h.act)
+    }
+
+    fn click(&mut self) {
         if !self.expanded {
             self.expanded = true;
-        } else if collapse_rect().contains(x, y) {
-            self.expanded = false;
-        } else if let Some(i) = tab_rects().iter().position(|r| r.contains(x, y)) {
-            self.page = i;
+        } else if let Some(act) = self.act_at_cursor() {
+            if self.panel.act(act) {
+                self.expanded = false;
+            }
         } else {
             return;
         }
-        self.hover = None;
+        self.panel.hover = None;
         self.apply_size();
+        self.redraw();
     }
 
     fn draw(&mut self) {
         let (w, h) = self.size();
-        let (expanded, page, hover) = (self.expanded, self.page, self.hover);
+        let expanded = self.expanded;
         let (Some(win), Some(surface)) = (&self.window, &mut self.surface) else { return };
         let scale = win.scale_factor() as f32;
         let (pw, ph) = ((w * scale).ceil() as u32, (h * scale).ceil() as u32);
@@ -137,11 +537,13 @@ impl App {
         }
         let Some(g) = &self.gfx else { return };
         let _ = g.begin(pw as i32, ph as i32);
+        self.hits.clear();
         if expanded {
-            draw_panel(g, page, hover);
+            self.panel.draw(g, &mut self.hits);
         } else {
             g.fill_rrect(Rect::new(0.0, -20.0, w, h + 20.0), 17.0, Color::rgb(0, 0, 0));
-            g.text("Nock", Rect::new(0.0, 0.0, w, h), &g.fonts.menu, Color::white(0.9), Align::Center);
+            let label = if self.panel.running() { fmt_time(self.panel.left_ms() as f64 / 1000.0) } else { "Nock".into() };
+            g.text(&label, Rect::new(0.0, 0.0, w, h), &g.fonts.menu, Color::white(0.9), Align::Center);
         }
         let _ = g.end();
 
@@ -160,59 +562,7 @@ impl App {
         }
         let _ = buf.present();
     }
-
 }
-
-fn draw_panel(g: &Gfx, page: usize, hover: Option<usize>) {
-        let f = &g.fonts;
-        g.fill_rrect(Rect::new(0.0, -24.0, EXP_W, EXP_H + 24.0), 24.0, Color::rgb(0, 0, 0));
-
-        let chev = collapse_rect();
-        g.icon('\u{2303}', chev, &f.icon14, T3);
-
-        let rects = tab_rects();
-        g.fill_rrect(rects[page], 14.0, ACCENT.fade(0.20));
-        for (i, r) in rects.iter().enumerate() {
-            let hot = hover == Some(i);
-            if i != page && hot {
-                g.fill_rrect(*r, 14.0, Color::white(0.07));
-            }
-            let col = if i == page { ACCENT } else if hot { T2 } else { T3 };
-            g.text(TAB_LABELS[i], *r, &f.small, col, Align::Center);
-        }
-
-        g.shifted(0.0, CONTENT_Y, || match TAB_LABELS[page] {
-            "Stats" => page_stats(g),
-            name => {
-                let r = Rect::new(0.0, 0.0, EXP_W, EXP_H - CONTENT_Y);
-                g.text(&format!("{name} is not ported to Linux yet"), r, &f.body, T3, Align::Center);
-            }
-        });
-}
-
-fn page_stats(g: &Gfx) {
-        let f = &g.fonts;
-        let tile = |x: f32, label: &str, value: &str, frac: Option<f32>| {
-            let r = Rect::new(x, 20.0, 170.0, 96.0);
-            g.fill_rrect(r, 14.0, Color::white(0.09));
-            g.text(label, Rect::new(r.x + 14.0, r.y + 10.0, r.w - 28.0, 16.0), &f.tiny, T2, Align::Left);
-            g.text(value, Rect::new(r.x + 14.0, r.y + 30.0, r.w - 28.0, 36.0), &f.big, T1, Align::Left);
-            if let Some(k) = frac {
-                let bar = Rect::new(r.x + 14.0, r.y + r.h - 18.0, r.w - 28.0, 5.0);
-                g.fill_rrect(bar, 2.5, Color::white(0.12));
-                g.fill_rrect(Rect::new(bar.x, bar.y, bar.w * k.clamp(0.0, 1.0), bar.h), 2.5, ACCENT);
-            }
-        };
-        let m = mem_info();
-        tile(24.0, "MEMORY", &m.map_or("n/a".into(), |m| format!("{:.0}%", m.0 * 100.0)), m.map(|m| m.0));
-        tile(
-            215.0,
-            "MEMORY USED",
-            &m.map_or("n/a".into(), |m| format!("{:.1} GB", m.2 as f32 / 1024.0)),
-            None,
-        );
-        tile(406.0, "UPTIME", &uptime(), None);
-    }
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, el: &ActiveEventLoop) {
@@ -239,20 +589,30 @@ impl ApplicationHandler for App {
             WindowEvent::CursorMoved { position, .. } => {
                 let k = self.window.as_ref().map_or(1.0, |w| w.scale_factor()) as f32;
                 self.cursor = (position.x as f32 / k, position.y as f32 / k);
-                let hover = if self.expanded {
-                    tab_rects().iter().position(|r| r.contains(self.cursor.0, self.cursor.1))
-                } else {
-                    None
-                };
-                if hover != self.hover {
-                    self.hover = hover;
-                    if let Some(w) = &self.window {
-                        w.request_redraw();
-                    }
+                let hover = if self.expanded { self.act_at_cursor() } else { None };
+                if hover != self.panel.hover {
+                    self.panel.hover = hover;
+                    self.redraw();
                 }
             }
             WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => self.click(),
+            WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
+                if self.panel.key(&event.logical_key, event.text.as_deref()) {
+                    self.redraw();
+                }
+            }
             _ => {}
+        }
+    }
+
+    /// Wake once a second while the timer runs (the only thing that changes by itself).
+    fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+        if self.panel.running() {
+            self.panel.tick();
+            self.redraw();
+            el.set_control_flow(ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(500)));
+        } else {
+            el.set_control_flow(ControlFlow::Wait);
         }
     }
 }
@@ -260,7 +620,16 @@ impl ApplicationHandler for App {
 pub fn run() {
     // ponytail: X11 only (Xwayland on Wayland desktops); native Wayland needs layer-shell
     let el = EventLoop::builder().with_x11().build().expect("event loop");
-    if let Err(e) = el.run_app(&mut App::default()) {
+    let mut app = App {
+        window: None,
+        surface: None,
+        gfx: None,
+        expanded: false,
+        panel: Panel::new(),
+        hits: Vec::new(),
+        cursor: (0.0, 0.0),
+    };
+    if let Err(e) = el.run_app(&mut app) {
         eprintln!("nock: {e}");
     }
 }
@@ -269,17 +638,59 @@ pub fn run() {
 mod tests {
     use super::*;
 
+    /// Keep tests away from the real data directory.
+    fn sandbox() {
+        std::env::set_var("XDG_DATA_HOME", std::env::temp_dir().join("nock-test"));
+    }
+
     /// Renders each page to PNGs for eyeballing (NOCK_PREVIEW_DIR=dir cargo test -- --ignored).
     #[test]
     #[ignore]
     fn preview_pages() {
+        sandbox();
         let dir = std::env::var("NOCK_PREVIEW_DIR").expect("NOCK_PREVIEW_DIR");
         let g = Gfx::new(EXP_W as i32, EXP_H as i32, 1.0).unwrap();
-        for page in [0, 3] {
+        let mut p = Panel::new();
+        p.todos = vec![
+            Todo { done: false, text: "Write the Linux port".into() },
+            Todo { done: true, text: "Ship Nock 0.12.10".into() },
+        ];
+        p.timer_task = Some("Linux port".into());
+        for page in [TODAY, STATS] {
+            p.page = page;
+            p.hover = Some(Act::Tab(0));
             let _ = g.begin(EXP_W as i32, EXP_H as i32);
-            draw_panel(&g, page, Some(1));
+            p.draw(&g, &mut Vec::new());
             let _ = g.end();
             g.save_png(&format!("{dir}/page{page}.png"));
         }
+    }
+
+    #[test]
+    fn todo_entry_and_timer() {
+        sandbox();
+        let mut p = Panel::new();
+        p.todos.clear();
+        p.act(Act::TodoAdd);
+        for c in ["a", "b"] {
+            p.key(&Key::Character(c.into()), Some(c));
+        }
+        assert_eq!(p.entering.as_deref(), Some("ab"));
+        p.key(&Key::Named(NamedKey::Backspace), None);
+        p.key(&Key::Named(NamedKey::Enter), None);
+        assert_eq!(p.todos.len(), 1);
+        assert_eq!(p.todos[0].text, "a");
+
+        p.act(Act::TimerPreset(15));
+        assert_eq!(p.left_ms(), 15 * 60_000);
+        p.act(Act::TimerCustom);
+        p.key(&Key::Character("x".into()), Some("x")); // letters are ignored for the timer length
+        p.key(&Key::Character("7".into()), Some("7"));
+        p.key(&Key::Named(NamedKey::Enter), None);
+        assert_eq!(p.timer_total_s, 7 * 60);
+        p.act(Act::TimerToggle);
+        assert!(p.running());
+        p.act(Act::TimerToggle);
+        assert!(!p.running());
     }
 }
