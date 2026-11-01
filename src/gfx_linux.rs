@@ -202,9 +202,24 @@ impl Gfx {
         let t = self.ts.get();
         let k = t.sx;
         let px = f.size * k;
-        let glyphs: Vec<_> = s.chars().map(|ch| f.face.rasterize(ch, px)).collect();
-        let width: f32 = glyphs.iter().map(|(m, _)| m.advance_width).sum();
+        let mut glyphs: Vec<_> = s.chars().map(|ch| f.face.rasterize(ch, px)).collect();
+        let mut width: f32 = glyphs.iter().map(|(m, _)| m.advance_width).sum();
         let (box_x, box_w) = (r.x * k + t.tx, r.w * k);
+        if width > box_w {
+            // too long: keep what fits and end with an ellipsis
+            let dots = f.face.rasterize('\u{2026}', px);
+            let mut used = dots.0.advance_width;
+            let keep = glyphs
+                .iter()
+                .take_while(|(m, _)| {
+                    used += m.advance_width;
+                    used <= box_w
+                })
+                .count();
+            glyphs.truncate(keep);
+            glyphs.push(dots);
+            width = glyphs.iter().map(|(m, _)| m.advance_width).sum();
+        }
         let mut x = match align {
             Align::Left => box_x,
             Align::Center => box_x + (box_w - width) * 0.5,
@@ -218,8 +233,8 @@ impl Gfx {
         let (pw, ph) = (pm.width() as i32, pm.height() as i32);
         let data = pm.data_mut();
         for (m, bmp) in glyphs {
-            if x + m.advance_width > clip_r + 0.5 && align == Align::Left {
-                break; // ponytail: hard clip, no ellipsis
+            if x + m.advance_width > clip_r + 0.5 {
+                break;
             }
             let gx = (x + m.xmin as f32).round() as i32;
             let gy = (base - m.height as f32 - m.ymin as f32).round() as i32;

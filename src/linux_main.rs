@@ -28,6 +28,7 @@ const CONTENT_Y: f32 = 40.0;
 const MAX_TODO: usize = 5;
 const PICK_ROWS: usize = 5;
 const CLIP_ROWS: usize = 5;
+const SHELF_MAX: usize = 12;
 
 const T1: Color = Color::white(0.96);
 const T2: Color = Color::white(0.62);
@@ -47,6 +48,7 @@ const TAB_LABELS: [&str; 9] =
     ["Media", "Controls", "Today", "Stats", "Clipboard", "Shelf", "Apps", "Games", "Power"];
 const CONTROLS: usize = 1;
 const CLIPBOARD: usize = 4;
+const SHELF: usize = 5;
 const APPS: usize = 6;
 const TODAY: usize = 2;
 const STATS: usize = 3;
@@ -113,6 +115,9 @@ enum Act {
     TodoDel(usize),
     TodoFocus(usize),
     TodoAdd,
+    ShelfItem(usize),
+    ShelfDel(usize),
+    ShelfClear,
     ClipItem(usize),
     ClipPin(usize),
     ClipSearch,
@@ -170,6 +175,9 @@ struct Panel {
     /// last text seen on the system clipboard, and one we set ourselves and should not record
     clip_seen: Option<String>,
     ignore_clip: Option<String>,
+    /// Shelf tab: kept files, and whether a file is being dragged over the notch
+    shelf: Vec<String>,
+    shelf_hover: bool,
 }
 
 impl Panel {
@@ -200,6 +208,8 @@ impl Panel {
             clip_scroll: 0,
             clip_seen: sys::clipboard_text(),
             ignore_clip: None,
+            shelf: store::load_shelf(),
+            shelf_hover: false,
         }
     }
 
@@ -240,6 +250,15 @@ impl Panel {
         self.clips.truncate(20);
         self.clip_scroll = 0;
         true
+    }
+
+    fn shelf_add(&mut self, paths: impl IntoIterator<Item = String>) {
+        for p in paths {
+            if self.shelf.len() < SHELF_MAX && !self.shelf.contains(&p) {
+                self.shelf.push(p);
+            }
+        }
+        store::save_shelf(&self.shelf);
     }
 
     fn scroll(&mut self, rows: isize) -> bool {
@@ -359,6 +378,27 @@ impl Panel {
             Act::TodoAdd => {
                 self.entering = Some(String::new());
                 self.entry_timer = false;
+            }
+            Act::ShelfItem(i) => {
+                if let Some(p) = self.shelf.get(i).cloned() {
+                    if std::path::Path::new(&p).exists() {
+                        sys::open(&p, "");
+                        return true;
+                    }
+                    // gone from disk: drop it from the shelf
+                    self.shelf.remove(i);
+                    store::save_shelf(&self.shelf);
+                }
+            }
+            Act::ShelfDel(i) => {
+                if i < self.shelf.len() {
+                    self.shelf.remove(i);
+                    store::save_shelf(&self.shelf);
+                }
+            }
+            Act::ShelfClear => {
+                self.shelf.clear();
+                store::save_shelf(&self.shelf);
             }
             Act::ClipItem(i) => {
                 let item = self.clip_view().get(i).map(|(t, p)| (t.to_string(), *p));
@@ -543,6 +583,7 @@ impl Panel {
             CONTROLS => self.page_controls(g, hits),
             APPS => self.page_apps(g, hits),
             CLIPBOARD => self.page_clipboard(g, hits),
+            SHELF => self.page_shelf(g, hits),
             TODAY => self.page_today(g, hits),
             STATS => page_stats(g),
             POWER => self.page_power(g, hits),
@@ -554,6 +595,47 @@ impl Panel {
         for h in &mut hits[start..] {
             h.r.y += CONTENT_Y;
         }
+    }
+
+    fn page_shelf(&self, g: &Gfx, hits: &mut Vec<Hit>) {
+        let f = &g.fonts;
+        let area = Rect::new(20.0, 2.0, EXP_W - 40.0, 202.0);
+        if self.shelf_hover {
+            // a file is being dragged over the notch
+            g.fill_rrect(area, 18.0, ACCENT.fade(0.14));
+            g.stroke_rrect(area, 18.0, ACCENT.fade(0.9), 2.0);
+            g.text("Drop to add to the shelf", area, &f.body, T1, Align::Center);
+            return;
+        }
+        if self.shelf.is_empty() {
+            g.stroke_rrect(area, 18.0, Color::white(0.14), 1.0);
+            g.icon('\u{21E9}', Rect::new(area.cx() - 20.0, 62.0, 40.0, 40.0), &f.icon22, ACCENT);
+            g.text("Drop files here to keep them handy", Rect::new(area.x, 108.0, area.w, 24.0), &f.body, T1, Align::Center);
+            g.text("Click one to open it.", Rect::new(area.x, 132.0, area.w, 22.0), &f.small, T3, Align::Center);
+            return;
+        }
+        let (cols, tw, th) = (6usize, 88.0, 86.0);
+        let gap = (EXP_W - 56.0 - cols as f32 * tw) / (cols as f32 - 1.0);
+        for (i, path) in self.shelf.iter().enumerate() {
+            let (c, r) = (i % cols, i / cols);
+            let rect = Rect::new(28.0 + c as f32 * (tw + gap), 4.0 + r as f32 * (th + 6.0), tw, th);
+            let (act, xact) = (Act::ShelfItem(i), Act::ShelfDel(i));
+            hits.push(Hit { r: rect, act });
+            let x = Rect::new(rect.x + rect.w - 22.0, rect.y + 3.0, 19.0, 19.0);
+            hits.push(Hit { r: x, act: xact });
+            let over = self.hot(act) || self.hot(xact);
+            g.fill_rrect(rect, 16.0, Color::white(if over { 0.12 } else { 0.05 }));
+            let name = std::path::Path::new(path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
+            draw_file_icon(g, Rect::new(rect.cx() - 18.0, rect.y + 10.0, 36.0, 36.0), std::path::Path::new(path).is_dir());
+            g.text(&name, Rect::new(rect.x + 4.0, rect.y + 52.0, rect.w - 8.0, 24.0), &f.tiny, T2, Align::Center);
+            if over {
+                g.fill_circle(x.cx(), x.cy(), 8.5, Color(0.0, 0.0, 0.0, 0.75));
+                g.icon('\u{2715}', x, &f.icon14, if self.hot(xact) { Color(1.0, 0.5, 0.5, 1.0) } else { T1 });
+            }
+        }
+        let clear = Rect::new(EXP_W - 24.0 - 78.0, 190.0, 78.0, 18.0);
+        hits.push(Hit { r: clear, act: Act::ShelfClear });
+        g.text("Clear all", clear, &f.tiny, if self.hot(Act::ShelfClear) { T1 } else { T3 }, Align::Right);
     }
 
     fn page_clipboard(&self, g: &Gfx, hits: &mut Vec<Hit>) {
@@ -939,6 +1021,18 @@ impl Panel {
     }
 }
 
+/// A file (page with a folded corner) or a folder (tabbed), drawn so no icon font is needed.
+fn draw_file_icon(g: &Gfx, r: Rect, folder: bool) {
+    let (cx, cy) = (r.cx(), r.cy());
+    if folder {
+        g.fill_rrect(Rect::new(cx - 16.0, cy - 12.0, 14.0, 8.0), 3.0, C_MEM.fade(0.8));
+        g.fill_rrect(Rect::new(cx - 16.0, cy - 8.0, 32.0, 22.0), 4.0, C_MEM);
+    } else {
+        g.fill_poly(&[(cx - 11.0, cy - 15.0), (cx + 3.0, cy - 15.0), (cx + 11.0, cy - 7.0), (cx + 11.0, cy + 15.0), (cx - 11.0, cy + 15.0)], C_CPU);
+        g.fill_poly(&[(cx + 3.0, cy - 15.0), (cx + 3.0, cy - 7.0), (cx + 11.0, cy - 7.0)], Color::white(0.55));
+    }
+}
+
 fn draw_calendar(g: &Gfx) {
     let f = &g.fonts;
     let (year, month, day, wday, ..) = crate::sys::local_time();
@@ -1002,6 +1096,8 @@ struct App {
     hits: Vec<Hit>,
     /// pointer in logical (DIP) coordinates
     cursor: (f32, f32),
+    /// the drag itself opened the panel
+    shelf_auto_open: bool,
 }
 
 impl App {
@@ -1031,6 +1127,27 @@ impl App {
     fn act_at_cursor(&self) -> Option<Act> {
         let (x, y) = self.cursor;
         self.hits.iter().rev().find(|h| h.r.contains(x, y)).map(|h| h.act)
+    }
+
+    /// A file drag reached the notch: open the Shelf tab (and fold it again if nothing is dropped).
+    fn shelf_enter(&mut self) {
+        self.panel.shelf_hover = true;
+        if !self.expanded {
+            self.shelf_auto_open = true;
+            self.expanded = true;
+            self.apply_size();
+        }
+        self.panel.page = SHELF;
+        self.redraw();
+    }
+
+    fn shelf_leave(&mut self) {
+        self.panel.shelf_hover = false;
+        if std::mem::take(&mut self.shelf_auto_open) {
+            self.expanded = false;
+            self.apply_size();
+        }
+        self.redraw();
     }
 
     fn click(&mut self) {
@@ -1119,6 +1236,14 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => self.click(),
+            WindowEvent::HoveredFile(_) => self.shelf_enter(),
+            WindowEvent::HoveredFileCancelled => self.shelf_leave(),
+            WindowEvent::DroppedFile(path) => {
+                self.shelf_auto_open = false;
+                self.panel.shelf_hover = false;
+                self.panel.shelf_add([path.to_string_lossy().into_owned()]);
+                self.redraw();
+            }
             WindowEvent::MouseWheel { delta, .. } => {
                 let rows = match delta {
                     MouseScrollDelta::LineDelta(_, y) => -y as isize,
@@ -1167,6 +1292,7 @@ pub fn run() {
         panel: Panel::new(),
         hits: Vec::new(),
         cursor: (0.0, 0.0),
+        shelf_auto_open: false,
     };
     if let Err(e) = el.run_app(&mut app) {
         eprintln!("nock: {e}");
@@ -1195,6 +1321,7 @@ mod tests {
             Todo { done: true, text: "Ship Nock 0.12.10".into() },
         ];
         p.timer_task = Some("Linux port".into());
+        p.shelf = vec!["/etc".into(), "/etc/hostname".into(), "/home/akhil/report-final-v2.pdf".into()];
         p.pins = vec!["ssh dev@example.com".into()];
         p.clips = vec![
             "https://example.com/some/long/link/to/read/later".into(),
@@ -1204,7 +1331,7 @@ mod tests {
             "akhil@example.com".into(),
             "one more".into(),
         ];
-        for page in [CONTROLS, APPS, CLIPBOARD, TODAY, STATS, POWER] {
+        for page in [CONTROLS, APPS, CLIPBOARD, SHELF, TODAY, STATS, POWER] {
             p.page = page;
             p.hover = Some(Act::Tab(0));
             let _ = g.begin(EXP_W as i32, EXP_H as i32);
@@ -1272,6 +1399,21 @@ mod tests {
         assert!(p.act(Act::ClipItem(0)));
         assert!(!p.poll_clipboard());
         let _ = xclip.kill();
+    }
+
+    #[test]
+    fn shelf_keeps_files_once_up_to_the_limit() {
+        sandbox();
+        let mut p = Panel::new();
+        p.shelf.clear();
+        p.shelf_add((0..20).map(|i| format!("/tmp/f{}", i % 15)));
+        assert_eq!(p.shelf.len(), SHELF_MAX);
+        p.shelf_add(["/tmp/f0".to_string()]);
+        assert_eq!(p.shelf.len(), SHELF_MAX, "no duplicates");
+        // a file that has vanished is dropped when clicked, not opened
+        p.shelf = vec!["/definitely/not/here".into()];
+        assert!(!p.act(Act::ShelfItem(0)));
+        assert!(p.shelf.is_empty());
     }
 
     #[test]

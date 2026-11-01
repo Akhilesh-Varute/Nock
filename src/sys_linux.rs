@@ -100,12 +100,18 @@ pub fn open(target: &str, args: &str) {
     if target.ends_with(".desktop") {
         let stem = std::path::Path::new(&target).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
         run_first(&[("gio", &["launch", &target]), ("gtk-launch", &[&stem])]);
-    } else if target.contains("://") {
+    } else if target.contains("://") || (opens_with_default(&target) && args.is_empty()) {
         run("xdg-open", &[&target]);
     } else {
         let a: Vec<&str> = args.iter().map(String::as_str).collect();
         run(&target, &a);
     }
+}
+
+/// An existing folder or plain (non-executable) file: hand it to the default app.
+fn opens_with_default(path: &str) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path).is_ok_and(|m| m.is_dir() || m.permissions().mode() & 0o111 == 0)
 }
 
 /// Name of a launchable application from a .desktop file, or None to hide it.
