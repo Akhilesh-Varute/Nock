@@ -21,6 +21,7 @@ const DAYS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 use crate::cal::{days_in_month, first_weekday, fmt_time};
+use crate::games::{Hub, Input};
 use crate::gfx::*;
 use crate::store::{self, clip_kind_of, preview, AppEntry, ClipKind, Todo};
 use crate::media_linux::{fetch_art, Mpris, Track};
@@ -59,6 +60,7 @@ const MEDIA: usize = 0;
 const CONTROLS: usize = 1;
 const CLIPBOARD: usize = 4;
 const SHELF: usize = 5;
+const GAMES: usize = 7;
 const APPS: usize = 6;
 const TODAY: usize = 2;
 const STATS: usize = 3;
@@ -125,6 +127,9 @@ enum Act {
     TodoDel(usize),
     TodoFocus(usize),
     TodoAdd,
+    GameClick,
+    GamePick(usize),
+    GameBack,
     PlayPause,
     Prev,
     Next,
@@ -203,6 +208,10 @@ struct Panel {
     accent: Color,
     /// pointer in logical coordinates (a seek click needs where on the bar it landed)
     cursor: (f32, f32),
+    /// Games tab: the arcade, whether the left button is held, and the last frame time
+    hub: Hub,
+    mouse_down: bool,
+    game_last: Instant,
 }
 
 impl Panel {
@@ -244,6 +253,9 @@ impl Panel {
             art_slot: Arc::new(Mutex::new(None)),
             accent: ACCENT,
             cursor: (0.0, 0.0),
+            hub: Hub::new(store::load_bests()),
+            mouse_down: false,
+            game_last: Instant::now(),
         }
     }
 
@@ -358,6 +370,25 @@ impl Panel {
                 g.text(&label, Rect::new(x0 + dw + 15.0, 0.0, tw, h), &f.menu, T1, Align::Left);
             }
         }
+    }
+
+    /// A game is on screen and needs a frame about every 16 ms.
+    fn game_running(&self) -> bool {
+        self.page == GAMES && self.hub.is_playing()
+    }
+
+    /// Advance the running game by the time since the last frame.
+    fn game_tick(&mut self) {
+        let now = Instant::now();
+        let dt = now.duration_since(self.game_last).as_secs_f32().min(0.05);
+        self.game_last = now;
+        let ox = (EXP_W - crate::game::W) / 2.0;
+        let inp = Input { x: self.cursor.0 - ox, y: self.cursor.1 - 14.0 - CONTENT_Y, down: self.mouse_down };
+        let out = self.hub.step(dt, &inp);
+        if out.new_best {
+            store::save_bests(&self.hub.best);
+        }
+        // ponytail: no sound effects on Linux yet (out.sfx is dropped)
     }
 
     fn media_playing(&self) -> bool {
@@ -531,6 +562,12 @@ impl Panel {
                 self.entering = Some(String::new());
                 self.entry_timer = false;
             }
+            Act::GameClick => self.hub.click(),
+            Act::GamePick(k) => {
+                self.hub.pick(k);
+                self.game_last = Instant::now();
+            }
+            Act::GameBack => self.hub.back(),
             Act::PlayPause | Act::Prev | Act::Next => {
                 if let Some(t) = &self.track {
                     match act {
@@ -754,6 +791,7 @@ impl Panel {
         let start = hits.len();
         g.shifted(0.0, CONTENT_Y, || match self.page {
             MEDIA => self.page_media(g, hits),
+            GAMES => self.page_games(g, hits),
             CONTROLS => self.page_controls(g, hits),
             APPS => self.page_apps(g, hits),
             CLIPBOARD => self.page_clipboard(g, hits),
@@ -768,6 +806,25 @@ impl Panel {
         });
         for h in &mut hits[start..] {
             h.r.y += CONTENT_Y;
+        }
+    }
+
+    fn page_games(&self, g: &Gfx, hits: &mut Vec<Hit>) {
+        let f = &g.fonts;
+        let (ox, oy) = ((EXP_W - crate::game::W) / 2.0, 14.0);
+        if self.hub.is_playing() {
+            hits.push(Hit { r: Rect::new(ox, oy, crate::game::W, crate::game::H), act: Act::GameClick });
+            self.hub.draw(g, ox, oy, 1.0);
+            let r = Rect::new(ox + crate::game::W / 2.0 - 36.0, oy + 3.0, 72.0, 18.0);
+            hits.push(Hit { r, act: Act::GameBack });
+            g.fill_rrect(r, 9.0, if self.hot(Act::GameBack) { HOVER } else { Color(0.0, 0.0, 0.0, 0.35) });
+            g.text("\u{2039} Games", r, &f.tiny, T1, Align::Center);
+        } else {
+            let hot_tile = (0..4).find(|i| self.hot(Act::GamePick(*i)));
+            self.hub.draw_hub(g, ox, oy, 1.0, hot_tile);
+            for (i, r) in Hub::tiles(ox, oy).iter().enumerate() {
+                hits.push(Hit { r: *r, act: Act::GamePick(i) });
+            }
         }
     }
 
@@ -1419,6 +1476,7 @@ impl App {
 
     fn click(&mut self) {
         self.panel.cursor = self.cursor;
+        self.panel.mouse_down = true;
         if !self.expanded {
             self.expanded = true;
         } else if let Some(act) = self.act_at_cursor() {
@@ -2130,12 +2188,14 @@ impl ApplicationHandler for App {
             WindowEvent::CursorMoved { position, .. } => {
                 let k = self.window.as_ref().map_or(1.0, |w| w.scale_factor()) as f32;
                 self.cursor = (position.x as f32 / k, position.y as f32 / k);
+                self.panel.cursor = self.cursor;
                 let hover = if self.expanded { self.act_at_cursor() } else { None };
                 if hover != self.panel.hover {
                     self.panel.hover = hover;
                     self.redraw();
                 }
             }
+            WindowEvent::MouseInput { state: ElementState::Released, button: MouseButton::Left, .. } => self.panel.mouse_down = false,
             WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => self.click(),
             // the window manager may place a new window itself: put the notch back
             WindowEvent::Moved(pos) => {
@@ -2199,6 +2259,11 @@ impl ApplicationHandler for App {
         }
         self.bar_tick(minute);
         let pop_open = self.pop_tick();
+        let game_on = self.expanded && self.panel.game_running();
+        if game_on {
+            self.panel.game_tick();
+            self.redraw();
+        }
         if !self.expanded && self.panel.media_playing() {
             self.redraw(); // equaliser bars
         }
@@ -2221,6 +2286,9 @@ impl ApplicationHandler for App {
         if pop_open {
             // spinners and slow connects: look again soon
             el.set_control_flow(ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(120)));
+        }
+        if game_on {
+            el.set_control_flow(ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(16)));
         }
     }
 }
@@ -2281,7 +2349,7 @@ mod tests {
             "akhil@example.com".into(),
             "one more".into(),
         ];
-        for page in [MEDIA, CONTROLS, APPS, CLIPBOARD, SHELF, TODAY, STATS, POWER] {
+        for page in [MEDIA, CONTROLS, APPS, CLIPBOARD, SHELF, GAMES, TODAY, STATS, POWER] {
             p.page = page;
             p.hover = Some(Act::Tab(0));
             let _ = g.begin(EXP_W as i32, EXP_H as i32);
@@ -2395,6 +2463,32 @@ mod tests {
         let (_, col) = g.decode_image(&png).unwrap();
         assert!(col.0 > 0.99 && col.1 < 0.01 && col.2 < 0.01);
         assert!(g.decode_image(b"not an image").is_err());
+    }
+
+    #[test]
+    fn a_game_runs_on_the_panel() {
+        sandbox();
+        let mut p = Panel::new();
+        p.page = GAMES;
+        assert!(!p.game_running());
+        assert!(!p.act(Act::GamePick(1)));
+        assert!(p.game_running());
+        // the pointer drives the game and frames advance without panicking
+        p.cursor = (300.0, 200.0);
+        p.mouse_down = true;
+        for _ in 0..30 {
+            std::thread::sleep(Duration::from_millis(2));
+            p.game_tick();
+        }
+        // drawing it works, and Back returns to the hub
+        let g = Gfx::new(EXP_W as i32, EXP_H as i32, 1.0).unwrap();
+        let _ = g.begin(EXP_W as i32, EXP_H as i32);
+        let mut hits = Vec::new();
+        p.draw(&g, &mut hits);
+        let _ = g.end();
+        assert!(hits.iter().any(|h| h.act == Act::GameBack));
+        p.act(Act::GameBack);
+        assert!(!p.game_running());
     }
 
     #[test]
