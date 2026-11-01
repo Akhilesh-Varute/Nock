@@ -360,6 +360,7 @@ figure { margin: 0; }
 .final .btn { background: var(--ink); color: var(--bone); border-color: var(--ink); box-shadow: 5px 5px 0 var(--bone); }
 .final .btn:hover { box-shadow: 8px 8px 0 var(--bone); } .final .btn.alt { background: var(--bone); color: var(--ink); box-shadow: 5px 5px 0 var(--ink); }
 .final .ver { color: #2a2118; }
+.final .ctas + .ctas { margin-top: 18px; }
 footer { background: var(--ink); color: var(--bone); padding: 40px 0 60px; font-size: 14px; }
 footer .wrap { display: flex; flex-wrap: wrap; gap: 14px 26px; justify-content: space-between; align-items: center; }
 footer a { text-underline-offset: 3px; }

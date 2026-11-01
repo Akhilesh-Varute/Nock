@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nock: a notch for Windows</title>
-<meta name="description" content="A native notch and top bar for Windows, written in Rust. About 1 MB, about 0% CPU when idle, no Electron. Free and MIT licensed. The demo on this page is playable.">
+<meta name="description" content="A native notch and top bar for Windows (with a Linux preview), written in Rust. About 1 MB, about 0% CPU when idle, no Electron. Free and MIT licensed. The demo on this page is playable.">
 <meta property="og:title" content="Nock: a notch for Windows in 1 MB of Rust">
 <meta property="og:description" content="Tasks, a focus timer, music, clipboard history and system dropdowns in a native notch. No Electron. Try it right on the page.">
 <meta property="og:type" content="website">
@@ -250,7 +250,7 @@
     </div>
     <div class="proof" data-proof hidden></div>
     <div class="ver" id="verLine">Free. MIT licensed. Installer or one portable .exe.</div>
-    <div class="note-os" id="osNote">Heads up: Nock is Windows 10/11 only for now. A Linux port is in progress. You can still poke the demo.</div>
+    <div class="note-os" id="osNote">Heads up: Nock is built for Windows 10/11, with a Linux preview (<a href="#get">.deb and tarball</a>). You can still poke the demo.</div>
     </div>
     <div class="stickers" aria-hidden="true">
       <div class="sticker o s-ov" style="--r:-5deg; --d:0s">No Electron</div>
@@ -376,8 +376,12 @@
       <a class="btn" href="https://github.com/Akhilesh-Varute/Nock/releases/latest" data-dl="setup"><svg class="icon" aria-hidden="true"><use href="#i-dl"/></svg>Installer</a>
       <a class="btn alt" href="https://github.com/Akhilesh-Varute/Nock/releases/latest" data-dl="portable"><svg class="icon" aria-hidden="true"><use href="#i-dl"/></svg>Portable .exe</a>
     </div>
+    <div class="ctas reveal">
+      <a class="btn alt" href="https://github.com/Akhilesh-Varute/Nock/releases/latest" data-dl="deb"><svg class="icon" aria-hidden="true"><use href="#i-dl"/></svg>Linux .deb (preview)</a>
+      <a class="btn alt" href="https://github.com/Akhilesh-Varute/Nock/releases/latest" data-dl="targz"><svg class="icon" aria-hidden="true"><use href="#i-dl"/></svg>Linux .tar.gz (preview)</a>
+    </div>
     <div class="proof" data-proof hidden></div>
-    <div class="ver" id="verLine2">Free. Windows 10/11. The installer adds a Start menu entry; the portable file is just the app.</div>
+    <div class="ver" id="verLine2">Free. Windows 10/11. The installer adds a Start menu entry; the portable file is just the app. Linux is a preview for X11 or XWayland: fewer features, less tested.</div>
   </div>
 </section>
 </main>
