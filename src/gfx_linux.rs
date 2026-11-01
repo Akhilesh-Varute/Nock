@@ -129,6 +129,12 @@ impl Gfx {
         (p.width(), p.height(), p.data().to_vec())
     }
 
+    /// Test helper: write the backing bitmap as a PNG.
+    #[cfg(test)]
+    pub fn save_png(&self, path: &str) {
+        self.pix.borrow().save_png(path).unwrap();
+    }
+
     // ------------------------------------------------------------ frame ----
 
     pub fn begin(&self, _pw: i32, _ph: i32) -> Result<()> {
