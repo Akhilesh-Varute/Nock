@@ -12,9 +12,11 @@ Written in Rust. No webview, no framework, no runtime. One small <code>.exe</cod
 <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
 </p>
 
+<p align="center"><a href="https://www.producthunt.com/products/nock-2?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-nock-2" target="_blank" rel="noopener noreferrer"><img alt="Nock - A notch for Windows, in 1 MB of Rust | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1300649&theme=neutral"></a></p>
+
 <p align="center"><img src="docs/demo.gif" width="760" alt="Nock demo: the notch opens, every tab is shown, then the Wi-Fi and Bluetooth dropdowns, the buddy, a scene and the tray menu"></p>
 
-<p align="center"><a href="https://github.com/Akhilesh-Varute/Nock/releases/latest"><b>⬇ Download for Windows 10/11</b></a> &nbsp;·&nbsp; free, MIT, about 1 MB &nbsp;·&nbsp; <a href="https://www.producthunt.com/products/nock-2">Nock on Product Hunt</a></p>
+<p align="center"><a href="https://github.com/Akhilesh-Varute/Nock/releases/latest"><b>⬇ Download for Windows 10/11</b></a> &nbsp;·&nbsp; free, MIT, about 1 MB &nbsp;·&nbsp; <a href="https://www.producthunt.com/products/nock-2">Nock on Product Hunt</a> &nbsp;·&nbsp; <a href="https://youtu.be/rGcVKVOOf6A">Watch the video</a></p>
 
 > **Actively developed.** Nock is young and still being tested on more PCs, so you may hit rough edges. Bug reports and ideas are very welcome: [open an issue](../../issues). A **Linux preview** is available: see [Linux](#linux-preview).
 
