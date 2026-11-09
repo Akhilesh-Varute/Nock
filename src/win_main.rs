@@ -404,6 +404,12 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
         );
         let c24 = if a.cfg.clock_24h { MF_CHECKED } else { MF_UNCHECKED };
         let _ = AppendMenuW(menu, MF_STRING | c24, 11, w!("24-hour clock"));
+        if let Ok(sub) = CreatePopupMenu() {
+            let single = a.cfg.clip_single;
+            let _ = AppendMenuW(sub, MF_STRING | if !single { MF_CHECKED } else { MF_UNCHECKED }, 145, w!("Keep history (up to 20)"));
+            let _ = AppendMenuW(sub, MF_STRING | if single { MF_CHECKED } else { MF_UNCHECKED }, 146, w!("Current item only"));
+            let _ = AppendMenuW(menu, MF_POPUP, sub.0 as usize, w!("Clipboard history"));
+        }
         let tb = if a.cfg.top_bar { MF_CHECKED } else { MF_UNCHECKED };
         let _ = AppendMenuW(menu, MF_STRING | tb, 7, w!("Top bar"));
         let st = if a.cfg.stats { MF_CHECKED } else { MF_UNCHECKED };
@@ -551,6 +557,8 @@ fn on_tray(hwnd: HWND, a: &mut App, lp: LPARAM) {
             7 => a.toggle_top_bar(),
             10 => a.toggle_stats(),
             11 => a.toggle_clock24(),
+            145 => a.set_clip_single(false),
+            146 => a.set_clip_single(true),
             13 => a.toggle_auto_break(),
             16 => a.toggle_fs_hide(),
             17 => a.toggle_auto_close(),

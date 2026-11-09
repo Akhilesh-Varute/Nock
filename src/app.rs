@@ -166,6 +166,8 @@ pub enum Act {
     /// type to filter the clipboard list
     ClipSearch,
     ClipSearchClear,
+    /// opt in to remembering recent copies
+    ClipEnableHistory,
     /// start a focus session on the n-th to-do
     TodoFocus(usize),
     /// open a Windows Settings page: an index into `SETTINGS_PAGES`
@@ -1276,6 +1278,18 @@ impl App {
         self.render();
     }
 
+    /// Tray: Clipboard tab keeps either the current item only, or a history of 20.
+    pub fn set_clip_single(&mut self, v: bool) {
+        self.cfg.clip_single = v;
+        if v {
+            self.clips.truncate(1);
+        }
+        store::save_config(&self.cfg);
+        if self.expanded && self.page == Page::Clipboard {
+            self.render();
+        }
+    }
+
     pub fn set_clock_style(&mut self, n: u8) {
         self.cfg.clock_style = n.min(3);
         store::save_config(&self.cfg);
@@ -1824,6 +1838,11 @@ impl App {
             Act::ClipClear => {
                 self.clips.clear();
                 self.clip_scroll = 0;
+            }
+            Act::ClipEnableHistory => {
+                self.cfg.clip_history = true;
+                store::save_config(&self.cfg);
+                self.render();
             }
             Act::Launch(i) => {
                 if let Some(e) = self.apps.get(i) {
@@ -2576,12 +2595,15 @@ impl App {
                 self.alert_swatch = h.swatch;
             }
         }
+        if !self.cfg.clip_history {
+            return; // opted out: the smart-pill hint above still fired, nothing is kept
+        }
         if self.pins.contains(&text) {
             return; // already pinned
         }
         self.clips.retain(|c| *c != text);
         self.clips.insert(0, text);
-        self.clips.truncate(20);
+        self.clips.truncate(if self.cfg.clip_single { 1 } else { 20 });
         self.clip_scroll = 0;
         if self.expanded && self.page == Page::Clipboard {
             self.render();
