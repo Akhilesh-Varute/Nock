@@ -457,7 +457,7 @@
     var v = rel.tag_name || '';
     if (v) {
       $('#verLine').textContent = 'Latest: ' + v + '. Free, MIT licensed. Windows installer or portable .exe, Linux .deb or tarball (preview).';
-      $('#verLine2').textContent = 'Latest: ' + v + '. Free. Windows 10/11. The installer adds a Start menu entry; the portable file is just the app. Linux is a preview for X11 or XWayland: fewer features, less tested.';
+      $('#verLine2').textContent = 'Latest: ' + v + '. Free. Windows 10/11. Pick one, not both: each is its own ~1 MB download. The installer sets up Start menu and uninstall; the portable .exe is the whole app, just run it. Linux is a preview for X11 or XWayland: fewer features, less tested.';
     }
   }
   try {
