@@ -29,9 +29,9 @@ jobs:
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: nock
-          signing-policy-slug: release-signing
-          artifact-configuration-slug: nock-exe
+          project-slug: Nock
+          signing-policy-slug: test-signing
+          artifact-configuration-slug: initial
           github-artifact-id: ${{ steps.unsigned-exe.outputs.artifact-id }}
           wait-for-completion: true
           output-artifact-directory: signed/exe
@@ -59,9 +59,9 @@ jobs:
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: nock
-          signing-policy-slug: release-signing
-          artifact-configuration-slug: nock-setup
+          project-slug: Nock
+          signing-policy-slug: test-signing
+          artifact-configuration-slug: initial
           github-artifact-id: ${{ steps.unsigned-setup.outputs.artifact-id }}
           wait-for-completion: true
           output-artifact-directory: signed/setup
