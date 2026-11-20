@@ -47,7 +47,6 @@ pub fn draw(a: &App, w: f32, h: f32, hits: &mut Vec<Hit>) {
         g.fill_rrect(body, rad, a.accent.fade(0.03 + 0.15 * a.level));
         g.stroke_rrect(body, rad, a.accent.fade(0.2 + 0.7 * a.level), 1.0 + 2.2 * a.level);
     }
-
     if a.alerting() && t < 0.05 {
         let pulse = 0.5 + 0.5 * (a.eq_phase * 0.9).sin();
         // important hints get their own strong colour so they read from the corner of the eye
@@ -815,6 +814,17 @@ fn page_clipboard(a: &App, ca: f32, hits: &mut Vec<Hit>) {
     }
 
     if view.is_empty() {
+        if !a.cfg.clip_history && a.clip_filter.is_empty() {
+            // opt-in prompt: nothing is kept until the user asks for it here
+            g.text("Let Nock remember what you copy?", Rect::new(0.0, 80.0, EXP_W, 24.0), &f.body, T3.fade(ca), Align::Center);
+            g.text("Keeps the last 20 copies in memory so you can paste them again.", Rect::new(0.0, 104.0, EXP_W, 20.0), &f.small, T3.fade(ca * 0.8), Align::Center);
+            g.text("Password-manager copies are always skipped.", Rect::new(0.0, 124.0, EXP_W, 20.0), &f.small, T3.fade(ca * 0.8), Align::Center);
+            let btn = Rect::new(EXP_W / 2.0 - 60.0, 154.0, 120.0, 32.0);
+            hits.push(Hit { r: btn, act: Act::ClipEnableHistory });
+            g.fill_rrect(btn, 16.0, a.accent.fade((if hot(a, Act::ClipEnableHistory) { 0.95 } else { 0.8 }) * ca));
+            g.text("Enable", btn, &f.body, Color::white(ca), Align::Center);
+            return;
+        }
         let (l1, l2) = if a.clip_filter.is_empty() {
             ("Copy something and it will appear here.", "Click an item to paste it. Click the star to pin it as a saved snippet.")
         } else {
